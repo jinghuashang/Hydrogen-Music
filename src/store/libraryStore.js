@@ -74,6 +74,10 @@ export const useLibraryStore = defineStore('libraryStore', {
                 }
                 this.libraryInfo.followed = results[2].subscribed
                 this.libraryChangeAnimation = false
+
+                this.librarySongs.forEach((song, i) => {
+                    song.playable = results[0].privileges[i].st === 0
+                })
             })
         },
         async updateAlbumDetail(id) {
