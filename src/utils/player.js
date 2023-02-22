@@ -264,6 +264,7 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
             playing.value = false
             currentMusic.value = null
             lyric.value = null
+            playNext()
         }
     })
 }
