@@ -10,6 +10,7 @@ import { usePlayerStore } from '../store/playerStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { useOtherStore } from '../store/otherStore'
 import { storeToRefs } from 'pinia'
+import duration from 'dayjs/plugin/duration'
 
 const otherStore = useOtherStore()
 const userStore = useUserStore()
@@ -483,13 +484,13 @@ export function savePlaylist() {
     windowApi.saveLastPlaylist(JSON.stringify(list))
 }
 export function songTime(dt) {
+    dayjs.extend(duration)
     if(dt) {
         if ( dt == 0 || dt == "--") return dt;
-        const day = dayjs(0).millisecond(dt);
+        const day = dayjs.duration(dt)
         let str = "";
-        if (day.minute() >= 0) str += day.minute() + ':';
-        if (day.second() < 10) str += '0' + day.second()
-        if (day.second() >= 10) str += day.second();
+        if (day.minutes() >= 0) str += day.minutes() + ':';
+        str += day.seconds().toString().padStart(2, '0')
         return str;
     }
 }
