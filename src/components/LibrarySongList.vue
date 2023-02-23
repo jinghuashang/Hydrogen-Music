@@ -36,7 +36,7 @@
   }
   const play = (song, index) => {
     if(!song.playable) {
-      noticeOpen('当前歌曲无法播放', 2)
+      noticeOpen(`当前歌曲无法播放${!!song.reason ? ', ' + song.reason : ''}`, 2)
       return
     }
     if(props.type == 'search') {addToNext(song, true);return}
@@ -85,13 +85,15 @@
       key-field="nid"
       v-slot="{ item, index }"
     >
-      <div class="list-item" :class="{'list-item-playing': songId == item.id, 'list-item-disabled': !item.playable}" @dblclick="play(item, index)" @contextmenu="openMenu($event,item)">
+      <div class="list-item" :class="{'list-item-playing': songId == item.id, 'list-item-disabled': !item.playable, 'list-item-vip': item.vipOnly}" @dblclick="play(item, index)" @contextmenu="openMenu($event,item)">
         <div class="item-title">
             <div class="item-state">
               <svg v-show="(songId == item.id)" t="1669115475194" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="10562" width="200" height="200"><path d="M158.249961 614.402466c37.219322 0 67.372153 30.559802 67.372153 68.272422v273.065023c0 37.700288-30.152831 68.260089-67.372153 68.260089S90.865475 993.440198 90.865475 955.739911V682.674888a68.753387 68.753387 0 0 1 19.731914-48.269194 66.977515 66.977515 0 0 1 47.652572-20.003228zM394.083329 0.04933c37.20699 0 67.372153 30.572134 67.372153 68.272422v887.418159c0 37.700288-30.165163 68.260089-67.372153 68.260089s-67.322823-30.559802-67.322824-68.260089V68.272422c0-37.700288 30.103501-68.223092 67.322824-68.223092zM629.916696 273.077355c37.20699 0 67.384486 30.559802 67.384486 68.260089v614.402467c0 37.700288-30.177496 68.260089-67.384486 68.260089s-67.384486-30.559802-67.384486-68.260089v-614.402467c0-37.700288 30.165163-68.260089 67.384486-68.260089z m235.833368-136.544844a66.878855 66.878855 0 0 1 47.640239 20.003228 68.704057 68.704057 0 0 1 19.731914 48.269194v750.934978c0 37.700288-30.177496 68.260089-67.384486 68.260089s-67.384486-30.559802-67.384486-68.260089V204.767936a68.753387 68.753387 0 0 1 19.731914-48.269195 66.928185 66.928185 0 0 1 47.652572-20.003227z m0 0" p-id="10563"></path></svg>
               <div class="item-num" v-show="!(songId == item.id)">{{index + 1}}</div>
             </div>
-            <span class="item-name">{{item.name}}</span>
+            <span class="item-name">
+              <span>{{item.name}}</span>
+            </span>
         </div>
         <div class="item-other">
             <div class="item-author" v-if="item.ar">
@@ -210,6 +212,26 @@
             .item-title .item-name, .item-other span{
               color: rgba(156, 156, 156, 0.7);
             }
+        }
+        .list-item-vip{
+          .item-title .item-name span{
+            position: relative;
+            &::after{
+              content: 'VIP';
+              letter-spacing: 0.3px;
+              width: max-content;
+              padding: 0.5px 4px;
+              font-size: 0.7em;
+              border: 1px solid rgba(156, 156, 156);
+              font-family: Gilroy-ExtraBold;
+              font-weight: 100;
+              position: absolute;
+              display: block;
+              top: 50%;
+              transform: translate(50%, -40%) scale(1, .95);
+              right: -20px;
+            }
+          }
         }
     }
   }
