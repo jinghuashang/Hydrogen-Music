@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { getMVDetail, getMVUrl } from '../api/mv'
 import { search } from '../api/other';
+import { mapSongsPlayableStatus } from '../utils/songStatus';
 
 export const useOtherStore = defineStore('otherStore', {
     state: () => {
@@ -132,7 +133,9 @@ export const useOtherStore = defineStore('otherStore', {
                 if(type == 1000) params.limit = 10
                 if(type == 1004) params.limit = 10
                 search(params).then(data => {
-                    if(type == 1) this.searchResult.searchSongs = data.result.songs
+                    if(type == 1) {
+                        this.searchResult.searchSongs = mapSongsPlayableStatus(data.result.songs)
+                    }
                     if(type == 10) this.searchResult.searchAlbums = data.result.albums
                     if(type == 100) this.searchResult.searchArtists = data.result.artists
                     if(type == 1000) this.searchResult.searchPlaylists = data.result.playlists
