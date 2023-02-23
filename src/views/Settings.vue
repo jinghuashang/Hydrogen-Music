@@ -61,6 +61,13 @@
   const selectedShortcut = ref(null)
   const newShortcut = ref([])
   const shortcutCharacter  = ['=', '-', '~', '@', '#', '$', '[', ']', ';', "'", ',', '.', '/', '!'];
+  const selectedOutputDevice = ref('default')
+  const availableOutputDevices = ref([])
+  navigator.mediaDevices.enumerateDevices().then((devices) => {
+    availableOutputDevices.value = devices.filter(d => d.kind === 'audiooutput').map(({deviceId, label}) => ({
+        value: deviceId, label
+    }))
+  })
 
   if(isLogin()) {
     getVipInfo().then(result => {
@@ -75,6 +82,7 @@
         tlyricSize.value = settings.music.tlyricSize
         rlyricSize.value = settings.music.rlyricSize
         lyricInterlude.value = settings.music.lyricInterlude
+        selectedOutputDevice.value = settings.music.outputDevice || 'default'
         videoFolder.value = settings.local.videoFolder
         downloadFolder.value = settings.local.downloadFolder
         localFolder.value = settings.local.localFolder
@@ -91,7 +99,8 @@
             lyricSize: lyricSize.value,
             tlyricSize: tlyricSize.value,
             rlyricSize: rlyricSize.value,
-            lyricInterlude: lyricInterlude.value
+            lyricInterlude: lyricInterlude.value,
+            outputDevice: selectedOutputDevice.value
         },
         local: {
             videoFolder: videoFolder.value,
@@ -342,6 +351,12 @@
                         <div class="option-name">删除所有未被使用的音乐视频</div>
                         <div class="option-operation">
                             <div class="button" @click="clearMusicVideo()">清除</div>
+                        </div>
+                    </div>
+                    <div class="option">
+                        <div class="option-name">输出设备</div>
+                        <div class="option-operation">
+                            <Selector v-model="selectedOutputDevice" :options="availableOutputDevices"></Selector>
                         </div>
                     </div>
                 </div>

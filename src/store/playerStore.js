@@ -39,12 +39,13 @@ export const usePlayerStore = defineStore('playerStore', {
             videoIsPlaying: false,
             playerShow: true,
             lyricBlur: false,
+            outputDevice: null,
         }
     },
     actions: {
     },
     persist: {
         storage: localStorage,
-        paths: ['progress','volume','playMode','shuffleIndex','listInfo','songId','currentIndex','time','quality','lyricType','musicVideo','lyricBlur']
+        paths: ['progress', 'volume', 'playMode', 'shuffleIndex', 'listInfo', 'songId', 'currentIndex', 'time', 'quality', 'lyricType', 'musicVideo', 'lyricBlur', 'outputDevice']
     },
 })
