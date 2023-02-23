@@ -3,6 +3,7 @@ import { getPlaylistDetail, getPlaylistAll, getRecommendSongs, playlistDynamic }
 import { getAlbumDetail, albumDynamic } from '../api/album'
 import { getArtistDetail, getArtistFansCount, getArtistTopSong, getArtistAlbum } from '../api/artist'
 import { getArtistMV } from '../api/mv'
+import { mapSongsPlayableStatus } from "../utils/songStatus";
 
 export const useLibraryStore = defineStore('libraryStore', {
     state: () => {
@@ -61,6 +62,7 @@ export const useLibraryStore = defineStore('libraryStore', {
             await Promise.all([getPlaylistDetail(params), getPlaylistAll(params), playlistDynamic(id)]).then(async results => {
                 this.libraryInfo = results[0].playlist
                 this.librarySongs = results[1].songs
+                this.librarySongs = mapSongsPlayableStatus(results[1].songs, results[1].privileges)
                 if(results[0].playlist.trackIds.length > 1000) {
                     for (let i = 1; i < (results[0].playlist.trackIds.length / 1000); i++) {
                         const params = {
@@ -69,15 +71,12 @@ export const useLibraryStore = defineStore('libraryStore', {
                             offset: i * 1000,
                         }
                         const res = await getPlaylistAll(params)
-                        this.librarySongs = this.librarySongs.concat(res.songs)
+                        const songs = mapSongsPlayableStatus(res.songs, res.privileges)
+                        this.librarySongs = this.librarySongs.concat(songs)
                     }
                 }
                 this.libraryInfo.followed = results[2].subscribed
                 this.libraryChangeAnimation = false
-
-                this.librarySongs.forEach((song, i) => {
-                    song.playable = results[0].privileges[i].st === 0
-                })
             })
         },
         async updateAlbumDetail(id) {
@@ -87,7 +86,7 @@ export const useLibraryStore = defineStore('libraryStore', {
             }
             await Promise.all([getAlbumDetail(params), albumDynamic(id)]).then(results => {
                 this.libraryInfo = results[0].album
-                this.librarySongs = results[0].songs
+                this.librarySongs = mapSongsPlayableStatus(results[0].songs)
                 this.libraryInfo.followed = results[1].isSub
                 this.libraryChangeAnimation = false
             })
@@ -101,7 +100,7 @@ export const useLibraryStore = defineStore('libraryStore', {
                 results[0].artist.follow = results[1].data
                 results[0].artist.followed = results[1].data.follow
                 this.libraryInfo = results[0].artist
-                this.librarySongs = results[0].hotSongs
+                this.librarySongs = mapSongsPlayableStatus(results[0].hotSongs)
                 this.libraryChangeAnimation = false
             })
         },
@@ -112,7 +111,7 @@ export const useLibraryStore = defineStore('libraryStore', {
                 // timestamp: new Date().getTime()
             }
             await getArtistTopSong(params).then(result => {
-                this.librarySongs = result.songs
+                this.librarySongs = mapSongsPlayableStatus(result.songs)
             })
         },
         //获取歌手专辑，并更新Store数据
@@ -141,7 +140,7 @@ export const useLibraryStore = defineStore('libraryStore', {
         },
         async updateRecommendSongs() {
             await getRecommendSongs().then(result => {
-                this.librarySongs = result.data.dailySongs
+                this.librarySongs = mapSongsPlayableStatus(result.data.dailySongs)
             })
         },
     },
