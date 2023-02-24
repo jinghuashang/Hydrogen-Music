@@ -10,7 +10,7 @@ import { storeToRefs } from 'pinia'
 
 const userStore = useUserStore(pinia)
 const playerStore = usePlayerStore()
-const { quality, lyricSize, tlyricSize, rlyricSize, lyricInterludeTime, outputDevice } = storeToRefs(playerStore)
+const { quality, lyricSize, tlyricSize, rlyricSize, lyricInterludeTime } = storeToRefs(playerStore)
 const localSotre = useLocalStore()
 const { updateUser } = userStore
 
@@ -21,7 +21,6 @@ export const initSettings = () => {
         tlyricSize.value = settings.music.tlyricSize
         rlyricSize.value = settings.music.rlyricSize
         lyricInterludeTime.value = settings.music.lyricInterlude
-        outputDevice.value = settings.music.outputDevice || 'default'
         localSotre.downloadedFolderSettings = settings.local.downloadFolder
         localSotre.localFolderSettings = settings.local.localFolder
         localSotre.quitApp = settings.other.quitApp
