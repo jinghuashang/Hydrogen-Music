@@ -1,7 +1,7 @@
 <template>
   <div class="selector" ref="select" @click="changeOptionsVisible">
     <div class="selector-head">
-      <span class="select-head-cont">{{ current.label }}</span>
+      <span class="select-head-cont" :class="{ 'long-label': isLongLabel(current?.label) }">{{ current?.label }}</span>
     </div>
     <teleport to="body">
       <transition name="selector" @enter="absolutePosition(overlay, select)">
@@ -22,7 +22,7 @@
               'selector-option-item-selected': modelValue === item.value,
             }"
           >
-            {{ item.label }}
+            <span :class="{'long-label' :isLongLabel(item?.label)}">{{ item?.label }}</span>
           </div>
         </div>
       </transition>
@@ -54,6 +54,10 @@ const changeOption = (e) => {
   emit("update:modelValue", e.value);
   option.value = false;
 };
+
+const isLongLabel = (label) => {
+  return label?.length >= 20
+}
 
 let clickOutside = (event) => {
   if (select.value && !select.value.contains(event.target)) {
@@ -89,6 +93,21 @@ const changeOptionsVisible = () => (option.value = !option.value);
   padding: 8px 0;
 }
 
+.selector-head{
+  padding: 2px 10px;
+  width: 100%;
+}
+.selector-head,.selector-option-item{
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.selector-head:hover .long-label, .selector-option-item:hover .long-label{
+    display: block;
+    width: fit-content;
+    animation: slide-label 5s linear infinite alternate;
+}
+
 .selector-option-item {
   width: 200px;
   height: 34px;
@@ -108,6 +127,15 @@ const changeOptionsVisible = () => (option.value = !option.value);
   &-selected {
     background-color: black;
     color: white;
+  }
+}
+
+@keyframes slide-label{
+  from {
+    transform: translatex(0%);
+  }
+  to{
+    transform: translatex(-60%);
   }
 }
 
