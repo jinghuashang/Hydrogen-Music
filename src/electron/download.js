@@ -1,4 +1,5 @@
-const { ipcMain } =  require('electron')
+const { ipcMain } =  require('electron');
+const path = require('path');
 const Store = require('electron-store');
 module.exports = MusicDownload = (win) => {
     const settingsStore = new Store({name: 'settings'})
@@ -14,12 +15,12 @@ module.exports = MusicDownload = (win) => {
         downloadObj.downloadUrl = args.url
         downloadObj.type = args.type
         const savePath = await settingsStore.get('settings')
-        downloadObj.savePath = savePath.local.downloadFolder + '\\'
+        downloadObj.savePath = savePath.local.downloadFolder
         win.webContents.downloadURL(downloadObj.downloadUrl)
     })
 
     win.webContents.session.on('will-download', (event, item, webContents) => {
-        item.setSavePath(downloadObj.savePath + downloadObj.fileName + '.' + downloadObj.type)
+        item.setSavePath(path.join(downloadObj.savePath, downloadObj.fileName + '.' + downloadObj.type))
 
         const totalBytes = item.getTotalBytes();
 
