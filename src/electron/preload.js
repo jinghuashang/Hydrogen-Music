@@ -158,6 +158,7 @@ contextBridge.exposeInMainWorld('windowApi', {
     deleteMusicVideo: (id) => ipcRenderer.invoke('delete-music-video', id),
     getLocalMusicLyric: (filePath) => ipcRenderer.invoke('get-local-music-lyric', filePath),
     copyTxt,
+    selectFile: () => ipcRenderer.invoke('select-file'),
     checkUpdate,
     setWindowTile,
 })

@@ -330,4 +330,15 @@ module.exports = IpcMainEvent = (win, app) => {
     ipcMain.on('set-window-title', (e, title) => {
         win.setTitle(title)
     })
+    ipcMain.handle('select-file', async (e) => {
+        const filters = [
+            {name: 'Fonts', extensions:['woff','woff2','ttf','otf','eot']}
+        ]
+        const { canceled, filePaths } = await dialog.showOpenDialog({properties: ['openFile'],filters})
+        if (canceled) {
+            return null
+        } else {
+            return filePaths[0]
+        }
+    })
 }
