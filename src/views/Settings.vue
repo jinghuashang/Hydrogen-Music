@@ -60,7 +60,8 @@
   const shortcutsList = ref(null)
   const selectedShortcut = ref(null)
   const newShortcut = ref([])
-  const shortcutCharacter  = ['=', '-', '~', '@', '#', '$', '[', ']', ';', "'", ',', '.', '/', '!'];
+const shortcutCharacter = ['=', '-', '~', '@', '#', '$', '[', ']', ';', "'", ',', '.', '/', '!'];
+const customFont = ref('')
 
   if(isLogin()) {
     getVipInfo().then(result => {
@@ -80,8 +81,10 @@
         localFolder.value = settings.local.localFolder
         shortcutsList.value = settings.shortcuts
         globalShortcuts.value = settings.other.globalShortcuts
-        quitApp.value = settings.other.quitApp
+		quitApp.value = settings.other.quitApp
+        customFont.value = settings.other.customFont
     })
+	insertCustomFontStyle()
   })
 
   const setAppSettings = () => {
@@ -101,7 +104,8 @@
         shortcuts: shortcutsList.value,
         other: {
             globalShortcuts: globalShortcuts.value,
-            quitApp: quitApp.value
+			quitApp: quitApp.value,
+            customFont: customFont.value,
         }
     }
     windowApi.setSettings(JSON.stringify(settings))
@@ -251,6 +255,33 @@
   }
   const toGithub = () => {
     windowApi.toRegister("https://github.com/Kaidesuyo/Hydrogen-Music")
+  }
+  const insertCustomFontStyle = (init = false) => {
+  	const head = document.querySelector('head')
+  	if (init) {
+  		customFont.value = ''
+  		head.querySelector('#__CUSTOM_FONT__').remove()
+  	}
+  	else if (customFont.value.length) {
+  	const str = `
+  		@font-face {
+  			font-family: SourceHanSansCN-Bold;
+              font-weight: 'bold';
+  			src: local(${customFont.value});
+  		}`, el = head.querySelector('#__CUSTOM_FONT__')
+  		if (el) {
+  			el.innerHTML = str
+  		}
+  		else {
+  			const style = document.createElement('style')
+  			style.setAttribute('id', '__CUSTOM_FONT__')
+  			style.innerHTML = 
+  			head.appendChild(style)
+  		}
+  	}
+  }
+  const setCustomFont = () => {
+        insertCustomFontStyle(customFont.value.length ? false : true)
   }
 </script>
 
@@ -428,6 +459,13 @@
                                     <div class="toggle-on" v-show="userStore.cloudDiskPage"></div>
                                 </Transition>
                             </div>
+                        </div>
+                    </div>
+                    <div class="option">
+                        <div class="option-name">自定义字体</div>
+                        <div class="custom-font local-folder">
+                            <!-- <div class="custom-font-path">{{customFont ? customFont : '未设置'}}</div> -->
+                            <input type="text" placeholder="输入本地已安装字体名字" @blur="setCustomFont()" v-model.lazy="customFont">
                         </div>
                     </div>
                     <div class="option">
@@ -725,6 +763,11 @@
                                 color: black;
                                 background-color: rgba(255, 255, 255, 0.35);
                                 transition: 0.2s;
+                                &.selected {
+                                    color: white;
+                                    background-color: black;
+                                    box-shadow: 0 0 0 1px black;
+                                }
                                 &:hover{
                                     cursor: pointer;
                                     opacity: 0.8;
@@ -732,6 +775,17 @@
                                 }
                             }
                         }
+						.custom-font {
+							.custom-font-path {
+								width: 50vw;
+								height: 30px;
+								background-color: rgba(255, 255, 255, 0.35);
+								font: 13px SourceHanSansCN-Bold;
+								color: black;
+								line-height: 30px;
+								overflow: hidden;
+							}
+						}
                     }
                     .forbid-shortcuts{
                         opacity: 0.5;
