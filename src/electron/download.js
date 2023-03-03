@@ -1,6 +1,7 @@
 const { ipcMain } = require("electron");
 const path = require("path");
 const Store = require("electron-store");
+const { nanoid } = require('nanoid')
 module.exports = MusicDownload = (win) => {
     const settingsStore = new Store({ name: "settings" });
     let isClose = false;
@@ -55,11 +56,7 @@ module.exports = MusicDownload = (win) => {
                     item.setSavePath(alterPath + "." + downloadObj.type);
                     if (interruptedTimes > 3) {
                         item.setSavePath(
-                            downloadObj.savePath +
-                                "undefined_name" +
-                                Math.trunc(Math.random(0, 1) * 10000) +
-                                "." +
-                                downloadObj.type
+                            path.join(downloadObj.savePath, "undefined_name_" + nanoid()  + "." + downloadObj.type)
                         );
                         interruptedTimes = 0;
                     }
