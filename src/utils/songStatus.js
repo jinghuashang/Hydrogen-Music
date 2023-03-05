@@ -22,7 +22,7 @@ function checkSongPlayable(song, _privilege) {
       status.playable = false
       status.reason = '仅限 VIP 会员'
     }
-  } else if (song.fee === 4 || privilege?.fee === 4) {
+  } else if ((song.fee === 4 || privilege?.fee === 4) && song?.st < 0) {
     status.playable = false
     status.reason = '付费专辑'
   } else if (song.noCopyrightRcmd !== null && song.noCopyrightRcmd !== undefined) {
@@ -37,6 +37,8 @@ function checkSongPlayable(song, _privilege) {
 
 // 只有调用 getPlaylistAll接口时，才需传入privileges数组
 export function mapSongsPlayableStatus(songs, privilegeList = []) {
+  console.log(songs)
+  console.log(privilegeList)
   if(songs?.length === undefined) return
 
   if(privilegeList.length === 0){
