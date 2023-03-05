@@ -1,6 +1,5 @@
 import pinia from '../store/pinia'
-import Plyr from 'plyr'
-import { Howl } from 'howler'
+import { Howl, Howler } from 'howler'
 import dayjs from 'dayjs';
 import { noticeOpen } from './dialog'
 import { checkMusic, getMusicUrl, likeMusic, getLyric } from '../api/song'
@@ -43,7 +42,10 @@ export function loadLastSong() {
 }
 
 export function play(url, autoplay) {
-    if(currentMusic.value) currentMusic.value.unload()
+    if(currentMusic.value) {
+        currentMusic.value.unload()
+        Howler.unload()
+    }
     currentMusic.value = new Howl({
         src: url,
         autoplay: autoplay,
@@ -231,7 +233,7 @@ export async function getLocalLyric(filePath) {
     else return false
 }
 export async function getSongUrl(id, index, autoplay, isLocal) {
-    windowApi.setWindowTile(songList.value[index].name + " - " + songList.value[index].ar[0].name)
+    windowApi.setWindowTile(songList.value[currentIndex.value].name + " - " + songList.value[currentIndex.value].ar[0].name)
     if(isLocal) {
         windowApi.getLocalMusicImage(songList.value[currentIndex.value].url).then(base64 => {
             localBase64Img.value = base64
