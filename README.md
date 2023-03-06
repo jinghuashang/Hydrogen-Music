@@ -1,8 +1,8 @@
 <br />
 <p align="center">
   <a href="https://github.com/Kaidesuyo/Hydrogen-Music" target="blank">
-    <!-- <img src="img/icon.png" alt="Logo" width="156" height="156"> -->
     <img src="img/wait for rebuild.png" alt="">
+    <img src="img/icon.png" alt="Logo" width="156" height="156">
   </a>
   <h2 align="center" style="font-weight: 600">Hydrogen Music</h2>
 
