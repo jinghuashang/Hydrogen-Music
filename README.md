@@ -1,24 +1,18 @@
 <br />
 <p align="center">
   <a href="https://github.com/Kaidesuyo/Hydrogen-Music" target="blank">
-    <img src="img/icon.png" alt="Logo" width="156" height="156">
+    <!-- <img src="img/icon.png" alt="Logo" width="156" height="156"> -->
+    <img src="img/wait for rebuild.png" alt="">
   </a>
   <h2 align="center" style="font-weight: 600">Hydrogen Music</h2>
 
-  <p align="center">
-    ⚠️请注意：本项目只是为了尽快应付毕业设计的产物，完全没有根据软件工程规范编写，仅供参考！
-    <br />
-    ⚠️上半年暂时没时间，下半年会进行重构，并且会比现在的版本更好。
-    <br />
-    因网易增加了网易云盾验证，密码登录可能无法使用，请使用二维码登录。
-    <br />
-    请尽量不要使用云盘中的上传功能，目前上传失败概率大且内存无法得到释放。
-    <br />
-    <a href="#%EF%B8%8F-安装" target="blank"><strong>📦️ 下载安装包</strong></a>
-    <br />
-    <br />
-  </p>
-</p>
+## ⚠️ 注意：
+- 本项目是为了尽快应付毕业设计的产物，没有根据软件工程规范编写，仅供参考！
+- 本项目下半年会进行重构，届时会重写所有源代码，请在接受此条件的前提下提交PR。
+- 由于本地管理功能并不完善，请尽量将其作为流媒体播放器使用。
+- 因网易增加了网易云盾验证，密码与邮箱登录无法使用，请使用二维码登录。
+- 请尽量不要使用云盘中的上传功能，目前上传失败概率大且内存无法得到释放。
+- <a href="#%EF%B8%8F-安装" target="blank"><strong>📦️ 下载安装包</strong></a>
 
 ## 📦️ 安装
 
