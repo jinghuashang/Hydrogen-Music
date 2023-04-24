@@ -7,6 +7,7 @@ import { useUserStore } from '../store/userStore'
 import { usePlayerStore } from '../store/playerStore'
 import { useLocalStore } from '../store/localStore'
 import { storeToRefs } from 'pinia'
+import { insertCustomFontStyle } from './setFont'
 
 const userStore = useUserStore(pinia)
 const playerStore = usePlayerStore()
@@ -24,27 +25,28 @@ export const initSettings = () => {
         localSotre.downloadedFolderSettings = settings.local.downloadFolder
         localSotre.localFolderSettings = settings.local.localFolder
         localSotre.quitApp = settings.other.quitApp
-        if(localSotre.downloadedFolderSettings && !localSotre.downloadedMusicFolder) {
-            scanMusic({type:'downloaded',refresh:false})
+        if (localSotre.downloadedFolderSettings && !localSotre.downloadedMusicFolder) {
+            scanMusic({ type: 'downloaded', refresh: false })
         }
-        if(localSotre.localFolderSettings.length != 0 && !localSotre.localMusicFolder) {
-            scanMusic({type:'local',refresh:false})
+        if (localSotre.localFolderSettings.length != 0 && !localSotre.localMusicFolder) {
+            scanMusic({ type: 'local', refresh: false })
         }
-        if(!localSotre.downloadedFolderSettings && localSotre.downloadedMusicFolder) {
+        if (!localSotre.downloadedFolderSettings && localSotre.downloadedMusicFolder) {
             localSotre.downloadedMusicFolder = null
             localSotre.downloadedFiles = null
             windowApi.clearLocalMusicData('downloaded')
         }
-        if(localSotre.localFolderSettings.length == 0 && localSotre.localMusicFolder) {
+        if (localSotre.localFolderSettings.length == 0 && localSotre.localMusicFolder) {
             localSotre.localMusicFolder = null,
-            localSotre.localMusicList = null
+                localSotre.localMusicList = null
             localSotre.localMusicClassify = null
             windowApi.clearLocalMusicData('local')
         }
+        insertCustomFontStyle(settings.other.customFont)
     })
 }
 export const getUserLikelist = () => {
-    if(userStore.user.userId)
+    if (userStore.user.userId)
         getLikelist(userStore.user.userId).then(result => {
             userStore.likelist = result.ids
         })
@@ -56,7 +58,7 @@ export const getUserLikelist = () => {
 export const init = () => {
     initSettings()
     loadLastSong()
-    if(isLogin()) {
+    if (isLogin()) {
         getUserProfile().then(result => {
             updateUser(result.profile)
             getUserLikelist()
