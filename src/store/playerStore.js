@@ -38,13 +38,15 @@ export const usePlayerStore = defineStore('playerStore', {
             musicVideoDOM: null,
             videoIsPlaying: false,
             playerShow: true,
+            coverBlur: false,
             lyricBlur: false,
+            coverUrl: null,
         }
     },
     actions: {
     },
     persist: {
         storage: localStorage,
-        paths: ['progress','volume','playMode','shuffleIndex','listInfo','songId','currentIndex','time','quality','lyricType','musicVideo','lyricBlur']
+        paths: ['progress','volume','playMode','shuffleIndex','listInfo','songId','currentIndex','time','quality','lyricType','musicVideo','coverBlur','lyricBlur']
     },
 })

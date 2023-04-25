@@ -224,6 +224,15 @@ const openMusicVideo = (flag) => {
     if (flag)
         playerStore.musicVideo = !playerStore.musicVideo
 }
+const setCoverBlur = () => {
+    if (!playerStore.coverBlur)
+        dialogOpen('确定开启', '开启后此功能会消耗一定性能且可能造成卡顿，确定开启吗？', openCoverBlur)
+    else
+        openCoverBlur(true)
+}
+const openCoverBlur = (flag) => {
+    if (flag) playerStore.coverBlur = !playerStore.coverBlur
+}
 const setLyricBlur = () => {
     if (!playerStore.lyricBlur)
         dialogOpen('确定开启', '开启后此功能会消耗一定性能且可能造成卡顿，确定开启吗？', openLyricBlur)
@@ -302,6 +311,18 @@ const setCustomFont = () => {
                             <div class="option-name">音质选择</div>
                             <div class="option-operation">
                                 <Selector v-model="musicLevel" :options="musicLevelOptions"></Selector>
+                            </div>
+                        </div>
+                        <div class="option">
+                            <div class="option-name">开启背景封面模糊</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="setCoverBlur()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': playerStore.coverBlur }">
+                                        {{ playerStore.coverBlur ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="playerStore.coverBlur"></div>
+                                    </Transition>
+                                </div>
                             </div>
                         </div>
                         <div class="option">
@@ -477,7 +498,7 @@ const setCustomFont = () => {
                 <div class="app-icon">
                     <img src="../assets/icon/icon.ico" alt="">
                 </div>
-                <div class="version">V0.4.0</div>
+                <div class="version">V0.5.0</div>
                 <div class="app-author" @click="toGithub()">Made by Kaidesuyo</div>
             </div>
         </div>
