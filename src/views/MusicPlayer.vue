@@ -9,10 +9,13 @@
 
 <template>
   <div class="music-player">
-    <Player class="player-container" :class="{'player-hide': playerStore.videoIsPlaying && !playerStore.playerShow, 'player-blur': playerStore.videoIsPlaying}"></Player>
+    <Transition name="fade3">
+      <div class="back-drop" :style="{'backgroundImage': 'url(' + playerStore.coverUrl + ')'}" v-if="playerStore.coverBlur && !playerStore.videoIsPlaying"></div>
+    </Transition>
+    <Player class="player-container" :class="{'player-hide': playerStore.videoIsPlaying && !playerStore.playerShow, 'player-blur': playerStore.videoIsPlaying ,'cover-blur': playerStore.coverBlur}"></Player>
     <Lyric class="lyric-container" :class="{'lyric-hide': playerStore.videoIsPlaying && !playerStore.playerShow}"></Lyric>
     <Transition name="fade">
-        <MusicVideo class="music-video" v-if="playerStore.addMusicVideo"></MusicVideo>
+      <MusicVideo class="music-video" v-if="playerStore.addMusicVideo"></MusicVideo>
     </Transition>
     <Transition name="fade2">
       <PlayerVideo class="back-video" v-show="playerStore.videoIsPlaying" v-if="playerStore.currentMusicVideo && playerStore.musicVideo"></PlayerVideo>
@@ -40,6 +43,30 @@
     align-items: center;
     justify-content: center;
     transition: 0.2s;
+    position: relative;
+    overflow: hidden;
+    .back-drop{
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 0;
+      width: 120%;
+      height: 120%;
+      background-size: contain;
+      filter: blur(50px);
+      transform: translate(-10%, -10%); //开启GPU硬件加速
+      transition: 0.3s;
+    }
+    .back-drop::before{
+      content: "";
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.3);
+    }
     .player-container{
       padding: 16Px 12Px;
       padding-bottom: 4vh;
@@ -66,6 +93,11 @@
     .player-blur{
       background-color: rgba(255, 255, 255, 0.2);
       backdrop-filter: blur(4px);
+      transform: translateZ(0);
+    }
+    .cover-blur{
+      background-color: rgba(255, 255, 255, 0.2);
+      transform: translateZ(0);
     }
     .lyric-container{
       margin-left: 50Px;
@@ -107,6 +139,20 @@
       height: 100%;
     }
   }
+
+  .fade3-enter-active {
+    transition: 0.6s !important
+  }
+  .fade3-leave-active {
+    transition: 1.5s !important;
+  }
+  .fade3-enter-from {
+    opacity: 1;
+  }
+  .fade3-leave-to {
+    opacity: 0;
+  }
+
   .fade-enter-active,
   .fade-leave-active {
     transition: 0.1s;
@@ -116,6 +162,7 @@
     transform: scale(0.95);
     opacity: 0;
   }
+  
   .fade2-enter-active {
     transition: 1s;
   }

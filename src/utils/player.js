@@ -16,7 +16,7 @@ const userStore = useUserStore()
 const libraryStore = useLibraryStore(pinia)
 const playerStore = usePlayerStore(pinia)
 const { libraryInfo } = storeToRefs(libraryStore)
-const { currentMusic, playing, progress, volume, quality, playMode, songList, shuffledList, shuffleIndex, listInfo, songId, currentIndex, time, playlistWidgetShow, playerChangeSong, lyric, lyricsObjArr, lyricShow, lyricEle, isLyricDelay, widgetState, localBase64Img, musicVideo, currentMusicVideo, musicVideoDOM, videoIsPlaying, playerShow, lyricBlur} = storeToRefs(playerStore)
+const { currentMusic, playing, progress, volume, quality, playMode, songList, shuffledList, shuffleIndex, listInfo, songId, currentIndex, time, playlistWidgetShow, playerChangeSong, lyric, lyricsObjArr, lyricShow, lyricEle, isLyricDelay, widgetState, localBase64Img, musicVideo, currentMusicVideo, musicVideoDOM, videoIsPlaying, playerShow, lyricBlur, coverUrl} = storeToRefs(playerStore)
 
 let isProgress = false
 let musicProgress = null
@@ -232,11 +232,31 @@ export async function getLocalLyric(filePath) {
     if(lyric) return lyric
     else return false
 }
+export function setSongToWindows() {
+    if(songList.value[currentIndex.value].type != 'local') {
+        coverUrl.value = songList.value[currentIndex.value].al.picUrl + '?param=128y128'
+    } else {
+        if(!localBase64Img.value) coverUrl.value = null
+        else coverUrl.value = localBase64Img.value
+    }
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: [songList.value[currentIndex.value].name],
+          artist: [songList.value[currentIndex.value].ar.map(a => a.name)],
+          artwork: [
+            { src: coverUrl.value }
+          ]
+        });
+    } else {
+        return
+    }
+}
 export async function getSongUrl(id, index, autoplay, isLocal) {
     windowApi.setWindowTile(songList.value[currentIndex.value].name + " - " + songList.value[currentIndex.value].ar[0].name)
     if(isLocal) {
         windowApi.getLocalMusicImage(songList.value[currentIndex.value].url).then(base64 => {
             localBase64Img.value = base64
+            setSongToWindows()
         })
         play(songList.value[currentIndex.value].url, autoplay)
         lyric.value = null
@@ -252,6 +272,7 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
         }
         return
     }
+    setSongToWindows()
     await checkMusic(id).then(result => {
         if(result.success == true) {
             getMusicUrl(id, quality.value).then(songInfo => {
@@ -598,6 +619,9 @@ windowApi.musicProcessControl((event, mode) => {
         if(progress.value - 3 > 0) progress.value -= 3
         else progress.value = 0
     }
+    if(videoIsPlaying.value) {
+        musicVideoCheck(progress.value, true)
+    }
     currentMusic.value.seek(progress.value)
 })
 windowApi.playOrPauseMusicCheck(playing.value)
@@ -611,3 +635,17 @@ windowApi.beforeQuit(() => {
     }
     windowApi.exitApp(JSON.stringify(list))
 })
+if ('mediaSession' in navigator) {
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+      playLast()
+    });
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+      playNext()
+    });
+    navigator.mediaSession.setActionHandler('play', () => {
+       startMusic();
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      pauseMusic()
+    });
+}
