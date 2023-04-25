@@ -215,7 +215,8 @@
     if(localStorage.getItem('Sessdata')) headers.cookie = 'SESSDATA=' + localStorage.getItem('Sessdata')  + ';'
     console.log(currentVideoInfo.value)
     console.log(selectedInfo.value)
-    const urlIndex = selectedInfo.value.qn - (currentVideoInfo.value.quality.length - currentVideoInfo.value.video.length / 2)
+    let urlIndex = selectedInfo.value.qn - (currentVideoInfo.value.quality.length - currentVideoInfo.value.video.length / 2)
+    if(urlIndex < 0) urlIndex = 0
     console.log(urlIndex)
     windowApi.getBiliVideo({url: currentVideoInfo.value.video[urlIndex].baseUrl, option: {headers: headers, params: {id: addMusicVideo.value.id, bv: selectedInfo.value.bvid, cid: selectedInfo.value.part, quality: selectedInfo.value.quality, qn: selectedInfo.value.qn, timing: JSON.stringify(timingList.value)}}}).then(result => {
         isDownloading.value = false
