@@ -208,8 +208,9 @@
             lyricEle.value[i].style.transitionDelay = j + 's'
             j += 0.05
             if(lyricBlur.value) {
+              if(k > 1.8) k = 1.8
               lyricEle.value[i].firstChild.style.setProperty("filter", "blur(" + k + "px)");
-              k += 0.4
+              k += 0.2
             }
           }
         }
@@ -394,8 +395,7 @@
           display: flex;
           flex-direction: column;
           align-items: flex-start;
-          transition-duration: 0.6s;
-          transition-timing-function: cubic-bezier(.30,0,.12,1);
+          transition: 0.4s cubic-bezier(.30,0,.12,1);
           user-select: text;
           &:hover{
             cursor: pointer;

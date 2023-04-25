@@ -13,7 +13,7 @@
   const userStore = useUserStore()
   const localStore = useLocalStore()
   const playerStore = usePlayerStore()
-  const { playing, progress, volume, playMode, currentIndex, songList, songId, widgetState, lyricShow, lyricType, playlistWidgetShow, time, playerChangeSong, localBase64Img, musicVideo, addMusicVideo, videoIsPlaying, playerShow } = storeToRefs(playerStore)
+  const { playing, progress, volume, playMode, currentIndex, songList, songId, widgetState, lyricShow, lyricType, playlistWidgetShow, time, playerChangeSong, localBase64Img, musicVideo, addMusicVideo, videoIsPlaying, playerShow, coverBlur } = storeToRefs(playerStore)
 
   const checkIsLike = computed(() => (id) => {
     return userStore.likelist.includes(id)
@@ -80,9 +80,9 @@
                 <span class="music-name" :class="{'music-name-in': playerChangeSong}">{{songList[currentIndex].name || songList[currentIndex].localName}}</span>
             </div>
             <div class="info-music">
-                <div class="music-author-lable" :class="{'music-author-lable-video': videoIsPlaying}"></div>
+                <div class="music-author-lable" :class="{'music-author-lable-video': videoIsPlaying || coverBlur}"></div>
                 <div class="music-author">
-                    <span @click="checkArtist(singer.id)" class="author" :style="{color: videoIsPlaying ? 'black' : 'rgb(105, 105, 105)'}" v-for="(singer, index) in songList[currentIndex].ar">{{singer.name || ''}}{{index == songList[currentIndex].ar.length -1 ? '' : ' / '}}</span>
+                    <span @click="checkArtist(singer.id)" class="author" :style="{color: videoIsPlaying || coverBlur ? 'black' : 'rgb(105, 105, 105)'}" v-for="(singer, index) in songList[currentIndex].ar">{{singer.name || ''}}{{index == songList[currentIndex].ar.length -1 ? '' : ' / '}}</span>
                 </div>
             </div>
         </div>
