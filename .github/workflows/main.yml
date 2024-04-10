@@ -26,7 +26,7 @@ jobs:
           node-version: "18.12.0"
           
       - name: Install Dependencies
-        run: npm install electron-installer-snap
+        run: npm install --save-dev electron-installer-snap
         
       - name: Build Electron App
         run: npm run dist
