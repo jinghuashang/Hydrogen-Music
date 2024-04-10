@@ -70,7 +70,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "Kaidesuyo",
+        "owner": "jinghuashang",
         "repo": "Hydrogen-Music",
         "releaseType": "draft"
       }
