@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.5.0",
   "main": "background.js",
-  "author": "jinghuashang",
+  "author": "Kaidesuyo",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
