@@ -26,7 +26,11 @@ jobs:
           node-version: "18.12.0"
           
       - name: Install Dependencies
-        run: npm install --save-dev electron-installer-snap
+        run: npm install
+
+      - name: Install Snapcraft on Ubuntu
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo snap install snapcraft --classic
         
       - name: Build Electron App
         run: npm run dist
