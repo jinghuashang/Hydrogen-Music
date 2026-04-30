@@ -7,13 +7,8 @@ const Store = require('electron-store')
 const settingsStore = new Store({name: 'settings'})
 
 let unblockProcess = null
-
-function saveUnblockDiag(running, error) {
-  try {
-    const diagStore = new Store({name: 'unblock-diag'})
-    diagStore.set('diag', { running, error, time: Date.now() })
-  } catch {}
-}
+// Module-level diagnostic, readable by getUnblockDiagnostic() with no store race
+let unblockDiag = { running: false, error: 'not started yet', time: 0 }
 
 //启动网易云音乐API
 module.exports = async function startNeteaseMusicApi() {
@@ -28,7 +23,7 @@ module.exports = async function startNeteaseMusicApi() {
 module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
   const settings = settingsStore.get('settings')
   if (!settings || !settings.unblock || !settings.unblock.enabled) {
-    console.log('[UnblockNeteaseMusic] Not enabled in settings, skipping')
+    unblockDiag = { running: false, error: 'disabled in settings', time: Date.now() }
     return
   }
   const port = settings.unblock.port || '36531:36532'
@@ -37,21 +32,25 @@ module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
   try {
     const unblockRoot = path.dirname(require.resolve('unblockneteasemusic/package.json'))
     const mainScript = path.join(unblockRoot, 'precompiled', 'app.js')
-
-    console.log('[UnblockNeteaseMusic] Package root:', unblockRoot)
-    console.log('[UnblockNeteaseMusic] Main script:', mainScript)
-    console.log('[UnblockNeteaseMusic] Script exists:', fs.existsSync(mainScript))
-
-    if (!fs.existsSync(mainScript)) {
-      saveUnblockDiag(false, `Script not found: ${mainScript}`)
-      console.error('[UnblockNeteaseMusic] Script not found:', mainScript)
-      return
-    }
-
     const certPath = path.join(unblockRoot, 'server.crt')
     const keyPath = path.join(unblockRoot, 'server.key')
-    console.log('[UnblockNeteaseMusic] Cert exists:', fs.existsSync(certPath))
-    console.log('[UnblockNeteaseMusic] Key exists:', fs.existsSync(keyPath))
+
+    const scriptExists = fs.existsSync(mainScript)
+    const certExists = fs.existsSync(certPath)
+    const keyExists = fs.existsSync(keyPath)
+
+    if (!scriptExists) {
+      unblockDiag = {
+        running: false,
+        error: `Script not found: ${mainScript}`,
+        unblockRoot,
+        scriptExists,
+        certExists,
+        keyExists,
+        time: Date.now(),
+      }
+      return
+    }
 
     // Use Electron's bundled Node.js with ELECTRON_RUN_AS_NODE to bypass single-instance lock
     unblockProcess = spawn(process.execPath, [mainScript, '-p', port, '-e', '-', '-o', ...sources], {
@@ -64,27 +63,52 @@ module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
         SIGN_KEY: keyPath,
       },
     })
+
     unblockProcess.stdout.on('data', (data) => {
-      console.log(`[UnblockNeteaseMusic] ${data}`)
+      const msg = data.toString().trim()
+      if (msg) unblockDiag.lastStdout = msg
     })
     unblockProcess.stderr.on('data', (data) => {
-      console.log(`[UnblockNeteaseMusic] ${data}`)
+      const msg = data.toString().trim()
+      if (msg) unblockDiag.lastStderr = msg
     })
     unblockProcess.on('error', (err) => {
-      saveUnblockDiag(false, `spawn error: ${err.message}`)
-      console.error('[UnblockNeteaseMusic] Failed to start:', err.message)
+      unblockDiag = {
+        running: false,
+        error: `spawn error: ${err.message}`,
+        unblockRoot,
+        scriptExists,
+        certExists,
+        keyExists,
+        time: Date.now(),
+      }
       unblockProcess = null
     })
     unblockProcess.on('exit', (code) => {
-      saveUnblockDiag(false, `exited with code ${code}`)
-      console.log(`[UnblockNeteaseMusic] Exited with code ${code}`)
+      if (code !== 0) {
+        unblockDiag = {
+          running: false,
+          error: `exited with code ${code}`,
+          lastStderr: unblockDiag.lastStderr,
+          unblockRoot,
+          time: Date.now(),
+        }
+      }
       unblockProcess = null
     })
-    saveUnblockDiag(true, '')
-    console.log(`[UnblockNeteaseMusic] Started on port ${port}`)
+
+    unblockDiag = {
+      running: true,
+      error: '',
+      unblockRoot,
+      scriptExists,
+      certExists,
+      keyExists,
+      pid: unblockProcess.pid,
+      time: Date.now(),
+    }
   } catch (e) {
-    saveUnblockDiag(false, `package error: ${e.message}`)
-    console.error('[UnblockNeteaseMusic] Package error:', e.message)
+    unblockDiag = { running: false, error: `package error: ${e.message}`, time: Date.now() }
   }
 }
 
@@ -93,7 +117,6 @@ module.exports.stopUnblockNeteaseMusic = function stopUnblockNeteaseMusic() {
   if (unblockProcess) {
     unblockProcess.kill()
     unblockProcess = null
-    console.log('[UnblockNeteaseMusic] Stopped')
   }
 }
 
@@ -108,12 +131,7 @@ module.exports.getUnblockStatus = function getUnblockStatus() {
   return unblockProcess !== null
 }
 
-//获取UnblockNeteaseMusic诊断信息
+//获取UnblockNeteaseMusic诊断信息 (module-level, no store dependency)
 module.exports.getUnblockDiagnostic = function getUnblockDiagnostic() {
-  try {
-    const diagStore = new Store({name: 'unblock-diag'})
-    return diagStore.get('diag') || { running: false, error: 'no data' }
-  } catch {
-    return { running: false, error: 'store error' }
-  }
+  return { ...unblockDiag, running: unblockProcess !== null }
 }
