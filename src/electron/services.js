@@ -28,7 +28,7 @@ module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
     // Use the precompiled (webpack-bundled) app.js which is self-contained with all dependencies
     const mainScript = path.join(unblockRoot, 'precompiled', 'app.js')
 
-    unblockProcess = spawn(process.execPath, [mainScript, '-p', port, '-e', '-', '-o', ...sources], {
+    unblockProcess = spawn('node', [mainScript, '-p', port, '-e', '-', '-o', ...sources], {
       cwd: unblockRoot,
       stdio: 'pipe',
       env: {

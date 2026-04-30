@@ -2,7 +2,7 @@ export const insertCustomFontStyle = (customFont) => {
   if (!document) return
   const head = document.querySelector('head')
 
-  if (!customFont.length) {
+  if (!customFont || !customFont.length) {
     head.querySelector('#__CUSTOM_FONT__')?.remove()
   }
   else {
