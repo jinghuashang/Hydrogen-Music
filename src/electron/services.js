@@ -1,6 +1,7 @@
 const { serveNcmApi } = require('NeteaseCloudMusicApi')
 const generateConfig = require('NeteaseCloudMusicApi/generateConfig')
 const { spawn } = require('child_process')
+const path = require('path')
 const Store = require('electron-store')
 const settingsStore = new Store({name: 'settings'})
 
@@ -23,12 +24,18 @@ module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
   const sources = settings.unblock.sources || ['qq', 'kugou', 'kuwo', 'bilibili']
 
   try {
-    const unblockRoot = require('path').dirname(require.resolve('unblockneteasemusic/package.json'))
-    const mainScript = require('path').join(unblockRoot, 'src', 'app.js')
+    const unblockRoot = path.dirname(require.resolve('unblockneteasemusic/package.json'))
+    // Use the precompiled (webpack-bundled) app.js which is self-contained with all dependencies
+    const mainScript = path.join(unblockRoot, 'precompiled', 'app.js')
 
-    unblockProcess = spawn('node', [mainScript, '-p', port, '-e', '-', '-o', ...sources], {
+    unblockProcess = spawn(process.execPath, [mainScript, '-p', port, '-e', '-', '-o', ...sources], {
       cwd: unblockRoot,
-      stdio: 'pipe'
+      stdio: 'pipe',
+      env: {
+        ...process.env,
+        SIGN_CERT: path.join(unblockRoot, 'server.crt'),
+        SIGN_KEY: path.join(unblockRoot, 'server.key'),
+      },
     })
     unblockProcess.stdout.on('data', (data) => {
       console.log(`[UnblockNeteaseMusic] ${data}`)
