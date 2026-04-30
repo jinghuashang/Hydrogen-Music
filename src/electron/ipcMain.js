@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const { parseFile } = require('music-metadata')
 const registerShortcuts = require('./shortcuts')
-const { startUnblockNeteaseMusic, stopUnblockNeteaseMusic, restartUnblockNeteaseMusic, getUnblockStatus } = require('./services')
+const { startUnblockNeteaseMusic, stopUnblockNeteaseMusic, restartUnblockNeteaseMusic, getUnblockStatus, getUnblockDiagnostic } = require('./services')
 const Store = require('electron-store')
 const CancelToken = axios.CancelToken
 let cancel = null
@@ -364,5 +364,8 @@ module.exports = IpcMainEvent = (win, app) => {
     })
     ipcMain.handle('get-unblock-status', async () => {
         return getUnblockStatus()
+    })
+    ipcMain.handle('get-unblock-diag', async () => {
+        return getUnblockDiagnostic()
     })
 }

@@ -161,6 +161,7 @@ contextBridge.exposeInMainWorld('windowApi', {
     stopUnblock: () => ipcRenderer.invoke('stop-unblock'),
     restartUnblock: () => ipcRenderer.invoke('restart-unblock'),
     getUnblockStatus: () => ipcRenderer.invoke('get-unblock-status'),
+    getUnblockDiag: () => ipcRenderer.invoke('get-unblock-diag'),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     copyTxt,
     selectFile: () => ipcRenderer.invoke('select-file'),
