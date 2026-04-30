@@ -57,7 +57,7 @@
       "node_modules/unblockneteasemusic/**/*"
     ],
     "directories": {
-      "output": "dist"
+      "output": "release/${version}"
     },
     "files": [],
     "nsis": {
