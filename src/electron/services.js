@@ -21,13 +21,17 @@ module.exports = async function startNeteaseMusicApi() {
 
 //启动UnblockNeteaseMusic
 module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
+  console.log('[UnblockNeteaseMusic] Called, checking settings...')
   const settings = settingsStore.get('settings')
-  if (!settings || !settings.unblock || !settings.unblock.enabled) {
+  console.log('[UnblockNeteaseMusic] Settings:', JSON.stringify(settings?.unblock))
+  // On first run settings may not exist — default to enabled, matching ipcMain.js initSettings
+  if (settings && settings.unblock && settings.unblock.enabled === false) {
     unblockDiag = { running: false, error: 'disabled in settings', time: Date.now() }
     return
   }
-  const port = settings.unblock.port || '36531:36532'
-  const sources = settings.unblock.sources || ['qq', 'kugou', 'kuwo', 'bilibili']
+  const unblockCfg = (settings && settings.unblock) || {}
+  const port = unblockCfg.port || '36531:36532'
+  const sources = unblockCfg.sources || ['qq', 'kugou', 'kuwo', 'bilibili']
 
   try {
     const unblockRoot = path.dirname(require.resolve('unblockneteasemusic/package.json'))
