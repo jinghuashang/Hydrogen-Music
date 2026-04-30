@@ -3,11 +3,11 @@ const generateConfig = require('NeteaseCloudMusicApi/generateConfig')
 const { spawn } = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
 const Store = require('electron-store')
 const settingsStore = new Store({name: 'settings'})
 
 let unblockProcess = null
-// Module-level diagnostic, readable by getUnblockDiagnostic() with no store race
 let unblockDiag = { running: false, error: 'not started yet', time: 0 }
 
 //启动网易云音乐API
@@ -31,36 +31,31 @@ module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
 
   try {
     const unblockRoot = path.dirname(require.resolve('unblockneteasemusic/package.json'))
-    const mainScript = path.join(unblockRoot, 'precompiled', 'app.js')
-    const certPath = path.join(unblockRoot, 'server.crt')
-    const keyPath = path.join(unblockRoot, 'server.key')
 
-    const scriptExists = fs.existsSync(mainScript)
-    const certExists = fs.existsSync(certPath)
-    const keyExists = fs.existsSync(keyPath)
+    // Copy files out of ASAR to a real filesystem temp directory.
+    // The child process runs as pure Node.js (ELECTRON_RUN_AS_NODE) and
+    // cannot read from inside app.asar.
+    const tmpDir = path.join(os.tmpdir(), 'hydrogen-unblock')
+    fs.mkdirSync(tmpDir, { recursive: true })
 
-    if (!scriptExists) {
-      unblockDiag = {
-        running: false,
-        error: `Script not found: ${mainScript}`,
-        unblockRoot,
-        scriptExists,
-        certExists,
-        keyExists,
-        time: Date.now(),
-      }
-      return
-    }
+    const tmpAppJs = path.join(tmpDir, 'app.js')
+    const tmpCert = path.join(tmpDir, 'server.crt')
+    const tmpKey = path.join(tmpDir, 'server.key')
 
-    // Use Electron's bundled Node.js with ELECTRON_RUN_AS_NODE to bypass single-instance lock
-    unblockProcess = spawn(process.execPath, [mainScript, '-p', port, '-e', '-', '-o', ...sources], {
-      cwd: unblockRoot,
+    fs.writeFileSync(tmpAppJs, fs.readFileSync(path.join(unblockRoot, 'precompiled', 'app.js')))
+    fs.writeFileSync(tmpCert, fs.readFileSync(path.join(unblockRoot, 'server.crt')))
+    fs.writeFileSync(tmpKey, fs.readFileSync(path.join(unblockRoot, 'server.key')))
+
+    // ELECTRON_RUN_AS_NODE=1 tells Electron to run as pure Node.js:
+    // no GUI, no single-instance lock, just execute the script.
+    unblockProcess = spawn(process.execPath, [tmpAppJs, '-p', port, '-e', '-', '-o', ...sources], {
+      cwd: tmpDir,
       stdio: 'pipe',
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: '1',
-        SIGN_CERT: certPath,
-        SIGN_KEY: keyPath,
+        SIGN_CERT: tmpCert,
+        SIGN_KEY: tmpKey,
       },
     })
 
@@ -76,10 +71,8 @@ module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
       unblockDiag = {
         running: false,
         error: `spawn error: ${err.message}`,
-        unblockRoot,
-        scriptExists,
-        certExists,
-        keyExists,
+        execPath: process.execPath,
+        tmpDir,
         time: Date.now(),
       }
       unblockProcess = null
@@ -90,7 +83,7 @@ module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
           running: false,
           error: `exited with code ${code}`,
           lastStderr: unblockDiag.lastStderr,
-          unblockRoot,
+          lastStdout: unblockDiag.lastStdout,
           time: Date.now(),
         }
       }
@@ -100,15 +93,12 @@ module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
     unblockDiag = {
       running: true,
       error: '',
-      unblockRoot,
-      scriptExists,
-      certExists,
-      keyExists,
+      tmpDir,
       pid: unblockProcess.pid,
       time: Date.now(),
     }
   } catch (e) {
-    unblockDiag = { running: false, error: `package error: ${e.message}`, time: Date.now() }
+    unblockDiag = { running: false, error: `init error: ${e.message}`, time: Date.now() }
   }
 }
 
@@ -131,7 +121,7 @@ module.exports.getUnblockStatus = function getUnblockStatus() {
   return unblockProcess !== null
 }
 
-//获取UnblockNeteaseMusic诊断信息 (module-level, no store dependency)
+//获取UnblockNeteaseMusic诊断信息
 module.exports.getUnblockDiagnostic = function getUnblockDiagnostic() {
   return { ...unblockDiag, running: unblockProcess !== null }
 }
