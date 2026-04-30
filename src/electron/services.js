@@ -53,11 +53,13 @@ module.exports.startUnblockNeteaseMusic = function startUnblockNeteaseMusic() {
     console.log('[UnblockNeteaseMusic] Cert exists:', fs.existsSync(certPath))
     console.log('[UnblockNeteaseMusic] Key exists:', fs.existsSync(keyPath))
 
-    unblockProcess = spawn('node', [mainScript, '-p', port, '-e', '-', '-o', ...sources], {
+    // Use Electron's bundled Node.js with ELECTRON_RUN_AS_NODE to bypass single-instance lock
+    unblockProcess = spawn(process.execPath, [mainScript, '-p', port, '-e', '-', '-o', ...sources], {
       cwd: unblockRoot,
       stdio: 'pipe',
       env: {
         ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
         SIGN_CERT: certPath,
         SIGN_KEY: keyPath,
       },
