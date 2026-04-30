@@ -146,7 +146,10 @@
                 top: 0px;
                 left: 0px;
                 img{
-                    width: 100%;
+                    width: 35vw;
+                    height: 13.7vw;
+                    object-fit: cover;
+                    flex-shrink: 0;
                     &:hover{
                         cursor: pointer;
                     }
