@@ -54,7 +54,7 @@
     "appId": "114514",
     "asar": true,
     "asarUnpack": [
-      "node_modules/unblockneteasemusic/**/*"
+      "node_modules/unblockneteasemusic/**"
     ],
     "directories": {
       "output": "release/${version}"

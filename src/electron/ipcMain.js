@@ -13,6 +13,9 @@ module.exports = IpcMainEvent = (win, app) => {
     const settingsStore = new Store({name: 'settings'})
     const lastPlaylistStore = new Store({name: 'lastPlaylist'})
     const musicVideoStore = new Store({name: 'musicVideo'})
+    ipcMain.handle('get-app-version', async () => {
+        return require('../../package.json').version
+    })
     ipcMain.on('window-min', () => {
         win.minimize()
     })

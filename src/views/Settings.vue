@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onActivated } from 'vue'
+import { ref, onActivated, onMounted } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { logout } from '../api/user'
 import { noticeOpen, dialogOpen } from "../utils/dialog";
@@ -64,6 +64,7 @@ const selectedShortcut = ref(null)
 const newShortcut = ref([])
 const shortcutCharacter = ['=', '-', '~', '@', '#', '$', '[', ']', ';', "'", ',', '.', '/', '!'];
 const customFont = ref('')
+const appVersion = ref('')
 const unblockEnabled = ref(false)
 const unblockPort = ref('36531:36532')
 
@@ -72,6 +73,9 @@ if (isLogin()) {
         vipInfo.value = result.data
     })
 }
+onMounted(async () => {
+    appVersion.value = await windowApi.getAppVersion()
+})
 onActivated(() => {
     windowApi.getSettings().then(settings => {
         if (!settings) return
@@ -546,7 +550,7 @@ const toggleUnblock = () => {
                 <div class="app-icon">
                     <img src="../assets/icon/icon.ico" alt="">
                 </div>
-                <div class="version">V0.1.0</div>
+                <div class="version">V{{ appVersion }}</div>
                 <div class="app-author" @click="toGithub()">Made by Kaidesuyo</div>
                 <div class="app-author" @click="toJinghuaGithub()">Modified by jinghuashang</div>
             </div>
