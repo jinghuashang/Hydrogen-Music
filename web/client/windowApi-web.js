@@ -3,7 +3,8 @@
  * 通过 /api/invoke、/api/send + SSE(/api/events) 对接 web/server。
  */
 
-const API = '/api'
+// 支持通过环境变量配置 API 地址（用于 Vercel 部署）
+const API = import.meta.env.VITE_NCM_API_URL || '/api'
 
 let eventSource = null
 const sseListeners = new Map()

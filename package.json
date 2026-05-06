@@ -18,7 +18,8 @@
     "dist": "vite build && electron-builder -p always",
     "web:build": "vite build --config web/vite.config.mjs",
     "web:dev": "vite --config web/vite.config.mjs",
-    "web:server": "node web/server/server.js"
+    "web:server": "node web/server/server.js",
+    "vercel-build": "npm run web:build"
   },
   "dependencies": {
     "axios": "^1.2.0",
