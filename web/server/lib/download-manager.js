@@ -15,8 +15,16 @@ function createDownloadManager({ settingsStore, broadcast }) {
   }
 
   async function downloadOne(args) {
-    const folder = getDownloadFolder()
+    let folder = getDownloadFolder()
     if (!folder) return
+    folder = path.resolve(String(folder).trim())
+    try {
+      await fs.promises.mkdir(folder, { recursive: true })
+    } catch (e) {
+      console.error('[download] mkdir', folder, e.message)
+      broadcast('download-next', null)
+      return
+    }
     const fileName = args.name.replaceAll('/', ' - ').replaceAll('\\', ' - ')
     const dest = path.join(folder, `${fileName}.${args.type}`)
     abortController = new AbortController()
@@ -41,7 +49,7 @@ function createDownloadManager({ settingsStore, broadcast }) {
       })
     } catch (e) {
       if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') {
-        console.error('[download]', e.message)
+        console.error('[download]', dest, e.code || e.message)
       }
     } finally {
       abortController = null

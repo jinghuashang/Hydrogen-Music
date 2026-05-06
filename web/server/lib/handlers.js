@@ -104,13 +104,46 @@ function createHandlers({ broadcast }) {
       }
       return { data: result.data, cookies: { ...biliCookies } }
     },
+    /**
+     * Web 端专用：浏览器不能直接请求 B 站 API（CORS），由网关代为请求并与 biliCookies 合并。
+     * 返回体与 Electron preload 中 biliFetch 一致，为接口 JSON（非 axios 包装）。
+     */
+    'get-bili-fetch': async (_e, request) => {
+      const option = request.option || {}
+      option.headers = { ...(option.headers || {}) }
+      const serverCookieStr = Object.entries(biliCookies)
+        .map(([k, v]) => `${k}=${v}`)
+        .join('; ')
+      const clientCookie = option.headers.Cookie || option.headers.cookie || ''
+      delete option.headers.cookie
+      if (clientCookie && serverCookieStr) {
+        option.headers.Cookie = `${clientCookie}; ${serverCookieStr}`
+      } else {
+        option.headers.Cookie = clientCookie || serverCookieStr
+      }
+      const result = await axios.get(request.url, option)
+      const setCookies = result.headers['set-cookie']
+      if (setCookies) {
+        setCookies.forEach((c) => {
+          const [kv] = c.split(';')
+          const [name, ...vals] = kv.split('=')
+          biliCookies[name.trim()] = vals.join('=')
+        })
+      }
+      return result.data
+    },
     'get-bili-video': async (_e, request) => {
       const settings = await getSettings()
       if (!settings.local.videoFolder) return 'noSavePath'
-      const outPath = path.join(
-        settings.local.videoFolder,
-        `${request.option.params.cid}_${request.option.params.quality.substring(3)}.mp4`,
-      )
+      const folder = path.resolve(String(settings.local.videoFolder).trim())
+      try {
+        await fs.promises.mkdir(folder, { recursive: true })
+      } catch (e) {
+        console.error('[get-bili-video] mkdir', e.message)
+        return 'failed'
+      }
+      const q = request.option.params.quality || ''
+      const outPath = path.join(folder, `${request.option.params.cid}_${q.substring(3)}.mp4`)
       if (await fileExists(outPath)) {
         request.option.params.timing = JSON.parse(request.option.params.timing)
         request.option.params.path = outPath
@@ -145,7 +178,11 @@ function createHandlers({ broadcast }) {
           } catch {}
           return 'cancel'
         }
-        throw e
+        console.error('[get-bili-video] fetch', e.message)
+        try {
+          if (fs.existsSync(outPath)) fs.unlinkSync(outPath)
+        } catch {}
+        return 'failed'
       }
       const writer = fs.createWriteStream(outPath)
       try {
@@ -162,7 +199,11 @@ function createHandlers({ broadcast }) {
           } catch {}
           return 'cancel'
         }
-        throw e
+        console.error('[get-bili-video] write', e.message)
+        try {
+          if (fs.existsSync(outPath)) fs.unlinkSync(outPath)
+        } catch {}
+        return 'failed'
       }
       if (canceled) {
         try {

@@ -234,12 +234,7 @@ export function installWebWindowApi() {
         Referer: 'https://www.bilibili.com/',
         ...options.headers,
       }
-      const fetchUrl = new URL(url)
-      if (options.params) {
-        Object.entries(options.params).forEach(([k, v]) => fetchUrl.searchParams.append(k, v))
-      }
-      const res = await fetch(fetchUrl.toString(), { ...options, headers })
-      return res.json()
+      return invoke('get-bili-fetch', [{ url, option: { ...options, headers } }])
     },
   }
 
