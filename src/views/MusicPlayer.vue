@@ -112,7 +112,12 @@
     }
     .music-video{
       position: absolute;
+      inset: 0;
       z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
     }
   }
   .back-video{

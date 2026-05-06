@@ -34,7 +34,7 @@ module.exports = MusicDownload = (win) => {
             win.setProgressBar(progress / 100);
 
             if (state === "interrupted") {
-                let alterPath = downloadObj.savePath + downloadObj.fileName;
+                let alterPath = path.join(downloadObj.savePath, downloadObj.fileName);
                 if (
                     alterPath.indexOf('"') != -1 ||
                     alterPath.indexOf("?") != -1 ||

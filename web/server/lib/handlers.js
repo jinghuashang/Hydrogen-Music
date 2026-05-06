@@ -76,7 +76,8 @@ function createHandlers({ broadcast }) {
     'dialog:openFile': async () => ({
       __web: true,
       kind: 'directory',
-      message: 'Web 版请在弹窗中输入 NAS 上的绝对路径',
+      message:
+        '请输入目录的绝对路径（Linux/macOS 如 /home/用户名/Music；NAS 如 /volume1/music；Windows 如 D:\\\\Music）',
     }),
     'get-last-playlist': async () => {
       const lastPlaylist = lastPlaylistStore.get('playlist')

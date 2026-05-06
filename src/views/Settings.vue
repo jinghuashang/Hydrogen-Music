@@ -10,6 +10,7 @@ import { useUserStore } from '../store/userStore';
 import { usePlayerStore } from '../store/playerStore';
 import { insertCustomFontStyle } from '../utils/setFont';
 import { clearProxyCache } from '../utils/request'
+import { normalizeLocalDirPath, localDirPathEquals } from '../utils/localPath'
 import Selector from '../components/Selector.vue'
 
 const router = useRouter()
@@ -67,6 +68,12 @@ const customFont = ref('')
 const appVersion = ref('')
 const unblockEnabled = ref(false)
 const unblockPort = ref('36531:36532')
+/** 渲染进程用于文案：Linux/Web 下目录选择器或路径习惯与 Windows 不同 */
+const isLinuxLikePath =
+    typeof navigator !== 'undefined' &&
+    /\b(Linux|X11|Wayland)\b/i.test(
+        `${navigator.userAgent} ${navigator.platform || ''}`,
+    )
 
 if (isLogin()) {
     getVipInfo().then(result => {
@@ -84,9 +91,13 @@ onActivated(() => {
         tlyricSize.value = settings.music.tlyricSize
         rlyricSize.value = settings.music.rlyricSize
         lyricInterlude.value = settings.music.lyricInterlude
-        videoFolder.value = settings.local.videoFolder
-        downloadFolder.value = settings.local.downloadFolder
-        localFolder.value = settings.local.localFolder
+        videoFolder.value = normalizeLocalDirPath(settings.local.videoFolder)
+        downloadFolder.value = normalizeLocalDirPath(settings.local.downloadFolder)
+        localFolder.value = Array.isArray(settings.local.localFolder)
+            ? settings.local.localFolder
+                  .map((x) => normalizeLocalDirPath(x))
+                  .filter(Boolean)
+            : []
         shortcutsList.value = settings.shortcuts
         globalShortcuts.value = settings.other.globalShortcuts
         quitApp.value = settings.other.quitApp
@@ -139,20 +150,35 @@ const routerChange = () => {
     router.back()
 }
 
-const selectFolder = (type) => {
-    if (type == 'download') {
-        windowApi.openFile().then(path => {
-            downloadFolder.value = path
-        })
-    } else if (type == 'local') {
-        windowApi.openFile().then(path => {
-            if (path && localFolder.value.indexOf(path) == -1) localFolder.value.push(path)
-        })
-    } else if (type == 'video') {
-        windowApi.openFile().then(path => {
-            videoFolder.value = path
-        })
+function applyLocalFolderPath(type, raw) {
+    const p = normalizeLocalDirPath(raw)
+    if (!p) return
+    if (type === 'download') downloadFolder.value = p
+    else if (type === 'video') videoFolder.value = p
+    else if (type === 'local') {
+        if (!localFolder.value.some((x) => localDirPathEquals(x, p))) localFolder.value.push(p)
     }
+}
+
+const selectFolder = (type) => {
+    windowApi.openFile().then((picked) => {
+        if (picked) applyLocalFolderPath(type, picked)
+    })
+}
+
+/** Linux/Wayland 或无法弹出系统选目录时，可粘贴绝对路径（与 Web 版行为一致） */
+const manualInputFolder = (type) => {
+    const def =
+        type === 'download'
+            ? downloadFolder.value || ''
+            : type === 'video'
+              ? videoFolder.value || ''
+              : ''
+    const hint = isLinuxLikePath
+        ? '请输入绝对路径（示例：/home/用户名/Music 或 /mnt/nas/music）'
+        : '请输入绝对路径（Windows 示例：D:\\\\Music；也可复制资源管理器地址栏路径）'
+    const v = window.prompt(hint, def || '')
+    if (v) applyLocalFolderPath(type, v)
 }
 const deleteLocalFolder = (index) => {
     localFolder.value.splice(index, 1)
@@ -422,17 +448,19 @@ const toggleUnblock = () => {
                         <div class="option" v-if="playerStore.musicVideo">
                             <div class="option-name">音乐视频缓存</div>
                             <div class="select-download-folder">
-                                <div class="selected-folder" :title="downloadFolder">{{ videoFolder ? videoFolder : '待选择' }}
+                                <div class="selected-folder" :title="videoFolder || ''">{{ videoFolder ? videoFolder : '待选择' }}
                                 </div>
                                 <div class="select-option" @click="selectFolder('video')">选择</div>
+                                <div class="select-option select-option-secondary" @click="manualInputFolder('video')">手动输入</div>
                             </div>
                         </div>
                         <div class="option">
                             <div class="option-name">下载目录</div>
                             <div class="select-download-folder">
-                                <div class="selected-folder" :title="downloadFolder">{{ downloadFolder ? downloadFolder :
+                                <div class="selected-folder" :title="downloadFolder || ''">{{ downloadFolder ? downloadFolder :
                                     '待选择' }}</div>
                                 <div class="select-option" @click="selectFolder('download')">选择</div>
+                                <div class="select-option select-option-secondary" @click="manualInputFolder('download')">手动输入</div>
                             </div>
                         </div>
                         <div class="option">
@@ -441,9 +469,11 @@ const toggleUnblock = () => {
                                 <div class="selected-local-folder-item">
                                     <div class="selected-folder" :title="item" @contextmenu="deleteLocalFolder(index)"
                                         v-for="(item, index) in localFolder">{{ item ? item : '请添加' }}</div>
-                                    <div class="tip">您可以同时添加多个目录,右键移除您不需要的目录。数据量过大时需要一定扫描时间,请稍等。</div>
+                                    <div class="tip">可同时添加多个目录；右键移除不需要的目录。路径需为绝对路径（Linux/macOS 多为「/home/…」开头；Windows 为盘符路径）。数据量过大时扫描会较慢。</div>
+                                    <div class="tip tip-linux" v-if="isLinuxLikePath">Linux：若系统文件选择器异常（如部分 Wayland 环境），请用「手动输入」填写目录路径。</div>
                                 </div>
                                 <div class="add-option" @click="selectFolder('local')">添加</div>
+                                <div class="add-option add-option-secondary" @click="manualInputFolder('local')">手动输入路径</div>
                             </div>
                         </div>
                     </div>
@@ -841,12 +871,17 @@ const toggleUnblock = () => {
                                 color: black;
                                 background-color: rgba(255, 255, 255, 0.35);
                                 transition: 0.2s;
+                                white-space: nowrap;
 
                                 &:hover {
                                     cursor: pointer;
                                     opacity: 0.8;
                                     box-shadow: 0 0 0 1px black;
                                 }
+                            }
+
+                            .select-option-secondary {
+                                margin-left: 8px;
                             }
                         }
 
@@ -875,6 +910,11 @@ const toggleUnblock = () => {
                                     color: black;
                                     text-align: left;
                                 }
+
+                                .tip-linux {
+                                    margin-top: 4px;
+                                    opacity: 0.85;
+                                }
                             }
 
                             .add-option {
@@ -885,6 +925,7 @@ const toggleUnblock = () => {
                                 color: black;
                                 background-color: rgba(255, 255, 255, 0.35);
                                 transition: 0.2s;
+                                white-space: nowrap;
 
                                 &.selected {
                                     color: white;
@@ -897,6 +938,10 @@ const toggleUnblock = () => {
                                     opacity: 0.8;
                                     box-shadow: 0 0 0 1px black;
                                 }
+                            }
+
+                            .add-option-secondary {
+                                margin-left: 8px;
                             }
                         }
 

@@ -76,8 +76,11 @@ async function send(event, payload) {
 }
 
 function promptPath(title) {
-  const v = window.prompt(title || '请输入目录在服务器上的绝对路径（例如 /volume1/music）')
-  return v && v.trim() ? v.trim() : null
+  const v = window.prompt(
+    title ||
+      '请输入绝对路径（Linux：/home/用户名/Music；NAS：/volume1/music；Windows：D:\\\\Music）',
+  )
+  return v && v.trim() ? v.trim().replace(/[/\\]+$/, '') : null
 }
 
 export function installWebWindowApi() {

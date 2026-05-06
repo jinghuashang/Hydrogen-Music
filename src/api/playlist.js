@@ -145,6 +145,175 @@ export function playlistsFromHomepageBlockPage(body) {
     return out
 }
 
+function normBlockResourceId(id) {
+    if (id == null) return id
+    if (typeof id === 'string' && /^\d+$/.test(id)) return Number(id)
+    return id
+}
+
+function mainTitleFromBlockUi(ui) {
+    if (!ui) return ''
+    const mt = ui.mainTitle
+    if (typeof mt === 'object' && mt != null && mt.title) return String(mt.title).trim()
+    if (typeof mt === 'string') return mt.trim()
+    return String(ui.title || '').trim()
+}
+
+function coverFromBlockResource(res, ui) {
+    return (
+        ui.image?.imageUrl ||
+        ui.image?.url ||
+        res.coverUrl ||
+        res.picUrl ||
+        ''
+    )
+}
+
+/**
+ * 解析 /homepage/block/page 中的歌手资源（与歌单同源首页流，登录后更贴近官方「发现」）
+ */
+export function artistsFromHomepageBlockPage(body) {
+    if (!body || body.code !== 200) return []
+    const blocks = body.data?.blocks
+    if (!Array.isArray(blocks)) return []
+    const out = []
+    const seen = new Set()
+    const tryPush = (id, name, img) => {
+        if (id == null || !String(name || '').trim()) return
+        const nid = normBlockResourceId(id)
+        if (seen.has(nid)) return
+        seen.add(nid)
+        out.push({
+            id: nid,
+            name: String(name).trim(),
+            img1v1Url: img || '',
+            picUrl: img || '',
+            coverImgUrl: img || '',
+        })
+    }
+    const artistBlockRe =
+        /ARTIST|SINGER|歌手|艺人|ORION_ARTIST|RCMD.*ARTIST|SIMILAR_ARTIST/i
+    for (const block of blocks) {
+        const blockHint =
+            artistBlockRe.test(String(block.blockCode || '')) ||
+            artistBlockRe.test(String(block.showType || ''))
+        for (const creative of block.creatives || []) {
+            for (const res of creative.resources || []) {
+                const rt = String(res.resourceType || '').toLowerCase()
+                const ui = res.uiElement || {}
+                const title = mainTitleFromBlockUi(ui)
+                const img = coverFromBlockResource(res, ui)
+                if (res.artist?.id != null && res.artist?.name) {
+                    tryPush(
+                        res.artist.id,
+                        res.artist.name,
+                        res.artist.img1v1Url || res.artist.picUrl || img,
+                    )
+                    continue
+                }
+                const id = res.resourceId ?? res.id
+                if (rt === 'artist' && id && title) {
+                    tryPush(id, title, img)
+                } else if (
+                    blockHint &&
+                    id &&
+                    title &&
+                    rt !== 'song' &&
+                    rt !== 'list' &&
+                    rt !== 'playlist' &&
+                    rt !== 'album'
+                ) {
+                    tryPush(id, title, img)
+                }
+            }
+        }
+    }
+    return out
+}
+
+/**
+ * 解析 /homepage/block/page 中的专辑/新碟资源
+ */
+export function albumsFromHomepageBlockPage(body) {
+    if (!body || body.code !== 200) return []
+    const blocks = body.data?.blocks
+    if (!Array.isArray(blocks)) return []
+    const out = []
+    const seen = new Set()
+    const tryPushAlbumObj = (album) => {
+        if (!album || album.id == null) return
+        const nid = normBlockResourceId(album.id)
+        if (seen.has(nid)) return
+        seen.add(nid)
+        const pic =
+            album.picUrl ||
+            album.blurPicUrl ||
+            album.cover ||
+            ''
+        const artist =
+            album.artist ||
+            (album.artists?.[0]
+                ? {
+                      id: normBlockResourceId(album.artists[0].id),
+                      name: album.artists[0].name,
+                  }
+                : undefined)
+        out.push({
+            ...album,
+            id: nid,
+            picUrl: pic || album.picUrl,
+            blurPicUrl: album.blurPicUrl || pic,
+            artist,
+        })
+    }
+    const tryPushFlat = (id, name, img) => {
+        if (id == null || !String(name || '').trim()) return
+        const nid = normBlockResourceId(id)
+        if (seen.has(nid)) return
+        seen.add(nid)
+        out.push({
+            id: nid,
+            name: String(name).trim(),
+            picUrl: img,
+            blurPicUrl: img,
+        })
+    }
+    const albumBlockRe =
+        /ALBUM|新碟|专辑|ORION_ALBUM|RCMD.*ALBUM|NEW_ALBUM|NEW_DISK|SONG_LIST_ALBUM/i
+    for (const block of blocks) {
+        const blockHint =
+            albumBlockRe.test(String(block.blockCode || '')) ||
+            albumBlockRe.test(String(block.showType || ''))
+        for (const creative of block.creatives || []) {
+            for (const res of creative.resources || []) {
+                const rt = String(res.resourceType || '').toLowerCase()
+                const ui = res.uiElement || {}
+                const title = mainTitleFromBlockUi(ui)
+                const img = coverFromBlockResource(res, ui)
+                if (res.album?.id != null) {
+                    tryPushAlbumObj(res.album)
+                    continue
+                }
+                const id = res.resourceId ?? res.id
+                if (rt === 'album' && id && title) {
+                    tryPushFlat(id, title, img)
+                } else if (
+                    blockHint &&
+                    id &&
+                    title &&
+                    rt !== 'song' &&
+                    rt !== 'list' &&
+                    rt !== 'playlist' &&
+                    rt !== 'artist'
+                ) {
+                    tryPushFlat(id, title, img)
+                }
+            }
+        }
+    }
+    return out
+}
+
 /**
  * 将 /recommend/resource 响应解析为歌单列表（兼容 recommend / feature / 嵌套 playlist）
  */
