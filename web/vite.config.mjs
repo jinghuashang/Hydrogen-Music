@@ -23,6 +23,12 @@ export default defineConfig({
       '@': path.join(repoRoot, 'src'),
     },
   },
+  define: {
+    // 允许通过环境变量配置 API 地址（用于 Vercel 部署）
+    'import.meta.env.VITE_NCM_API_URL': JSON.stringify(
+      process.env.VITE_NCM_API_URL || '/api'
+    ),
+  },
   server: {
     port: 5174,
     strictPort: false,

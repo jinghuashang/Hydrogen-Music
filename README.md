@@ -38,6 +38,46 @@ npm run dev
 npm start
 ```
 
+## 🌐 部署到 Vercel
+
+除了下载安装包使用，你还可以将本项目部署到 Vercel 或你的服务器上。
+
+### 快速部署
+
+1. 点击本仓库右上角的 **Fork**，复制本仓库到你的 GitHub 账号。
+
+2. 部署网易云 API，详情参见 [Binaryify/NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)。你也可以将 API 部署到 Vercel。
+
+3. 点击仓库的 **Add File**，选择 **Create new file**，输入 `vercel.json`，将下面的内容复制粘贴到文件中，并将 `https://your-netease-api.example.com` 替换为你刚刚部署的网易云 API 地址：
+
+```json
+{
+  "rewrites": [
+    {
+      "source": "/api/:match*",
+      "destination": "https://your-netease-api.example.com/:match*"
+    }
+  ]
+}
+```
+
+4. 打开 [Vercel.com](https://vercel.com)，使用 GitHub 登录。
+
+5. 点击 **Import Git Repository** 并选择你刚刚复制的仓库并点击 **Import**。
+
+6. 点击 **PERSONAL ACCOUNT** 旁边的 **Select**。
+
+7. 点击 **Environment Variables**，填写：
+   - **Name**: `VITE_NCM_API_URL`
+   - **Value**: 你的 NCM API 地址（如 `https://your-ncm-api.vercel.app`）
+   - 点击 **Add**
+
+8. 最后点击底部的 **Deploy** 就可以部署到 Vercel 了。
+
+> 详细部署说明请参考 [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md)
+
+Powered by Vercel
+
 ## 📜 开源许可
 
 本项目仅供个人学习研究使用，禁止用于商业及非法用途。

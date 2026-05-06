@@ -27,3 +27,7 @@ dist/*
 *.njsproj
 *.sln
 *.sw?
+
+# Vercel (contains user-specific API URLs)
+vercel.json
+vercel.json.bak
