@@ -6,8 +6,8 @@ import { init } from './utils/initApp'
 import lazy from './utils/lazy'
 import './style.css'
 import 'normalize.css'
-import './assets/css/common.css'
-import './assets/css/fonts.css'
+import '@/assets/css/common.css'
+import '@/assets/css/fonts.css'
 const app = createApp(App)
 app.use(router)
 app.use(pinia)

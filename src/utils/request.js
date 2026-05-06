@@ -6,8 +6,14 @@ import { useLibraryStore } from '../store/libraryStore'
 const libraryStore = useLibraryStore(pinia)
 
 import { noticeOpen } from "./dialog";
+
+const ncmBase =
+    import.meta.env.VITE_WEB === 'true' || import.meta.env.VITE_WEB === '1'
+        ? '/ncm'
+        : 'http://localhost:36530'
+
 const request = axios.create({
-    baseURL: 'http://localhost:36530',
+    baseURL: ncmBase,
     withCredentials: true,
     timeout: 10000,
 });
