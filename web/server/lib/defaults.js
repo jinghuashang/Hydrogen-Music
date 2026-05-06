@@ -1,0 +1,37 @@
+/** 与 src/electron/ipcMain.js 中 initSettings 保持一致 */
+function defaultSettings() {
+  return {
+    music: {
+      level: 'standard',
+      lyricSize: '20',
+      tlyricSize: '14',
+      rlyricSize: '12',
+      lyricInterlude: 13,
+    },
+    local: {
+      videoFolder: null,
+      downloadFolder: null,
+      localFolder: [],
+    },
+    shortcuts: [
+      { id: 'play', name: '播放/暂停', shortcut: 'CommandOrControl+P', globalShortcut: 'CommandOrControl+Alt+P' },
+      { id: 'last', name: '上一首', shortcut: 'CommandOrControl+Left', globalShortcut: 'CommandOrControl+Alt+Left' },
+      { id: 'next', name: '下一首', shortcut: 'CommandOrControl+Right', globalShortcut: 'CommandOrControl+Alt+Right' },
+      { id: 'volumeUp', name: '增加音量', shortcut: 'CommandOrControl+Up', globalShortcut: 'CommandOrControl+Alt+Up' },
+      { id: 'volumeDown', name: '减少音量', shortcut: 'CommandOrControl+Down', globalShortcut: 'CommandOrControl+Alt+Down' },
+      { id: 'processForward', name: '快进(3s)', shortcut: 'CommandOrControl+]', globalShortcut: 'CommandOrControl+Alt+]' },
+      { id: 'processBack', name: '后退(3s)', shortcut: 'CommandOrControl+[', globalShortcut: 'CommandOrControl+Alt+[' },
+    ],
+    other: {
+      globalShortcuts: true,
+      quitApp: 'minimize',
+    },
+    unblock: {
+      enabled: true,
+      port: '36531:36532',
+      sources: ['qq', 'kugou', 'kuwo', 'bilibili'],
+    },
+  }
+}
+
+module.exports = { defaultSettings }

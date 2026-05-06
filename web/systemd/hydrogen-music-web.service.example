@@ -1,0 +1,48 @@
+# 示例：Hydrogen Music Web 网关开机自启（systemd）
+#
+# 使用前请：
+# 1. 将下面所有的 /home/orangepi/Hydrogen-Music-main 改成你的项目绝对路径
+# 2. 将 ExecStart 里的 node 路径改成 `which node` 的输出（若用 nvm，见 README 同目录说明）
+# 3. 将 User= 改成你的 Linux 用户名
+#
+# 安装（系统级，需 sudo）：
+#   sudo cp hydrogen-music-web.service.example /etc/systemd/system/hydrogen-music-web.service
+#   sudo nano /etc/systemd/system/hydrogen-music-web.service   # 按上面三项改好
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable hydrogen-music-web.service
+#   sudo systemctl start hydrogen-music-web.service
+#   sudo systemctl status hydrogen-music-web.service
+#
+# 仅当前用户自启（无需 sudo 管服务，推荐桌面/单用户）：
+#   mkdir -p ~/.config/systemd/user
+#   cp hydrogen-music-web.service.example ~/.config/systemd/user/hydrogen-music-web.service
+#   # 编辑文件改路径；且不要写 User= 行（用户服务以你身份运行）
+#   systemctl --user daemon-reload
+#   systemctl --user enable hydrogen-music-web.service
+#   systemctl --user start hydrogen-music-web.service
+#   # 默认 loginctl 会在登出时停掉用户服务，若希望「无登录也跑」：
+#   sudo loginctl enable-linger orangepi
+#
+
+[Unit]
+Description=Hydrogen Music Web (gateway + NCM API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=orangepi
+WorkingDirectory=/home/orangepi/Hydrogen-Music-main
+# 使用绝对路径的 node，避免 systemd 环境里没有 nvm / fnm 的 PATH
+ExecStart=/usr/bin/node /home/orangepi/Hydrogen-Music-main/web/server/server.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+# 可选：改端口
+# Environment=GATEWAY_PORT=37890
+# Environment=NCM_PORT=36530
+
+[Install]
+# 系统服务（放 /etc/systemd/system/）用下面一行：
+WantedBy=multi-user.target
+# 用户服务（放 ~/.config/systemd/user/）请改为：WantedBy=default.target，并删除上面 [Service] 里的 User= 行
