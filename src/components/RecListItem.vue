@@ -3,7 +3,18 @@
   import { useRouter } from 'vue-router';
   import { getNewAlbum } from '../api/album';
   import { getRecommendedArtists } from '../api/artist';
-  import { getRecommendedSongList, getTopList } from '../api/playlist'
+  import {
+    getRecommendedSongList,
+    getHomepageBlockPage,
+    getRecommendResource,
+    playlistsFromHomepageBlockPage,
+    playlistsFromRecommendResource,
+    artistsFromHomepageBlockPage,
+    albumsFromHomepageBlockPage,
+    mergePlaylistsById,
+    getTopList,
+  } from '../api/playlist'
+  import { isLogin } from '../utils/authority'
   import { useLibraryStore } from '../store/libraryStore'
   import { useLocalStore } from '../store/localStore';
   import { usePlayerStore } from '../store/playerStore';
@@ -46,20 +57,85 @@
   //加载数据
   async function loadData(artistNation,limit,albumNation,recType) {
     if(recType == 0) {
-        const listData = await getRecommendedSongList(limit)
-        recommendationList.value = listData.result
+        let playlists = []
+        if (isLogin()) {
+            try {
+                const hp = await getHomepageBlockPage(true)
+                playlists = playlistsFromHomepageBlockPage(hp)
+            } catch {
+                playlists = []
+            }
+            if (playlists.length < limit) {
+                try {
+                    const resourceBody = await getRecommendResource()
+                    const more = playlistsFromRecommendResource(resourceBody)
+                    playlists = mergePlaylistsById(playlists, more, limit)
+                } catch {
+                    /* 保持已有 playlists */
+                }
+            }
+        }
+        if (playlists.length < limit) {
+            const listData = await getRecommendedSongList(limit)
+            playlists = mergePlaylistsById(
+                playlists,
+                listData.result || [],
+                limit,
+            )
+        }
+        recommendationList.value = playlists.slice(0, limit)
         setTitle("推荐歌单", "RECOMMENDED SONG LIST")
     } else if(recType == 1) {
-        const listData = await getRecommendedArtists(artistNation)
+        const poolLimit = 50
+        let artists = []
+        if (isLogin()) {
+            try {
+                const hp = await getHomepageBlockPage(true)
+                artists = artistsFromHomepageBlockPage(hp)
+            } catch {
+                artists = []
+            }
+        }
+        if (artists.length < poolLimit) {
+            const listData = await getRecommendedArtists(artistNation)
+            artists = mergePlaylistsById(
+                artists,
+                listData.artists || [],
+                poolLimit,
+            )
+        }
         setTitle("推荐歌手", "RECOMMENDED ARTISTS")
-        recommendationList.value = shuffleData(listData.artists, 5, 50)
+        const pick = Math.min(5, artists.length)
+        if (pick === 0) recommendationList.value = []
+        else
+            recommendationList.value = shuffleData(
+                artists,
+                pick,
+                artists.length,
+            )
     } else if(recType == 2) {
-        const listData = await getNewAlbum({
-            limit: limit,
-            area: albumNation
-        })
+        let albums = []
+        if (isLogin()) {
+            try {
+                const hp = await getHomepageBlockPage(true)
+                albums = albumsFromHomepageBlockPage(hp)
+            } catch {
+                albums = []
+            }
+        }
+        if (albums.length < limit) {
+            const listData = await getNewAlbum({
+                limit: limit,
+                area: albumNation,
+            })
+            albums = mergePlaylistsById(
+                albums,
+                listData.albums || [],
+                limit,
+            )
+        }
         setTitle("最新专辑", "NEWEST ALBUM")
-        recommendationList.value = listData.albums
+        recommendationList.value = albums.slice(0, limit)
     } else if(recType == 3) {
         const listData = await getTopList()
         setTitle("排行榜", "TOP LIST")

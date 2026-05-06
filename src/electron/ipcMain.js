@@ -128,12 +128,12 @@ module.exports = IpcMainEvent = (win, app) => {
         }
     })
     ipcMain.handle('dialog:openFile', async () => {
-        const { canceled, filePaths } = await dialog.showOpenDialog({properties: ['openDirectory']})
-        if (canceled) {
-            return null
-        } else {
-            return filePaths[0]
-        }
+        const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+            properties: ['openDirectory'],
+            title: '选择文件夹',
+        })
+        if (canceled || !filePaths?.length) return null
+        return path.normalize(filePaths[0])
     })
     ipcMain.on('register-shortcuts', () => {
         registerShortcuts(win)
@@ -154,8 +154,18 @@ module.exports = IpcMainEvent = (win, app) => {
         if(lastPlaylist) return lastPlaylist
         else return null
     })
-    ipcMain.on('open-local-folder', (e, path) => {
-        shell.showItemInFolder(path)
+    ipcMain.on('open-local-folder', (e, targetPath) => {
+        const p = path.normalize(String(targetPath || ''))
+        if (!p) return
+        try {
+            if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+                shell.openPath(p)
+            } else {
+                shell.showItemInFolder(p)
+            }
+        } catch {
+            shell.showItemInFolder(p)
+        }
     })
     ipcMain.handle('get-request-data', async (e, request) => {
         const result = await axios.get(request.url, request.option)
@@ -210,11 +220,14 @@ module.exports = IpcMainEvent = (win, app) => {
     ipcMain.handle('get-bili-video', async (e, request) => {
         const settings = await settingsStore.get('settings')
         if(!settings.local.videoFolder) return 'noSavePath'
-        const path = settings.local.videoFolder + "\\" + request.option.params.cid + '_'+ request.option.params.quality.substring(3) + '.mp4'
+        const videoAbsPath = path.join(
+            settings.local.videoFolder,
+            `${request.option.params.cid}_${request.option.params.quality.substring(3)}.mp4`,
+        )
         let returnCode = 'success'
-        if(await fileIsExists(path)) {
+        if(await fileIsExists(videoAbsPath)) {
             request.option.params.timing = JSON.parse(request.option.params.timing)
-            request.option.params.path = path
+            request.option.params.path = videoAbsPath
             saveMusicVideo(request.option.params)
             return returnCode
         } else {
@@ -234,7 +247,7 @@ module.exports = IpcMainEvent = (win, app) => {
                     cancel = c
                 })
             })
-            const writer = fs.createWriteStream(path)
+            const writer = fs.createWriteStream(videoAbsPath)
             await result.data.pipe(writer)
             ipcMain.on('cancel-download-music-video', () => {
                 returnCode = 'cancel'
@@ -242,7 +255,7 @@ module.exports = IpcMainEvent = (win, app) => {
                 writer.once('close', () => {
                     cancel()
                     win.setProgressBar(-1)
-                    fs.unlinkSync(path)
+                    fs.unlinkSync(videoAbsPath)
                 })
             })
             return new Promise((resolve, reject) => {
@@ -253,7 +266,7 @@ module.exports = IpcMainEvent = (win, app) => {
                         return returnCode
                     }
                     request.option.params.timing = JSON.parse(request.option.params.timing)
-                    request.option.params.path = path
+                    request.option.params.path = videoAbsPath
                     saveMusicVideo(request.option.params)
                     resolve(returnCode)
                 })
@@ -281,7 +294,7 @@ module.exports = IpcMainEvent = (win, app) => {
         const files = fs.readdirSync(folderPath)
         files.forEach(filename => {
             const filePath = path.join(folderPath, filename)
-            if(!musicVideo.some(video => video.path == filePath)) {
+            if(!musicVideo.some(video => path.normalize(video.path) === path.normalize(filePath))) {
               console.log(filePath)
                 fs.unlinkSync(filePath)
             }
@@ -302,12 +315,12 @@ module.exports = IpcMainEvent = (win, app) => {
     })
     //获取本地歌词
     ipcMain.handle('get-local-music-lyric', async (e, filePath) => {
-        const str = filePath.split('\\')
-        const folderPath = filePath.substring(0, filePath.length - str[str.length - 1].length - 1)
-        const fileName = path.basename(filePath, path.extname(filePath))
-        async function readLyric(path) {
+        const abs = path.normalize(filePath)
+        const folderPath = path.dirname(abs)
+        const fileName = path.basename(abs, path.extname(abs))
+        async function readLyric(lyricPath) {
             try {
-                return fs.readFileSync(path, 'utf8')
+                return fs.readFileSync(lyricPath, 'utf8')
             } catch {
                 return false
             }
@@ -320,15 +333,17 @@ module.exports = IpcMainEvent = (win, app) => {
             })
             return lyricArr
         }
-        if(await fileIsExists(folderPath + '\\' + fileName + '.lrc')) {
-            const res = await readLyric(folderPath + '\\' + fileName + '.lrc')
+        const lrcPath = path.join(folderPath, `${fileName}.lrc`)
+        const txtPath = path.join(folderPath, `${fileName}.txt`)
+        if(await fileIsExists(lrcPath)) {
+            const res = await readLyric(lrcPath)
             if(res) return lyricHandle(res)
         }
-        if(await fileIsExists(folderPath + '\\' + fileName + '.txt')) {
-            const res = await readLyric(folderPath + '\\' + fileName + '.txt')
+        if(await fileIsExists(txtPath)) {
+            const res = await readLyric(txtPath)
             if(res) return lyricHandle(res)
         }
-        const metedata = await parseFile(filePath)
+        const metedata = await parseFile(abs)
         if(metedata.common.lyrics) return metedata.common.lyrics[0]
         
         return false
@@ -343,12 +358,13 @@ module.exports = IpcMainEvent = (win, app) => {
         const filters = [
             {name: 'Fonts', extensions:['woff','woff2','ttf','otf','eot']}
         ]
-        const { canceled, filePaths } = await dialog.showOpenDialog({properties: ['openFile'],filters})
-        if (canceled) {
-            return null
-        } else {
-            return filePaths[0]
-        }
+        const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+            properties: ['openFile'],
+            filters,
+            title: '选择字体文件',
+        })
+        if (canceled || !filePaths?.length) return null
+        return path.normalize(filePaths[0])
     })
     ipcMain.handle('start-unblock', async () => {
         startUnblockNeteaseMusic()

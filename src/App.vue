@@ -17,6 +17,9 @@
   const playerStore = usePlayerStore()
   const otherStore = useOtherStore()
 
+  const isWebClient =
+    import.meta.env.VITE_WEB === 'true' || import.meta.env.VITE_WEB === '1'
+
   windowApi.checkUpdate((event, version) => {
     otherStore.toUpdate = true
     otherStore.newVersion = version
@@ -34,7 +37,7 @@
     <SearchInput class="widget-search"></SearchInput>
   </div>
   <div class="dragBar">
-    <WindowControl class="window-control"></WindowControl>
+    <WindowControl v-if="!isWebClient" class="window-control"></WindowControl>
   </div>
   <Transition name="widget">
     <div class="musicWidget" v-if="playerStore.songList" v-show="playerStore.widgetState">

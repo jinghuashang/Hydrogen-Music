@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getCookie, isLogin } from '../utils/authority'
+import { isLogin, getNeteaseCookieStringForApi } from '../utils/authority'
 import pinia from "../store/pinia";
 import { useLibraryStore } from '../store/libraryStore'
 
@@ -54,8 +54,10 @@ request.interceptors.request.use(async function (config) {
     config.params = config.params || {}
     config.params.proxy = cachedProxy
   }
-  if(config.url != '/login/qr/check' && isLogin())
-    config.params.cookie = `MUSIC_U=${getCookie('MUSIC_U')};`;
+  if (config.url != '/login/qr/check' && isLogin()) {
+    const cookieStr = getNeteaseCookieStringForApi()
+    if (cookieStr) config.params.cookie = cookieStr
+  }
   if(libraryStore.needTimestamp.indexOf(config.url) != -1) {
     config.params.timestamp = new Date().getTime()
   }

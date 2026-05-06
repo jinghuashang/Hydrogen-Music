@@ -11,7 +11,9 @@ let getType = null
 
 module.exports = async function getDirTree(baseDir, type, win) {
     getType = type
-    let dirPath = path.resolve(__dirname, baseDir);
+    const dirPath = path.isAbsolute(baseDir)
+        ? path.normalize(baseDir)
+        : path.resolve(__dirname, baseDir)
     let all = {
         'name': baseDir,
         "children":[],
@@ -36,7 +38,7 @@ module.exports = async function getDirTree(baseDir, type, win) {
      */
     async function getFileJson(res,arr,dir) {
         for (let i = 0; i < res.length; i++) {
-            let tempDir = `${dir}\\${res[i]}`;
+            const tempDir = path.join(dir, res[i])
             await newObj(tempDir, res[i]).then(async (obj) => {
                 if(obj != null)
                     arr.push(obj);

@@ -33,6 +33,27 @@
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
             }
 
+  /** B 站 accept_description 可能为 string 或对象；统一成展示用文案 */
+  function qualityLabelFromApi(item) {
+    if (item == null) return ''
+    if (typeof item === 'string') return item
+    if (typeof item === 'object') {
+      return (
+        item.display_desc ||
+        item.desc ||
+        item.new_description ||
+        item.quality ||
+        ''
+      )
+    }
+    return String(item)
+  }
+
+  function normalizeQualityList(arr) {
+    if (!Array.isArray(arr)) return []
+    return arr.map(qualityLabelFromApi).filter(Boolean)
+  }
+
   const loginOrLogout = () => {
     if(!userStore.biliUser) {
         toLogin.value = true
@@ -139,9 +160,16 @@
             if(videoInfo.code == 0) {
                 currentVideoInfo.value = videoInfo.data
                 const videoData = await windowApi.biliFetch('https://api.bilibili.com/x/player/playurl', {headers: headers, params: {bvid: bv, cid: currentVideoInfo.value.cid, fourk: 1, fnval: 80}})
-                currentVideoInfo.value.quality = videoData.data.accept_description
+                if (!videoData.data?.dash?.video) {
+                    noticeOpen('获取视频流信息失败', 3)
+                    return
+                }
+                currentVideoInfo.value.quality = normalizeQualityList(
+                    videoData.data.accept_description,
+                )
                 if(currentVideoInfo.value.pages.length == 1) {
                     currentVideoInfo.value.video = videoData.data.dash.video
+                    currentVideoInfo.value.duration = videoData.data.dash.duration
                     selectedInfo.value.part = currentVideoInfo.value.cid
                 }
             } else noticeOpen('获取视频失败', 3)
@@ -165,23 +193,31 @@
     selectedInfo.value.part = cid
     if(localStorage.getItem('Sessdata')) headers.cookie = 'SESSDATA=' + localStorage.getItem('Sessdata')  + ';'
     const videoData = await windowApi.biliFetch('https://api.bilibili.com/x/player/playurl', {headers: headers, params: {bvid: selectedInfo.value.bvid, cid: cid, fourk: 1, fnval: 80}})
-    currentVideoInfo.value.quality = videoData.data.accept_description
+    if (!videoData.data?.dash?.video) {
+        noticeOpen('获取该分P视频流失败', 3)
+        return
+    }
+    currentVideoInfo.value.quality = normalizeQualityList(
+        videoData.data.accept_description,
+    )
     currentVideoInfo.value.video = videoData.data.dash.video
     currentVideoInfo.value.duration = videoData.data.dash.duration
   }
   const selectQuality = (item, index) => {
+    const label = qualityLabelFromApi(item)
+    if (!label) return
     if(!localStorage.getItem('Sessdata')) {
-        if(item != '流畅 360P' && item != '清晰 480P') {
+        if(label != '流畅 360P' && label != '清晰 480P') {
             noticeOpen('该清晰度需要登录账号', 2)
             return
         }
-    } else if(!userStore.biliUser.vipStatus) {
-        if(item != '流畅 360P' && item != '清晰 480P' && item != '高清 720P' && item != '高清 1080P') {
+    } else if(!userStore.biliUser?.vipStatus) {
+        if(label != '流畅 360P' && label != '清晰 480P' && label != '高清 720P' && label != '高清 1080P') {
             noticeOpen('该清晰度需要大会员', 2)
             return
         }
     }
-    selectedInfo.value.quality = item
+    selectedInfo.value.quality = label
     selectedInfo.value.qn = index
   }
   watch(() => [musicTiming.value, videoTiming.value], () => {
@@ -334,6 +370,12 @@
     if(isDownloading.value) cancelDownload()
     addMusicVideo.value = null
   }
+
+  const qualityShortForDisplay = (q) => {
+    const s = qualityLabelFromApi(q)
+    if (!s) return ''
+    return s.length > 3 ? s.substring(3) : s
+  }
 </script>
 <template>
   <div class="music-video">
@@ -366,7 +408,7 @@
                 <div class="video-info">
                     <div class="video-quality" v-if="selectedInfo.quality">
                         <span class="quality-title">QUALITY</span>
-                        <span class="quality">{{selectedInfo.quality.substring(3)}}</span>
+                        <span class="quality">{{ qualityShortForDisplay(selectedInfo.quality) }}</span>
                     </div>
                     <div class="info-title-cn">视频信息</div>
                     <div class="info-title-en">VIDEO INFO</div>
@@ -380,13 +422,13 @@
                                 </div>
                             </div>
                             <div class="more-video" v-if="currentVideoInfo.pages.length != 1">
-                                <div class="video-p" :class="{'opt-selected': selectedInfo.part == item.cid}" v-for="(item, index) in currentVideoInfo.pages">
-                                    <span class="p-name" :title="item.part" @click="selectPart(item.cid)">{{item.part}}</span>
+                                <div class="video-p" :class="{'opt-selected': selectedInfo.part == item.cid}" v-for="(item, index) in currentVideoInfo.pages" :key="'p-' + item.cid" @click.stop="selectPart(item.cid)">
+                                    <span class="p-name" :title="item.part">{{item.part}}</span>
                                 </div>
                             </div>
                             <div class="video-all-quality" v-if="currentVideoInfo.quality">
-                                <div class="quality-list" :class="{'opt-selected': selectedInfo.qn == index}" v-for="(item, index) in currentVideoInfo.quality">
-                                    <span class="quality-opt" :title="item" @click="selectQuality(item, index)">{{item}}</span>
+                                <div class="quality-list" :class="{'opt-selected': selectedInfo.qn == index}" v-for="(item, index) in currentVideoInfo.quality" :key="'q-' + index" @click.stop="selectQuality(item, index)">
+                                    <span class="quality-opt" :title="item">{{item}}</span>
                                 </div>
                             </div>
                         </div>

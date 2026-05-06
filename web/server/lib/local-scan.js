@@ -38,9 +38,15 @@ function createLocalScan({ settingsStore, broadcast }) {
       let count = 0
       for (let i = 0; i < baseUrl.length; i++) {
         if (!baseUrl[i]) continue
-        dirTree.push(await getDirTree(baseUrl[i], 'dir'))
-        metadata.push(await getDirTree(baseUrl[i], 'data', win))
-        count += metadata[i].count
+        try {
+          const dt = await getDirTree(baseUrl[i], 'dir')
+          const md = await getDirTree(baseUrl[i], 'data', win)
+          dirTree.push(dt)
+          metadata.push(md)
+          count += md.count || 0
+        } catch (e) {
+          console.error('[local-scan]', baseUrl[i], e.message)
+        }
       }
       const localData = {
         dirTree,
