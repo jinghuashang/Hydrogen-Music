@@ -3,7 +3,16 @@
   import { useRouter } from 'vue-router';
   import { getNewAlbum } from '../api/album';
   import { getRecommendedArtists } from '../api/artist';
-  import { getRecommendedSongList, getTopList } from '../api/playlist'
+  import {
+    getRecommendedSongList,
+    getHomepageBlockPage,
+    getRecommendResource,
+    playlistsFromHomepageBlockPage,
+    playlistsFromRecommendResource,
+    mergePlaylistsById,
+    getTopList,
+  } from '../api/playlist'
+  import { isLogin } from '../utils/authority'
   import { useLibraryStore } from '../store/libraryStore'
   import { useLocalStore } from '../store/localStore';
   import { usePlayerStore } from '../store/playerStore';
@@ -46,8 +55,33 @@
   //加载数据
   async function loadData(artistNation,limit,albumNation,recType) {
     if(recType == 0) {
-        const listData = await getRecommendedSongList(limit)
-        recommendationList.value = listData.result
+        let playlists = []
+        if (isLogin()) {
+            try {
+                const hp = await getHomepageBlockPage(true)
+                playlists = playlistsFromHomepageBlockPage(hp)
+            } catch {
+                playlists = []
+            }
+            if (playlists.length < limit) {
+                try {
+                    const resourceBody = await getRecommendResource()
+                    const more = playlistsFromRecommendResource(resourceBody)
+                    playlists = mergePlaylistsById(playlists, more, limit)
+                } catch {
+                    /* 保持已有 playlists */
+                }
+            }
+        }
+        if (playlists.length < limit) {
+            const listData = await getRecommendedSongList(limit)
+            playlists = mergePlaylistsById(
+                playlists,
+                listData.result || [],
+                limit,
+            )
+        }
+        recommendationList.value = playlists.slice(0, limit)
         setTitle("推荐歌单", "RECOMMENDED SONG LIST")
     } else if(recType == 1) {
         const listData = await getRecommendedArtists(artistNation)
