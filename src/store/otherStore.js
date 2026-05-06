@@ -90,6 +90,8 @@ export const useOtherStore = defineStore('otherStore', {
           searchResult: {},
           toUpdate: false,
           newVersion: null,
+          updateDownloadUrl: null,
+          updateIsWindows: false,
         }
     },
     actions: {

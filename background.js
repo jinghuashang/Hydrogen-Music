@@ -7,9 +7,8 @@ const LocalFiles = require('./src/electron/localmusic')
 const InitTray = require('./src/electron/tray')
 const registerShortcuts = require('./src/electron/shortcuts')
 
-const { app, BrowserWindow, globalShortcut } = require('electron')
+const { app, BrowserWindow, globalShortcut, shell } = require('electron')
 const Winstate = require('electron-win-state').default
-const { autoUpdater } = require("electron-updater");
 const path = require('path')
 const Store = require('electron-store');
 const settingsStore = new Store({name: 'settings'});
@@ -77,11 +76,7 @@ const createWindow = () => {
     win.once('ready-to-show', () => {
         win.show()
         if(process.resourcesPath.indexOf('\\node_modules\\') == -1) {
-            autoUpdater.autoDownload = false
-            autoUpdater.on('update-available', info => {
-                win.webContents.send('check-update', info.version)
-            });
-            autoUpdater.checkForUpdatesAndNotify()
+            checkForGithubUpdate(win)
         }
     })
     winstate.manage(win)
@@ -104,6 +99,51 @@ const createWindow = () => {
     LocalFiles(win, app)
     InitTray(win, app, path.resolve(__dirname, './src/assets/icon/icon.ico'))
     registerShortcuts(win)
+}
+
+function checkForGithubUpdate(win) {
+    const https = require('https')
+    const currentVersion = require('./package.json').version
+    const options = {
+        hostname: 'api.github.com',
+        path: '/repos/jinghuashang/Hydrogen-Music/releases/latest',
+        headers: {
+            'User-Agent': 'Hydrogen-Music',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+    }
+    const req = https.get(options, (res) => {
+        let data = ''
+        res.on('data', chunk => data += chunk)
+        res.on('end', () => {
+            try {
+                const release = JSON.parse(data)
+                const latestVersion = release.tag_name.replace(/^v/, '')
+                if (isNewerVersion(latestVersion, currentVersion)) {
+                    const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
+                    win.webContents.send('check-update', {
+                        version: latestVersion,
+                        downloadUrl: exeAsset ? exeAsset.browser_download_url : null,
+                        isWindows: process.platform === 'win32'
+                    })
+                }
+            } catch (e) {}
+        })
+    })
+    req.on('error', () => {})
+    req.end()
+}
+
+function isNewerVersion(latest, current) {
+    const l = latest.split('.').map(Number)
+    const c = current.split('.').map(Number)
+    for (let i = 0; i < Math.max(l.length, c.length); i++) {
+        const a = l[i] || 0
+        const b = c[i] || 0
+        if (a > b) return true
+        if (a < b) return false
+    }
+    return false
 }
 
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';

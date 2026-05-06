@@ -384,4 +384,65 @@ module.exports = IpcMainEvent = (win, app) => {
     ipcMain.handle('get-unblock-diag', async () => {
         return getUnblockDiagnostic()
     })
+
+    let updateDownloadCancelled = false
+    ipcMain.handle('download-update', async (e, url) => {
+        const { dialog: electronDialog } = require('electron')
+        const result = await electronDialog.showSaveDialog(win, {
+            defaultPath: url.split('/').pop(),
+            filters: [{ name: 'Installers', extensions: ['exe'] }]
+        })
+        if (result.canceled) return 'cancelled'
+        const savePath = result.filePath
+        updateDownloadCancelled = false
+        return new Promise((resolve, reject) => {
+            const https = require('https')
+            const followRedirect = (redirectUrl) => {
+                https.get(redirectUrl, (res) => {
+                    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                        followRedirect(res.headers.location)
+                        return
+                    }
+                    if (res.statusCode !== 200) {
+                        resolve('failed')
+                        return
+                    }
+                    const total = parseInt(res.headers['content-length'], 10) || 0
+                    let downloaded = 0
+                    const file = fs.createWriteStream(savePath)
+                    res.on('data', (chunk) => {
+                        if (updateDownloadCancelled) {
+                            res.destroy()
+                            file.close()
+                            fs.unlinkSync(savePath)
+                            resolve('cancelled')
+                            return
+                        }
+                        downloaded += chunk.length
+                        file.write(chunk)
+                        if (total > 0) {
+                            win.webContents.send('update-download-progress', Math.round(downloaded / total * 100))
+                        }
+                    })
+                    res.on('end', () => {
+                        if (!updateDownloadCancelled) {
+                            file.end()
+                            win.webContents.send('update-download-progress', 100)
+                            resolve('success')
+                        }
+                    })
+                    res.on('error', () => {
+                        file.close()
+                        try { fs.unlinkSync(savePath) } catch (e) {}
+                        resolve('failed')
+                    })
+                }).on('error', () => resolve('failed'))
+            }
+            followRedirect(url)
+        })
+    })
+
+    ipcMain.on('cancel-download-update', () => {
+        updateDownloadCancelled = true
+    })
 }

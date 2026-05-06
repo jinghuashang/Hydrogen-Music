@@ -108,6 +108,9 @@ function copyTxt(txt) {
 function checkUpdate(callback) {
     ipcRenderer.on('check-update', callback)
 }
+function downloadUpdateProgress(callback) {
+    ipcRenderer.on('update-download-progress', callback)
+}
 function setWindowTile(title) {
     ipcRenderer.send('set-window-title', title)
 }
@@ -166,6 +169,9 @@ contextBridge.exposeInMainWorld('windowApi', {
     copyTxt,
     selectFile: () => ipcRenderer.invoke('select-file'),
     checkUpdate,
+    downloadUpdateProgress,
+    downloadUpdate: (url) => ipcRenderer.invoke('download-update', url),
+    cancelDownloadUpdate: () => ipcRenderer.send('cancel-download-update'),
     setWindowTile,
     biliFetch: async (url, options = {}) => {
         const headers = {
