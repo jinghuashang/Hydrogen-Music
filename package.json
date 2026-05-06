@@ -15,7 +15,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "nodemon --exec electron . --watch ./ --ext .html",
-    "dist": "vite build && electron-builder -p always",
+    "dist": "node -e \"const v=require('./package.json').version;require('child_process').execSync('git tag v'+v+' -f',{stdio:'inherit'});require('child_process').execSync('git push origin v'+v+' -f',{stdio:'inherit'})\" && vite build && electron-builder -p always",
     "web:build": "vite build --config web/vite.config.mjs",
     "web:dev": "vite --config web/vite.config.mjs",
     "web:server": "node web/server/server.js",
