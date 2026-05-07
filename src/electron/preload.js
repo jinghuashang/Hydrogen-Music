@@ -80,6 +80,7 @@ function hidePlayer(callback) {
 }
 function setSettings(settings) {
     ipcRenderer.send('set-settings', settings)
+    return Promise.resolve()
 }
 function clearLocalMusicData(type) {
     ipcRenderer.send('clear-local-music-data', type)

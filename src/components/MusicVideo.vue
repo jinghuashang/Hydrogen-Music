@@ -3,6 +3,7 @@
   import QRCode from 'qrcode'
 
   import { songTime2, loadMusicVideo, unloadMusicVideo } from '../utils/player';
+  import { isHydrogenWeb, saveWebProfileIfSyncEnabled } from '../utils/webProfileNas'
   import VueSlider from 'vue-slider-component'
   import { dialogOpen, noticeOpen } from '../utils/dialog';
   import { useUserStore } from '../store/userStore';
@@ -71,6 +72,7 @@
         localStorage.removeItem('Sessdata')
         userStore.biliUser = null
         qrKey.value = null
+        saveWebProfileIfSyncEnabled().catch(() => {})
     }
   }
   const getQRCode = () => {
@@ -136,6 +138,7 @@
     if(userInfo.data.code == 0) {
         noticeOpen('登录成功', 2)
         userStore.biliUser = userInfo.data.data
+        saveWebProfileIfSyncEnabled().catch(() => {})
     } else {
         noticeOpen('登录失败', 2)
         loginOrLogout()
@@ -266,15 +269,51 @@
   }
   const addVideo = async (flag) => {
     if(!flag) return
-    isDownloading.value = true
-    noticeOpen('开始添加，请稍后', 2)
+    if (!isHydrogenWeb()) {
+        isDownloading.value = true
+    } else {
+        progress.value = 0
+    }
+    noticeOpen(isHydrogenWeb() ? '正在保存…' : '开始添加，请稍后', 2)
     if(localStorage.getItem('Sessdata')) headers.cookie = 'SESSDATA=' + localStorage.getItem('Sessdata')  + ';'
-    console.log(currentVideoInfo.value)
-    console.log(selectedInfo.value)
     let urlIndex = selectedInfo.value.qn - (currentVideoInfo.value.quality.length - currentVideoInfo.value.video.length / 2)
     if(urlIndex < 0) urlIndex = 0
-    console.log(urlIndex)
-    windowApi.getBiliVideo({url: currentVideoInfo.value.video[urlIndex].baseUrl, option: {headers: headers, params: {id: addMusicVideo.value.id, bv: selectedInfo.value.bvid, cid: selectedInfo.value.part, quality: selectedInfo.value.quality, qn: selectedInfo.value.qn, timing: JSON.stringify(timingList.value)}}}).then(result => {
+    const streamBaseUrl = currentVideoInfo.value.video[urlIndex].baseUrl
+
+    if (isHydrogenWeb()) {
+        try {
+            const result = await windowApi.getBiliVideo({
+                url: streamBaseUrl,
+                option: {
+                    headers,
+                    params: {
+                        webStreamOnly: true,
+                        streamBaseUrl,
+                        id: addMusicVideo.value.id,
+                        bv: selectedInfo.value.bvid,
+                        cid: selectedInfo.value.part,
+                        quality: selectedInfo.value.quality,
+                        qn: selectedInfo.value.qn,
+                        timing: JSON.stringify(timingList.value),
+                    },
+                },
+            })
+            progress.value = 0
+            if (result === 'failed') {
+                noticeOpen('添加失败', 2)
+                return
+            }
+            noticeOpen('添加成功（直链播放）', 2)
+            if(songId.value == addMusicVideo.value.id) loadMusicVideo(addMusicVideo.value.id)
+            addMusicVideo.value = null
+        } catch {
+            progress.value = 0
+            noticeOpen('添加失败', 2)
+        }
+        return
+    }
+
+    windowApi.getBiliVideo({url: streamBaseUrl, option: {headers: headers, params: {id: addMusicVideo.value.id, bv: selectedInfo.value.bvid, cid: selectedInfo.value.part, quality: selectedInfo.value.quality, qn: selectedInfo.value.qn, timing: JSON.stringify(timingList.value)}}}).then(result => {
         isDownloading.value = false
         if(result == 'noSavePath') {
             noticeOpen('请先在设置中设置音乐视频缓存目录', 2)
@@ -487,8 +526,8 @@
                     </TransitionGroup>
                 </div>
                 <div class="confirm" @click="addConfirm()">
-                    <div class="progress" :style="{left: -(100 - progress) + '%'}" v-if="isDownloading"></div>
-                    <span>{{!isDownloading ? '添加至歌曲' : '缓存中' + progress + '%'}}</span>
+                    <div class="progress" :style="{left: -(100 - progress) + '%'}" v-if="isDownloading && !isHydrogenWeb()"></div>
+                    <span>{{ isDownloading && !isHydrogenWeb() ? '缓存中' + progress + '%' : '添加至歌曲' }}</span>
                 </div>
             </div>
         </Transition>

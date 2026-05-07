@@ -1,6 +1,7 @@
 const axios = require('axios')
 const fs = require('fs')
 const path = require('path')
+const { URL } = require('url')
 const { parseFile } = require('music-metadata')
 const { CancelToken } = axios
 const { createStore } = require('./store')
@@ -23,10 +24,28 @@ function fileExists(p) {
   })
 }
 
+function isAllowedBilibiliMediaUrl(urlStr) {
+  let u
+  try {
+    u = new URL(urlStr)
+  } catch {
+    return false
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
+  const h = u.hostname.toLowerCase()
+  return (
+    h.endsWith('.bilivideo.com') ||
+    h.endsWith('.bilibili.com') ||
+    h.endsWith('.hdslb.com') ||
+    h.includes('akamaized.net')
+  )
+}
+
 function createHandlers({ broadcast }) {
   const settingsStore = createStore('settings')
   const lastPlaylistStore = createStore('lastPlaylist')
   const musicVideoStore = createStore('musicVideo')
+  const webProfileStore = createStore('webProfile')
 
   const downloadManager = createDownloadManager({ settingsStore, broadcast })
   const localScan = createLocalScan({ settingsStore, broadcast })
@@ -59,6 +78,10 @@ function createHandlers({ broadcast }) {
     if (!settings) {
       settings = defaultSettings()
       settingsStore.set('settings', settings)
+    }
+    if (!settings.local) settings.local = { ...defaultSettings().local }
+    if (settings.local.syncProfileToNas === undefined) {
+      settings.local.syncProfileToNas = false
     }
     return settings
   }
@@ -134,6 +157,28 @@ function createHandlers({ broadcast }) {
       return result.data
     },
     'get-bili-video': async (_e, request) => {
+      const params = request?.option?.params || {}
+      /** Web：不落盘，仅保存 B 站视频轨直链供 /api/bili-cdn 代理播放 */
+      if (params.webStreamOnly && params.streamBaseUrl) {
+        try {
+          const timing = JSON.parse(params.timing || 'null')
+          if (!timing) return 'failed'
+          await saveMusicVideo({
+            id: params.id,
+            bv: params.bv,
+            cid: params.cid,
+            quality: params.quality,
+            qn: params.qn,
+            timing,
+            path: '',
+            streamBaseUrl: String(params.streamBaseUrl).trim(),
+          })
+          return 'success'
+        } catch (e) {
+          console.error('[get-bili-video] webStreamOnly', e.message)
+          return 'failed'
+        }
+      }
       const settings = await getSettings()
       if (!settings.local.videoFolder) return 'noSavePath'
       const folder = path.resolve(String(settings.local.videoFolder).trim())
@@ -222,6 +267,8 @@ function createHandlers({ broadcast }) {
       const result = await searchMusicVideo(obj.id)
       if (result) {
         if (obj.method === 'get') return result
+        if (result.data.streamBaseUrl) return result
+        if (!result.data.path) return '404'
         const file = await fileExists(result.data.path)
         if (!file) return '404'
         return result
@@ -236,7 +283,11 @@ function createHandlers({ broadcast }) {
       const files = fs.readdirSync(folderPath)
       files.forEach((filename) => {
         const filePath = path.join(folderPath, filename)
-        if (!musicVideo.some((video) => video.path === filePath)) {
+        if (
+          !musicVideo.some(
+            (video) => video.path && path.normalize(video.path) === path.normalize(filePath),
+          )
+        ) {
           try {
             fs.unlinkSync(filePath)
           } catch {}
@@ -306,6 +357,16 @@ function createHandlers({ broadcast }) {
     },
     'get-unblock-status': async () => getUnblockStatus(),
     'get-unblock-diag': async () => getUnblockDiagnostic(),
+    /** Web：多浏览器共享的网易云 Cookie + 用户状态（需设置中开启「同步到 NAS」） */
+    'get-web-profile': async () => webProfileStore.get('profile') || null,
+    'set-web-profile': async (_e, profile) => {
+      webProfileStore.set('profile', profile)
+      return true
+    },
+    'clear-web-profile': async () => {
+      webProfileStore.set('profile', null)
+      return true
+    },
   }
 
   function dispatchSend(event, payload) {
@@ -325,10 +386,15 @@ function createHandlers({ broadcast }) {
       case 'download-cancel':
         downloadManager.onCancel()
         break
-      case 'set-settings':
-        settingsStore.set('settings', typeof payload === 'string' ? JSON.parse(payload) : payload)
+      case 'set-settings': {
+        const next = typeof payload === 'string' ? JSON.parse(payload) : payload
+        settingsStore.set('settings', next)
+        if (!next?.local?.syncProfileToNas) {
+          webProfileStore.set('profile', null)
+        }
         restartUnblockNeteaseMusic(settingsStore)
         break
+      }
       case 'save-last-playlist':
         lastPlaylistStore.set('playlist', typeof payload === 'string' ? JSON.parse(payload) : payload)
         break
@@ -392,11 +458,68 @@ function createHandlers({ broadcast }) {
     startUnblockNeteaseMusic(settingsStore)
   }
 
+  function biliCookieHeader() {
+    return Object.entries(biliCookies)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ')
+  }
+
+  /** GET /api/bili-cdn?u=<encodeURIComponent(bilibiliUrl)> */
+  async function handleBiliCdn(req, res) {
+    try {
+      const raw = req.query.u
+      if (!raw || typeof raw !== 'string') {
+        res.status(400).end('missing u')
+        return
+      }
+      const targetUrl = decodeURIComponent(raw)
+      if (!isAllowedBilibiliMediaUrl(targetUrl)) {
+        res.status(403).end('host not allowed')
+        return
+      }
+      const serverC = biliCookieHeader()
+      const clientC = req.headers.cookie || ''
+      const cookie = [serverC, clientC].filter(Boolean).join('; ')
+      const upstreamHeaders = {
+        Referer: 'https://www.bilibili.com/',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      }
+      if (req.headers.range) upstreamHeaders.Range = req.headers.range
+      if (cookie) upstreamHeaders.Cookie = cookie
+
+      const upstream = await axios({
+        method: 'GET',
+        url: targetUrl,
+        headers: upstreamHeaders,
+        responseType: 'stream',
+        validateStatus: () => true,
+        maxRedirects: 5,
+      })
+
+      const hop = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control']
+      hop.forEach((h) => {
+        const v = upstream.headers[h]
+        if (v) res.setHeader(h, v)
+      })
+      res.status(upstream.status)
+      upstream.data.pipe(res)
+      upstream.data.on('error', (err) => {
+        console.error('[bili-cdn] stream', err.message)
+        if (!res.writableEnded) res.destroy()
+      })
+    } catch (e) {
+      console.error('[bili-cdn]', e.message)
+      if (!res.headersSent) res.status(502).end()
+    }
+  }
+
   return {
     invokeRoute,
     sendRoute,
     bootstrapUnblock,
     settingsStore,
+    handleBiliCdn,
   }
 }
 

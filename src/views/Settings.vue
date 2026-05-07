@@ -11,7 +11,14 @@ import { usePlayerStore } from '../store/playerStore';
 import { insertCustomFontStyle } from '../utils/setFont';
 import { clearProxyCache } from '../utils/request'
 import { normalizeLocalDirPath, localDirPathEquals } from '../utils/localPath'
+import {
+    isHydrogenWeb,
+    saveWebProfileIfSyncEnabled,
+    clearWebProfileOnNas,
+} from '../utils/webProfileNas'
 import Selector from '../components/Selector.vue'
+
+const isWebClient = isHydrogenWeb()
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -68,6 +75,8 @@ const customFont = ref('')
 const appVersion = ref('')
 const unblockEnabled = ref(false)
 const unblockPort = ref('36531:36532')
+/** Web：将网易云登录与用户状态写入 NAS（多设备/多浏览器共用） */
+const syncProfileToNas = ref(false)
 /** 渲染进程用于文案：Linux/Web 下目录选择器或路径习惯与 Windows 不同 */
 const isLinuxLikePath =
     typeof navigator !== 'undefined' &&
@@ -106,22 +115,31 @@ onActivated(() => {
             unblockEnabled.value = settings.unblock.enabled
             unblockPort.value = settings.unblock.port || '36531:36532'
         }
+        syncProfileToNas.value = !!settings.local?.syncProfileToNas
+        const m = settings.music || {}
+        if (Object.prototype.hasOwnProperty.call(m, 'coverBlur')) playerStore.coverBlur = !!m.coverBlur
+        if (Object.prototype.hasOwnProperty.call(m, 'lyricBlur')) playerStore.lyricBlur = !!m.lyricBlur
+        if (Object.prototype.hasOwnProperty.call(m, 'musicVideo')) playerStore.musicVideo = !!m.musicVideo
     })
 })
 
-const setAppSettings = () => {
+const setAppSettings = async () => {
     let settings = {
         music: {
             level: musicLevel.value,
             lyricSize: lyricSize.value,
             tlyricSize: tlyricSize.value,
             rlyricSize: rlyricSize.value,
-            lyricInterlude: lyricInterlude.value
+            lyricInterlude: lyricInterlude.value,
+            coverBlur: playerStore.coverBlur,
+            lyricBlur: playerStore.lyricBlur,
+            musicVideo: playerStore.musicVideo,
         },
         local: {
             videoFolder: videoFolder.value,
             downloadFolder: downloadFolder.value,
-            localFolder: localFolder.value
+            localFolder: localFolder.value,
+            syncProfileToNas: syncProfileToNas.value,
         },
         shortcuts: shortcutsList.value,
         other: {
@@ -136,12 +154,29 @@ const setAppSettings = () => {
         }
     }
     clearProxyCache()
-    windowApi.setSettings(JSON.stringify(settings))
+    const sent = windowApi.setSettings(JSON.stringify(settings))
+    if (sent && typeof sent.then === 'function') await sent
 }
 
-onBeforeRouteLeave((to, from, next) => {
-    setAppSettings()
-    initSettings()
+/** Web：将当前表单写入网关 settings.json 并回灌 Pinia，便于多浏览器立即一致 */
+const persistWebSettingsFromForm = async () => {
+    if (!isWebClient) return
+    try {
+        await setAppSettings()
+        await initSettings()
+    } catch (_) {}
+}
+
+onBeforeRouteLeave(async (to, from, next) => {
+    await setAppSettings()
+    await initSettings()
+    if (isWebClient && syncProfileToNas.value) {
+        try {
+            await saveWebProfileIfSyncEnabled()
+        } catch (e) {
+            console.warn('[Settings] 保存 NAS 账户配置失败', e)
+        }
+    }
     next()
     noticeOpen("设置已保存", 2)
 })
@@ -158,6 +193,7 @@ function applyLocalFolderPath(type, raw) {
     else if (type === 'local') {
         if (!localFolder.value.some((x) => localDirPathEquals(x, p))) localFolder.value.push(p)
     }
+    if (isWebClient) void persistWebSettingsFromForm()
 }
 
 const selectFolder = (type) => {
@@ -182,6 +218,7 @@ const manualInputFolder = (type) => {
 }
 const deleteLocalFolder = (index) => {
     localFolder.value.splice(index, 1)
+    if (isWebClient) void persistWebSettingsFromForm()
 }
 
 const formatShortcutName = (name) => {
@@ -242,10 +279,12 @@ const inputShortcut = (k) => {
         if (selectedShortcut.value.type) shortcutsList.value.find(sc => (sc.id == selectedShortcut.value.id)).globalShortcut = updateShortcut()
         else shortcutsList.value.find(sc => (sc.id == selectedShortcut.value.id)).shortcut = updateShortcut()
         newShortcut.value = []
+        if (isWebClient) void persistWebSettingsFromForm()
     }
 }
 const setDefaultShortcuts = () => {
     shortcutsList.value = [{ id: 'play', name: '播放/暂停', shortcut: 'CommandOrControl+P', globalShortcut: 'CommandOrControl+Alt+P', }, { id: 'last', name: '上一首', shortcut: 'CommandOrControl+Left', globalShortcut: 'CommandOrControl+Alt+Left', }, { id: 'next', name: '下一首', shortcut: 'CommandOrControl+Right', globalShortcut: 'CommandOrControl+Alt+Right', }, { id: 'volumeUp', name: '增加音量', shortcut: 'CommandOrControl+Up', globalShortcut: 'CommandOrControl+Alt+Up', }, { id: 'volumeDown', name: '减少音量', shortcut: 'CommandOrControl+Down', globalShortcut: 'CommandOrControl+Alt+Down', }, { id: 'processForward', name: '快进(3s)', shortcut: 'CommandOrControl+]', globalShortcut: 'CommandOrControl+Alt+]' }, { id: 'processBack', name: '后退(3s)', shortcut: 'CommandOrControl+[', globalShortcut: 'CommandOrControl+Alt+[' },]
+    if (isWebClient) void persistWebSettingsFromForm()
 }
 const clearMusicVideo = () => {
     windowApi.clearUnusedVideo().then(result => {
@@ -263,9 +302,10 @@ const setMusicVideo = () => {
     else
         openMusicVideo(true)
 }
-const openMusicVideo = (flag) => {
+const openMusicVideo = async (flag) => {
     if (flag)
         playerStore.musicVideo = !playerStore.musicVideo
+    if (flag) await persistWebSettingsFromForm()
 }
 const setCoverBlur = () => {
     if (!playerStore.coverBlur)
@@ -273,8 +313,9 @@ const setCoverBlur = () => {
     else
         openCoverBlur(true)
 }
-const openCoverBlur = (flag) => {
+const openCoverBlur = async (flag) => {
     if (flag) playerStore.coverBlur = !playerStore.coverBlur
+    if (flag) await persistWebSettingsFromForm()
 }
 const setLyricBlur = () => {
     if (!playerStore.lyricBlur)
@@ -282,13 +323,20 @@ const setLyricBlur = () => {
     else
         openLyricBlur(true)
 }
-const openLyricBlur = (flag) => {
+const openLyricBlur = async (flag) => {
     if (flag) playerStore.lyricBlur = !playerStore.lyricBlur
+    if (flag) await persistWebSettingsFromForm()
 }
 const userLogout = () => {
     if (isLogin()) {
-        logout().then(result => {
+        logout().then(async (result) => {
             if (result.code == 200) {
+                if (isWebClient) {
+                    try {
+                        const s = await windowApi.getSettings()
+                        if (s?.local?.syncProfileToNas) await clearWebProfileOnNas()
+                    } catch (_) {}
+                }
                 window.localStorage.clear()
                 userStore.user = null
                 userStore.biliUser = null
@@ -299,11 +347,28 @@ const userLogout = () => {
         })
     } else noticeOpen("您已退出账号", 2)
 }
-const save = () => {
+const save = async () => {
     selectedShortcut.value = null
-    setAppSettings()
-    initSettings()
+    await setAppSettings()
+    await initSettings()
+    if (isWebClient && syncProfileToNas.value) {
+        try {
+            await saveWebProfileIfSyncEnabled()
+        } catch (_) {}
+    }
     noticeOpen("设置已保存", 2)
+}
+
+/** Web：「同步到 NAS」开关立即写回网关 settings.json，避免仅切页未保存时其他设备看不到 */
+const toggleSyncProfileToNas = async () => {
+    syncProfileToNas.value = !syncProfileToNas.value
+    if (!isWebClient) return
+    try {
+        await setAppSettings()
+        if (syncProfileToNas.value) await saveWebProfileIfSyncEnabled()
+    } catch (e) {
+        console.warn('[Settings] 同步开关保存失败', e)
+    }
 }
 const toGithub = () => {
     windowApi.toRegister("https://github.com/Kaidesuyo/Hydrogen-Music")
@@ -314,6 +379,12 @@ const toJinghuaGithub = () => {
 
 const setCustomFont = () => {
     insertCustomFontStyle(customFont.value)
+    if (isWebClient) void persistWebSettingsFromForm()
+}
+
+const toggleGlobalShortcuts = async () => {
+    globalShortcuts.value = !globalShortcuts.value
+    await persistWebSettingsFromForm()
 }
 const toggleUnblock = () => {
     unblockEnabled.value = !unblockEnabled.value
@@ -370,7 +441,7 @@ const toggleUnblock = () => {
                         <div class="option">
                             <div class="option-name">音质选择</div>
                             <div class="option-operation">
-                                <Selector v-model="musicLevel" :options="musicLevelOptions"></Selector>
+                                <Selector v-model="musicLevel" :options="musicLevelOptions" @update:modelValue="persistWebSettingsFromForm"></Selector>
                             </div>
                         </div>
                         <div class="option">
@@ -400,25 +471,25 @@ const toggleUnblock = () => {
                         <div class="option">
                             <div class="option-name">歌词字体大小</div>
                             <div class="option-operation">
-                                <input v-model="lyricSize" name="lyricSize">
+                                <input v-model="lyricSize" name="lyricSize" @change="persistWebSettingsFromForm">
                             </div>
                         </div>
                         <div class="option">
                             <div class="option-name">歌词翻译字体大小</div>
                             <div class="option-operation">
-                                <input v-model="tlyricSize" name="tlyricSize">
+                                <input v-model="tlyricSize" name="tlyricSize" @change="persistWebSettingsFromForm">
                             </div>
                         </div>
                         <div class="option">
                             <div class="option-name">罗马歌词字体大小</div>
                             <div class="option-operation">
-                                <input v-model="rlyricSize" name="rlyricSize">
+                                <input v-model="rlyricSize" name="rlyricSize" @change="persistWebSettingsFromForm">
                             </div>
                         </div>
                         <div class="option">
                             <div class="option-name">歌词间奏等待时间(单位：秒)</div>
                             <div class="option-operation">
-                                <input v-model="lyricInterlude" name="lyricInterlude">
+                                <input v-model="lyricInterlude" name="lyricInterlude" @change="persistWebSettingsFromForm">
                             </div>
                         </div>
                         <div class="option">
@@ -476,6 +547,21 @@ const toggleUnblock = () => {
                                 <div class="add-option add-option-secondary" @click="manualInputFolder('local')">手动输入路径</div>
                             </div>
                         </div>
+                        <div class="option option-nas-sync" v-if="isWebClient">
+                            <div class="option-name">账户同步到 NAS</div>
+                            <div class="tip">
+                                此项仅同步网易与 B 站登录态，多浏览器共用；关同步或退出登录会清 NAS 副本。
+                            </div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleSyncProfileToNas">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': syncProfileToNas }">
+                                        {{ syncProfileToNas ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="syncProfileToNas"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="settings-item">
@@ -485,7 +571,7 @@ const toggleUnblock = () => {
                         <div class="option">
                             <div class="option-name">开启全局快捷键</div>
                             <div class="option-operation">
-                                <div class="toggle" @click="globalShortcuts = !globalShortcuts">
+                                <div class="toggle" @click="toggleGlobalShortcuts">
                                     <div class="toggle-off" :class="{ 'toggle-on-in': globalShortcuts }">{{ globalShortcuts
                                         ?
                                         '已开启' : '已关闭' }}</div>
@@ -552,7 +638,7 @@ const toggleUnblock = () => {
                         <div class="option">
                             <div class="option-name">退出应用时</div>
                             <div class="option-operation">
-                                <Selector v-model="quitApp" :options="quitAppOptions"></Selector>
+                                <Selector v-model="quitApp" :options="quitAppOptions" @update:modelValue="persistWebSettingsFromForm"></Selector>
                             </div>
                         </div>
                         <div class="option">
@@ -756,6 +842,30 @@ const toggleUnblock = () => {
                         align-items: center;
                         justify-content: space-between;
 
+                        &.option-nas-sync {
+                            align-items: flex-start;
+                            gap: 12px;
+
+                            .option-name {
+                                flex: 0 0 auto;
+                                max-width: 200px;
+                            }
+
+                            .tip {
+                                flex: 1 1 auto;
+                                min-width: 0;
+                                margin-top: 2px;
+                                font: 10px SourceHanSansCN-Bold;
+                                color: black;
+                                text-align: right;
+                            }
+
+                            .option-operation {
+                                flex: 0 0 auto;
+                                margin-top: 0;
+                            }
+                        }
+
                         .option-name {
                             font-family: SourceHanSansCN-Bold;
                             font-size: 16px;
@@ -908,12 +1018,13 @@ const toggleUnblock = () => {
                                 .tip {
                                     font: 10px SourceHanSansCN-Bold;
                                     color: black;
-                                    text-align: left;
+                                    text-align: right;
                                 }
 
                                 .tip-linux {
                                     margin-top: 4px;
                                     opacity: 0.85;
+                                    text-align: right;
                                 }
                             }
 
