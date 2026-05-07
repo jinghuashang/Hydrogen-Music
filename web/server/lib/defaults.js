@@ -7,11 +7,17 @@ function defaultSettings() {
       tlyricSize: '14',
       rlyricSize: '12',
       lyricInterlude: 13,
+      /** 与 playerStore 对齐，写入 settings.json 供 Web 多浏览器共用 */
+      coverBlur: false,
+      lyricBlur: false,
+      musicVideo: false,
     },
     local: {
       videoFolder: null,
       downloadFolder: null,
       localFolder: [],
+      /** Web：将网易云登录态与用户偏好写入 NAS，多浏览器共用 */
+      syncProfileToNas: false,
     },
     shortcuts: [
       { id: 'play', name: '播放/暂停', shortcut: 'CommandOrControl+P', globalShortcut: 'CommandOrControl+Alt+P' },

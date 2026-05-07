@@ -171,6 +171,10 @@ export function startLocalMusicVideo() {
     }, 200);
 }
 export function unloadMusicVideo() {
+    if (videoCheckInterval) {
+        clearInterval(videoCheckInterval)
+        videoCheckInterval = null
+    }
     currentMusicVideo.value = null
     videoIsPlaying.value = false
     playerShow.value = true
@@ -184,7 +188,7 @@ export function loadMusicVideo(id) {
             unloadMusicVideo()
         } else if(result) {
             currentMusicVideo.value = result.data
-            if(songList.value[currentIndex.value].type == 'local') startLocalMusicVideo()
+            if (result.data.streamBaseUrl || result.data.path) startLocalMusicVideo()
         } else {
             videoCheckInterval = null
             unloadMusicVideo()
@@ -304,7 +308,9 @@ export function startMusic() {
     }
     if(videoIsPlaying.value) {
         musicVideoDOM.value.play()
-        if(songList.value[currentIndex.value].type == 'local') startLocalMusicVideo()
+        if (currentMusicVideo.value && (currentMusicVideo.value.streamBaseUrl || currentMusicVideo.value.path)) {
+            startLocalMusicVideo()
+        }
     }
 }
 export function pauseMusic() {
@@ -318,7 +324,10 @@ export function pauseMusic() {
     }
     if(videoIsPlaying.value) {
         musicVideoDOM.value.pause()
-        if(songList.value[currentIndex.value].type == 'local') clearInterval(videoCheckInterval)
+        if (videoCheckInterval) {
+            clearInterval(videoCheckInterval)
+            videoCheckInterval = null
+        }
     }
 }
 

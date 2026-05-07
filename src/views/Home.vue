@@ -5,6 +5,7 @@
   import { noticeOpen } from "../utils/dialog";
   import { isLogin } from '../utils/authority'
   import { useUserStore } from '../store/userStore';
+  import { isHydrogenWeb, clearWebProfileOnNas } from '../utils/webProfileNas'
 
   const router  =useRouter()
   const userStore = useUserStore()
@@ -14,8 +15,14 @@
   }
   const userLogout = () => {
     if(isLogin()){
-      logout().then(result => {
+      logout().then(async (result) => {
         if(result.code == 200) {
+            if (isHydrogenWeb()) {
+              try {
+                const s = await windowApi.getSettings()
+                if (s?.local?.syncProfileToNas) await clearWebProfileOnNas()
+              } catch (_) {}
+            }
             window.localStorage.clear()
             userStore.user = null
             userStore.biliUser = null

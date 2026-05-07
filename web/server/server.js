@@ -24,6 +24,7 @@ async function main() {
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, service: 'hydrogen-music-web-gateway' })
   })
+  app.get('/api/bili-cdn', (req, res) => handlers.handleBiliCdn(req, res))
   app.get('/api/events', sseMiddleware)
   app.post('/api/invoke', express.json(), handlers.invokeRoute)
   app.post('/api/send', express.json(), handlers.sendRoute)

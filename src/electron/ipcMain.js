@@ -53,7 +53,11 @@ module.exports = IpcMainEvent = (win, app) => {
     })
     ipcMain.handle('get-settings', async () => {
         const settings =  await settingsStore.get('settings')
-        if(settings) return settings
+        if(settings) {
+            if (!settings.local) settings.local = {}
+            if (settings.local.syncProfileToNas === undefined) settings.local.syncProfileToNas = false
+            return settings
+        }
         else {
             let initSettings = {
                 music: {
@@ -61,12 +65,16 @@ module.exports = IpcMainEvent = (win, app) => {
                     lyricSize: '20',
                     tlyricSize: '14',
                     rlyricSize: '12',
-                    lyricInterlude: 13
+                    lyricInterlude: 13,
+                    coverBlur: false,
+                    lyricBlur: false,
+                    musicVideo: false,
                 },
                 local: {
                     videoFolder: null,
                     downloadFolder: null,
-                    localFolder: []
+                    localFolder: [],
+                    syncProfileToNas: false,
                 },
                 shortcuts: [
                     {
@@ -281,6 +289,8 @@ module.exports = IpcMainEvent = (win, app) => {
         const result = await searchMusicVideo(obj.id)
         if(result) {
             if(obj.method == 'get') return result
+            if(result.data.streamBaseUrl) return result
+            if(!result.data.path) return '404'
             const file = await fileIsExists(result.data.path)
             if(!file) return '404'
             else return result
@@ -294,7 +304,7 @@ module.exports = IpcMainEvent = (win, app) => {
         const files = fs.readdirSync(folderPath)
         files.forEach(filename => {
             const filePath = path.join(folderPath, filename)
-            if(!musicVideo.some(video => path.normalize(video.path) === path.normalize(filePath))) {
+            if(!musicVideo.some(video => video.path && path.normalize(video.path) === path.normalize(filePath))) {
               console.log(filePath)
                 fs.unlinkSync(filePath)
             }
