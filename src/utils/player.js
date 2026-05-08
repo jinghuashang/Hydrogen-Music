@@ -145,6 +145,7 @@ export function localMusicHandle(list, isToNext) {
                 name: song.common.title,
                 localName: song.common.localTitle,
                 type: 'local',
+                dt: Math.floor(song.format.duration * 1000),
                 sampleRate: song.format.sampleRate / 1000,
                 bitsPerSample: song.format.bitsPerSample,
                 bitrate: Math.round(song.format.bitrate / 1000),
@@ -270,8 +271,14 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
             setSongToWindows()
         })
         play(songList.value[currentIndex.value].url, autoplay)
-        lyric.value = null
-        lyricsObjArr.value = null
+        // 加载本地歌词
+        const localLyric = await getLocalLyric(songList.value[currentIndex.value].url)
+        if(localLyric) {
+            lyric.value = { lrc: { lyric: localLyric } }
+        } else {
+            lyric.value = null
+            lyricsObjArr.value = null
+        }
         if(!lyricShow.value && !widgetState.value) {
             lyricShow.value = true
             playerChangeSong.value = false

@@ -89,6 +89,49 @@ const createWindow = () => {
             win.webContents.send('player-save')
         }
     })
+    // 手动检测更新
+    const { ipcMain } = require('electron')
+    ipcMain.handle('manual-check-update', async () => {
+        return new Promise((resolve) => {
+            const https = require('https')
+            const currentVersion = require('./package.json').version
+            const options = {
+                hostname: 'api.github.com',
+                path: '/repos/jinghuashang/Hydrogen-Music/releases/latest',
+                headers: {
+                    'User-Agent': 'Hydrogen-Music',
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            }
+            const req = https.get(options, (res) => {
+                let data = ''
+                res.on('data', chunk => data += chunk)
+                res.on('end', () => {
+                    try {
+                        const release = JSON.parse(data)
+                        const latestVersion = release.tag_name.replace(/^v/, '')
+                        if (isNewerVersion(latestVersion, currentVersion)) {
+                            const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
+                            resolve({
+                                hasUpdate: true,
+                                version: latestVersion,
+                                downloadUrl: exeAsset ? exeAsset.browser_download_url : null,
+                                isWindows: process.platform === 'win32'
+                            })
+                        } else {
+                            resolve({ hasUpdate: false })
+                        }
+                    } catch (e) {
+                        resolve({ hasUpdate: false, error: '检查更新失败' })
+                    }
+                })
+            })
+            req.on('error', () => {
+                resolve({ hasUpdate: false, error: '网络连接失败' })
+            })
+            req.end()
+        })
+    })
     //api初始化
     startNeteaseMusicApi()
     //启动UnblockNeteaseMusic

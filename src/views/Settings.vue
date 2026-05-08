@@ -8,6 +8,7 @@ import { getVipInfo } from '../api/user'
 import { isLogin } from '../utils/authority';
 import { useUserStore } from '../store/userStore';
 import { usePlayerStore } from '../store/playerStore';
+import { useOtherStore } from '../store/otherStore';
 import { insertCustomFontStyle } from '../utils/setFont';
 import { clearProxyCache } from '../utils/request'
 import { normalizeLocalDirPath, localDirPathEquals } from '../utils/localPath'
@@ -23,6 +24,7 @@ const isWebClient = isHydrogenWeb()
 const router = useRouter()
 const userStore = useUserStore()
 const playerStore = usePlayerStore()
+const otherStore = useOtherStore()
 
 const vipInfo = ref(null)
 const musicLevel = ref('standard')
@@ -73,6 +75,7 @@ const newShortcut = ref([])
 const shortcutCharacter = ['=', '-', '~', '@', '#', '$', '[', ']', ';', "'", ',', '.', '/', '!'];
 const customFont = ref('')
 const appVersion = ref('')
+const isCheckingUpdate = ref(false)
 const unblockEnabled = ref(false)
 const unblockPort = ref('36531:36532')
 /** Web：将网易云登录与用户状态写入 NAS（多设备/多浏览器共用） */
@@ -376,6 +379,25 @@ const toGithub = () => {
 const toJinghuaGithub = () => {
     windowApi.toRegister("https://github.com/jinghuashang/Hydrogen-Music")
 }
+const checkForUpdate = async () => {
+    if (isCheckingUpdate.value) return
+    isCheckingUpdate.value = true
+    try {
+        const result = await windowApi.manualCheckUpdate()
+        if (result.hasUpdate) {
+            otherStore.toUpdate = true
+            otherStore.newVersion = result.version
+            otherStore.updateDownloadUrl = result.downloadUrl
+            otherStore.updateIsWindows = result.isWindows
+        } else {
+            noticeOpen(result.error || '当前已是最新版本', 2)
+        }
+    } catch (e) {
+        noticeOpen('检查更新失败', 2)
+    } finally {
+        isCheckingUpdate.value = false
+    }
+}
 
 const setCustomFont = () => {
     insertCustomFontStyle(customFont.value)
@@ -667,6 +689,9 @@ const toggleUnblock = () => {
                     <img src="../assets/icon/icon.ico" alt="">
                 </div>
                 <div class="version">V{{ appVersion }}</div>
+                <div class="check-update-btn" @click="checkForUpdate()" :class="{ 'checking': isCheckingUpdate }">
+                    {{ isCheckingUpdate ? '检查中...' : '检查更新' }}
+                </div>
                 <div class="app-author" @click="toGithub()">Made by Kaidesuyo</div>
                 <div class="app-author" @click="toJinghuaGithub()">Modified by jinghuashang</div>
             </div>
@@ -1171,6 +1196,30 @@ const toggleUnblock = () => {
             .version {
                 font: 14px Geometos;
                 color: black;
+            }
+
+            .check-update-btn {
+                margin-top: 15px;
+                padding: 8px 20px;
+                background-color: rgba(255, 255, 255, 0.35);
+                font: 14px SourceHanSansCN-Bold;
+                color: black;
+                transition: 0.2s;
+                cursor: pointer;
+
+                &:hover {
+                    opacity: 0.8;
+                    box-shadow: 0 0 0 1px black;
+                }
+
+                &:active {
+                    transform: scale(0.95);
+                }
+
+                &.checking {
+                    opacity: 0.6;
+                    cursor: not-allowed;
+                }
             }
 
             .app-author {
