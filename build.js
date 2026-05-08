@@ -11,7 +11,15 @@ execSync('vite build', { stdio: 'inherit' })
 execSync('electron-builder --publish never', { stdio: 'inherit' })
 
 // Find built files
-const releaseDir = path.join(__dirname, 'release', version)
+const releaseBase = path.join(__dirname, 'release')
+let releaseDir = path.join(releaseBase, version)
+if (!fs.existsSync(releaseDir)) {
+  // electron-builder may use a slightly different folder name; pick the most recent one
+  const dirs = fs.readdirSync(releaseBase)
+    .map(d => ({ name: d, time: fs.statSync(path.join(releaseBase, d)).mtimeMs }))
+    .sort((a, b) => b.time - a.time)
+  if (dirs.length) releaseDir = path.join(releaseBase, dirs[0].name)
+}
 const files = fs.readdirSync(releaseDir)
   .filter(f => f.endsWith('.exe') || f.endsWith('.zip') || f.endsWith('.dmg') || f.endsWith('.yml'))
   .map(f => path.join(releaseDir, f))
