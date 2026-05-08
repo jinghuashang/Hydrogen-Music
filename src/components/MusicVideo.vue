@@ -3,7 +3,14 @@
   import QRCode from 'qrcode'
 
   import { songTime2, loadMusicVideo, unloadMusicVideo } from '../utils/player';
-  import { isHydrogenWeb, saveWebProfileIfSyncEnabled } from '../utils/webProfileNas'
+  import {
+    isHydrogenWeb,
+    saveWebProfileIfSyncEnabled,
+    getBiliCookieForApi,
+    persistFullBiliSessionCookieHeader,
+    clearBiliStoredSession,
+    hasBiliSessionInStorage,
+  } from '../utils/webProfileNas'
   import VueSlider from 'vue-slider-component'
   import { dialogOpen, noticeOpen } from '../utils/dialog';
   import { useUserStore } from '../store/userStore';
@@ -69,7 +76,7 @@
             getQRCode()
         }
     } else {
-        localStorage.removeItem('Sessdata')
+        clearBiliStoredSession()
         userStore.biliUser = null
         qrKey.value = null
         saveWebProfileIfSyncEnabled().catch(() => {})
@@ -131,6 +138,7 @@
         })
         if (cookieParts.length > 0) {
             headers.cookie = cookieParts.join('; ') + ';'
+            persistFullBiliSessionCookieHeader(headers.cookie)
         }
     }
     // Use getBiliRequestData (main process with accumulated cookies from login flow)
@@ -157,8 +165,7 @@
         if(bv) {
             setDefault()
             selectedInfo.value = {bvid: bv}
-            if(localStorage.getItem('Sessdata')) headers.cookie = 'SESSDATA=' + localStorage.getItem('Sessdata') + ';'
-            else headers.cookie = ''
+            headers.cookie = getBiliCookieForApi()
             const videoInfo = await windowApi.biliFetch('https://api.bilibili.com/x/web-interface/view', {headers: headers, params: {bvid: bv}})
             if(videoInfo.code == 0) {
                 currentVideoInfo.value = videoInfo.data
@@ -194,7 +201,7 @@
   const selectPart = async (cid) => {
     setDefault()
     selectedInfo.value.part = cid
-    if(localStorage.getItem('Sessdata')) headers.cookie = 'SESSDATA=' + localStorage.getItem('Sessdata')  + ';'
+    headers.cookie = getBiliCookieForApi()
     const videoData = await windowApi.biliFetch('https://api.bilibili.com/x/player/playurl', {headers: headers, params: {bvid: selectedInfo.value.bvid, cid: cid, fourk: 1, fnval: 80}})
     if (!videoData.data?.dash?.video) {
         noticeOpen('获取该分P视频流失败', 3)
@@ -209,7 +216,7 @@
   const selectQuality = (item, index) => {
     const label = qualityLabelFromApi(item)
     if (!label) return
-    if(!localStorage.getItem('Sessdata')) {
+    if(!hasBiliSessionInStorage()) {
         if(label != '流畅 360P' && label != '清晰 480P') {
             noticeOpen('该清晰度需要登录账号', 2)
             return
@@ -275,7 +282,7 @@
         progress.value = 0
     }
     noticeOpen(isHydrogenWeb() ? '正在保存…' : '开始添加，请稍后', 2)
-    if(localStorage.getItem('Sessdata')) headers.cookie = 'SESSDATA=' + localStorage.getItem('Sessdata')  + ';'
+    headers.cookie = getBiliCookieForApi()
     let urlIndex = selectedInfo.value.qn - (currentVideoInfo.value.quality.length - currentVideoInfo.value.video.length / 2)
     if(urlIndex < 0) urlIndex = 0
     const streamBaseUrl = currentVideoInfo.value.video[urlIndex].baseUrl

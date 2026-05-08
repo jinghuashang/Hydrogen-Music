@@ -41,6 +41,46 @@ function isAllowedBilibiliMediaUrl(urlStr) {
   )
 }
 
+const BILI_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
+/** 从 B 站 CDN 直链查询串解析 Unix 过期秒；无则返回 null */
+function parseStreamUrlExpirySeconds(urlStr) {
+  try {
+    const u = new URL(urlStr)
+    for (const key of ['expires', 'expire']) {
+      const v = u.searchParams.get(key)
+      if (v && /^\d+$/.test(v)) {
+        const n = Number(v)
+        return n > 1e12 ? Math.floor(n / 1000) : n
+      }
+    }
+    const dl = u.searchParams.get('deadline')
+    if (dl && /^\d+$/.test(dl)) {
+      const n = Number(dl)
+      return n > 1e12 ? Math.floor(n / 1000) : n
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+/** 与 MusicVideo.vue 中 urlIndex 计算方式一致，从 playurl JSON 取 dash 视频轨 baseUrl */
+function pickDashVideoBaseUrl(playData, qn) {
+  const dash = playData?.data?.dash
+  if (!dash?.video?.length) return null
+  const ad = playData?.data?.accept_description
+  const Q = Array.isArray(ad) ? ad.length : 0
+  const V = dash.video.length
+  const q = typeof qn === 'number' && !Number.isNaN(qn) ? qn : 0
+  let urlIndex = q - (Q - V / 2)
+  if (urlIndex < 0) urlIndex = 0
+  urlIndex = Math.min(Math.floor(urlIndex), V - 1)
+  const item = dash.video[urlIndex]
+  return item?.baseUrl || item?.base_url || null
+}
+
 function createHandlers({ broadcast }) {
   const settingsStore = createStore('settings')
   const lastPlaylistStore = createStore('lastPlaylist')
@@ -71,6 +111,102 @@ function createHandlers({ broadcast }) {
     } else {
       musicVideoStore.set('musicVideo', [data])
     }
+  }
+
+  function biliCookieHeaderFromStore() {
+    return Object.entries(biliCookies)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ')
+  }
+
+  function mergeBiliCookieForStream(clientBiliCookie) {
+    return [biliCookieHeaderFromStore(), (clientBiliCookie || '').trim()].filter(Boolean).join('; ')
+  }
+
+  async function probeBiliStreamAlive(urlStr, mergedCookie) {
+    const headers = {
+      Referer: 'https://www.bilibili.com/',
+      'User-Agent': BILI_UA,
+    }
+    if (mergedCookie) headers.Cookie = mergedCookie
+    try {
+      const head = await axios({
+        method: 'HEAD',
+        url: urlStr,
+        headers,
+        timeout: 12000,
+        validateStatus: () => true,
+        maxRedirects: 5,
+      })
+      if (head.status === 200 || head.status === 206) return true
+      if (head.status === 405) {
+        const getPart = await axios({
+          method: 'GET',
+          url: urlStr,
+          headers: { ...headers, Range: 'bytes=0-0' },
+          timeout: 12000,
+          validateStatus: () => true,
+          maxRedirects: 5,
+        })
+        return getPart.status === 200 || getPart.status === 206
+      }
+      return false
+    } catch (e) {
+      console.warn('[music-video] probe stream', e.message)
+      return false
+    }
+  }
+
+  async function refreshWebMusicVideoStreamBaseUrl(record, clientBiliCookie) {
+    const { bv, cid, qn } = record
+    if (!bv || !cid) return null
+    const merged = mergeBiliCookieForStream(clientBiliCookie)
+    const headers = {
+      Referer: 'https://www.bilibili.com/',
+      'User-Agent': BILI_UA,
+    }
+    if (merged) headers.Cookie = merged
+    const res = await axios.get('https://api.bilibili.com/x/player/playurl', {
+      headers,
+      params: { bvid: bv, cid, fnval: 80, fourk: 1 },
+      timeout: 20000,
+      validateStatus: () => true,
+    })
+    if (res.status !== 200 || res.data?.code !== 0) {
+      console.error('[music-video] refresh playurl', res.data?.code, res.data?.message)
+      return null
+    }
+    return pickDashVideoBaseUrl(res.data, qn)
+  }
+
+  /**
+   * Web 直链：根据 URL 中 expires/deadline 或 HEAD 探测判定失效后，
+   * 重新请求 playurl 并 saveMusicVideo 更新 streamBaseUrl。
+   */
+  async function ensureWebStreamUrlFresh(record, clientBiliCookie) {
+    const url = record.streamBaseUrl
+    if (!url || typeof url !== 'string') return record
+    if (record.path) return record
+    const merged = mergeBiliCookieForStream(clientBiliCookie)
+    const skew = 120
+    const now = Math.floor(Date.now() / 1000)
+    const exp = parseStreamUrlExpirySeconds(url)
+    let needRefresh = false
+    if (exp != null) {
+      needRefresh = now >= exp - skew
+    } else {
+      needRefresh = !(await probeBiliStreamAlive(url, merged))
+    }
+    if (!needRefresh) return record
+    const nextUrl = await refreshWebMusicVideoStreamBaseUrl(record, clientBiliCookie)
+    if (!nextUrl) {
+      console.warn('[music-video] keep stale streamBaseUrl after refresh failure')
+      return record
+    }
+    if (nextUrl === url) return record
+    const next = { ...record, streamBaseUrl: nextUrl }
+    await saveMusicVideo(next)
+    return next
   }
 
   async function getSettings() {
@@ -267,7 +403,13 @@ function createHandlers({ broadcast }) {
       const result = await searchMusicVideo(obj.id)
       if (result) {
         if (obj.method === 'get') return result
-        if (result.data.streamBaseUrl) return result
+        if (result.data.streamBaseUrl) {
+          if (!result.data.path && obj.method === 'verify') {
+            const nextData = await ensureWebStreamUrlFresh(result.data, obj.clientBiliCookie)
+            return { data: nextData, index: result.index }
+          }
+          return result
+        }
         if (!result.data.path) return '404'
         const file = await fileExists(result.data.path)
         if (!file) return '404'
@@ -458,11 +600,7 @@ function createHandlers({ broadcast }) {
     startUnblockNeteaseMusic(settingsStore)
   }
 
-  function biliCookieHeader() {
-    return Object.entries(biliCookies)
-      .map(([k, v]) => `${k}=${v}`)
-      .join('; ')
-  }
+  const biliCookieHeader = biliCookieHeaderFromStore
 
   /** GET /api/bili-cdn?u=<encodeURIComponent(bilibiliUrl)> */
   async function handleBiliCdn(req, res) {

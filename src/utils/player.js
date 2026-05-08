@@ -2,6 +2,7 @@ import pinia from '../store/pinia'
 import { Howl, Howler } from 'howler'
 import dayjs from 'dayjs';
 import { noticeOpen } from './dialog'
+import { isHydrogenWeb, getBiliCookieForApi } from './webProfileNas'
 import { checkMusic, getMusicUrl, likeMusic, getLyric } from '../api/song'
 import { getLikelist } from '../api/user'
 import { useUserStore } from '../store/userStore'
@@ -181,7 +182,12 @@ export function unloadMusicVideo() {
 }
 export function loadMusicVideo(id) {
     if(currentMusicVideo.value) unloadMusicVideo()
-    windowApi.musicVideoIsExists({id: id, method: 'verify'}).then(result => {
+    const mvPayload = { id, method: 'verify' }
+    if (isHydrogenWeb()) {
+        const c = getBiliCookieForApi()
+        if (c) mvPayload.clientBiliCookie = c.replace(/;+$/, '')
+    }
+    windowApi.musicVideoIsExists(mvPayload).then(result => {
         if(result == '404') {
             videoCheckInterval = null
             noticeOpen('未找到视频文件', 2)
@@ -548,7 +554,8 @@ export function musicVideoCheck(seek, update) {
                 if(Math.abs(musicVideoDOM.value.currentTime - vt) > 1) return
                 currentTiming = currentMusicVideo.value.timing[i]
                 videoIsPlaying.value = true
-                if(!update) playerShow.value = false
+                // 仅迷你条模式下自动「切到视频层」；全屏播放器 (!widgetState) 下勿收起，否则封面进入播放页后会被立刻加上 player-hide
+                if (!update && widgetState.value) playerShow.value = false
                 return
             }
         }
