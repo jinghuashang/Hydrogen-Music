@@ -34,6 +34,7 @@
 
   const showPlayer = () => {
     playerStore.widgetState = false
+    playerStore.playerShow = true
     lyricShow.value = true
   }
 

@@ -1,6 +1,9 @@
 import pinia from '../store/pinia'
 import { useUserStore } from '../store/userStore'
 
+/** 与扫码登录后 OAuth 回调里整段 Cookie 一致，供 B 站 API（playurl 等）使用；仅 SESSDATA 往往不够 */
+export const BILI_FULL_COOKIE_STORAGE_KEY = 'HydrogenBiliCookie'
+
 export function isHydrogenWeb() {
   return import.meta.env.VITE_WEB === 'true' || import.meta.env.VITE_WEB === '1'
 }
@@ -19,20 +22,92 @@ export function collectNeteaseCookiesForNas() {
   return map
 }
 
-/** B 站：与 MusicVideo 中 localStorage「Sessdata」一致，用于请求 playurl 等 */
+function extractSessdataFromCookieHeader(header) {
+  if (!header || typeof header !== 'string') return null
+  const m = header.match(/(?:^|;\s*)SESSDATA=([^;]+)/i)
+  if (!m) return null
+  try {
+    return decodeURIComponent(m[1].trim())
+  } catch {
+    return m[1].trim()
+  }
+}
+
+/** 写入扫码登录得到的完整 Cookie 串（含 bili_jct、DedeUserID 等），并同步 Sessdata 供旧逻辑使用 */
+export function persistFullBiliSessionCookieHeader(cookieHeader) {
+  if (typeof localStorage === 'undefined') return
+  const raw = (cookieHeader || '').trim()
+  if (!raw) {
+    localStorage.removeItem('Sessdata')
+    localStorage.removeItem(BILI_FULL_COOKIE_STORAGE_KEY)
+    return
+  }
+  const normalized = raw.endsWith(';') ? raw : `${raw};`
+  localStorage.setItem(BILI_FULL_COOKIE_STORAGE_KEY, normalized)
+  const sd = extractSessdataFromCookieHeader(normalized)
+  if (sd) localStorage.setItem('Sessdata', sd)
+}
+
+export function clearBiliStoredSession() {
+  if (typeof localStorage === 'undefined') return
+  localStorage.removeItem('Sessdata')
+  localStorage.removeItem(BILI_FULL_COOKIE_STORAGE_KEY)
+}
+
+/** 发给 B 站网关请求的 Cookie 头（优先完整串，否则仅 SESSDATA） */
+export function getBiliCookieForApi() {
+  if (typeof localStorage === 'undefined') return ''
+  const full = localStorage.getItem(BILI_FULL_COOKIE_STORAGE_KEY)
+  if (full && full.trim()) {
+    const t = full.trim()
+    return t.endsWith(';') ? t : `${t};`
+  }
+  const sd = localStorage.getItem('Sessdata')
+  if (sd != null && sd !== '') return `SESSDATA=${sd};`
+  return ''
+}
+
+export function hasBiliSessionInStorage() {
+  return !!getBiliCookieForApi().trim()
+}
+
+/**
+ * B 站：写入 NAS 的配置
+ * - sessdata：与旧版兼容，单独存 SESSDATA 值
+ * - cookieHeader：完整 Cookie，恢复后 playurl / view 等与浏览器登录一致
+ */
 export function collectBiliForNas() {
-  if (typeof localStorage === 'undefined') return { sessdata: null }
+  if (typeof localStorage === 'undefined') {
+    return { sessdata: null, cookieHeader: null }
+  }
   const v = localStorage.getItem('Sessdata')
-  return { sessdata: v != null && v !== '' ? v : null }
+  const full = localStorage.getItem(BILI_FULL_COOKIE_STORAGE_KEY)
+  return {
+    sessdata: v != null && v !== '' ? v : null,
+    cookieHeader: full != null && full.trim() !== '' ? full.trim() : null,
+  }
 }
 
 export function applyBiliFromNas(bili) {
-  if (!bili || typeof bili !== 'object') return
-  if (bili.sessdata != null && bili.sessdata !== '') {
-    localStorage.setItem('Sessdata', String(bili.sessdata))
-  } else {
-    localStorage.removeItem('Sessdata')
+  if (!bili || typeof bili !== 'object') {
+    clearBiliStoredSession()
+    return
   }
+  const header =
+    bili.cookieHeader != null && String(bili.cookieHeader).trim() !== ''
+      ? String(bili.cookieHeader).trim()
+      : null
+  if (header) {
+    persistFullBiliSessionCookieHeader(header)
+    return
+  }
+  if (bili.sessdata != null && bili.sessdata !== '') {
+    const s = String(bili.sessdata)
+    localStorage.setItem('Sessdata', s)
+    localStorage.setItem(BILI_FULL_COOKIE_STORAGE_KEY, `SESSDATA=${s};`)
+    return
+  }
+  clearBiliStoredSession()
 }
 
 export function applyNeteaseCookiesFromNas(map) {
