@@ -243,13 +243,17 @@ function autoDownloadAndInstall(win, url) {
 }
 
 function isNewerVersion(latest, current) {
-    const l = latest.split('.').map(Number)
-    const c = current.split('.').map(Number)
+    function parsePart(s) {
+        const m = String(s).match(/^(\d+)(.*)$/)
+        return m ? [parseInt(m[1], 10), m[2] || ''] : [0, '']
+    }
+    const l = latest.split('.').map(parsePart)
+    const c = current.split('.').map(parsePart)
     for (let i = 0; i < Math.max(l.length, c.length); i++) {
-        const a = l[i] || 0
-        const b = c[i] || 0
-        if (a > b) return true
-        if (a < b) return false
+        const [aNum, aSuffix] = l[i] || [0, '']
+        const [bNum, bSuffix] = c[i] || [0, '']
+        if (aNum !== bNum) return aNum > bNum
+        if (aSuffix !== bSuffix) return aSuffix > bSuffix
     }
     return false
 }
