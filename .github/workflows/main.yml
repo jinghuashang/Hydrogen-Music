@@ -97,5 +97,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           files: release/**/*
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

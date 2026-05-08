@@ -36,7 +36,7 @@ try {
   execSync(`gh release upload ${tag} ${quotedFiles} --clobber`, { stdio: 'inherit' })
 } catch {
   console.log(`Creating release ${tag}...`)
-  execSync(`gh release create ${tag} ${quotedFiles} --title "Hydrogen Music ${tag}" --generate-notes`, { stdio: 'inherit' })
+  execSync(`gh release create ${tag} ${quotedFiles} --title "Hydrogen Music ${tag}" --notes ""`, { stdio: 'inherit' })
 }
 
 console.log('Done!')
