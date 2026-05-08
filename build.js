@@ -18,14 +18,17 @@ const files = fs.readdirSync(releaseDir)
 
 console.log('Built files:', files)
 
+// Quote file paths to handle spaces
+const quotedFiles = files.map(f => `"${f}"`).join(' ')
+
 // Create GitHub release and upload
 try {
   execSync(`gh release view ${tag}`, { stdio: 'pipe' })
   console.log(`Release ${tag} exists, uploading assets...`)
-  execSync(`gh release upload ${tag} ${files.join(' ')} --clobber`, { stdio: 'inherit' })
+  execSync(`gh release upload ${tag} ${quotedFiles} --clobber`, { stdio: 'inherit' })
 } catch {
   console.log(`Creating release ${tag}...`)
-  execSync(`gh release create ${tag} ${files.join(' ')} --title "Hydrogen Music ${tag}" --generate-notes`, { stdio: 'inherit' })
+  execSync(`gh release create ${tag} ${quotedFiles} --title "Hydrogen Music ${tag}" --generate-notes`, { stdio: 'inherit' })
 }
 
 console.log('Done!')

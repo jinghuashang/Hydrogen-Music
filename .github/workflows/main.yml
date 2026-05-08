@@ -4,15 +4,49 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'package.json'
     tags:
       - v*
 
 jobs:
+  check-version:
+    name: Check if version changed
+    runs-on: ubuntu-latest
+    if: github.ref_type != 'tag'
+    outputs:
+      version_changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Check out git repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check version change
+        id: check
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          PREVIOUS_VERSION=$(git show HEAD~1:package.json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version")
+          echo "Current: v${CURRENT_VERSION}, Previous: v${PREVIOUS_VERSION}"
+          echo "version=v${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "Version changed!"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version unchanged, skipping build."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
     name: build and release electron app
+    needs: check-version
+    if: >
+      github.ref_type == 'tag' ||
+      needs.check-version.outputs.version_changed == 'true'
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write          # 允许创建 release 和上传 assets
+      contents: write
 
     strategy:
       fail-fast: false
