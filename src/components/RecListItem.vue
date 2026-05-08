@@ -1,5 +1,5 @@
 <script setup>
-  import { onActivated, ref } from 'vue'
+  import { onActivated, onUnmounted, ref } from 'vue'
   import { useRouter } from 'vue-router';
   import { getNewAlbum } from '../api/album';
   import { getRecommendedArtists } from '../api/artist';
@@ -28,6 +28,8 @@
   const recTitle = ref('')
   const recTitleEN = ref('')
   const recommendationList = ref([{}])
+  const isRefreshing = ref(false)
+  let refreshTimer = null
 
   onActivated(() => {
     /**
@@ -35,7 +37,27 @@
      * 最后为当前列表的类型
      */
     loadData(1, 10, 'all', recType.value)
+    // 设置半小时自动刷新
+    if (refreshTimer) clearInterval(refreshTimer)
+    refreshTimer = setInterval(() => {
+      loadData(1, 10, 'all', recType.value)
+    }, 30 * 60 * 1000)
   })
+
+  onUnmounted(() => {
+    if (refreshTimer) {
+      clearInterval(refreshTimer)
+      refreshTimer = null
+    }
+  })
+
+  const refreshData = () => {
+    if (isRefreshing.value) return
+    isRefreshing.value = true
+    loadData(1, 10, 'all', recType.value).finally(() => {
+      isRefreshing.value = false
+    })
+  }
   //设置标题
   const setTitle = (cn, en) => {
     recTitle.value = cn
@@ -169,7 +191,12 @@
         <div class="header">
             <div class="header-title-en">{{recTitleEN}}</div>
             <div class="line"></div>
-            <!-- <div class="header-more">查看更多</div> -->
+            <div class="header-refresh" @click="refreshData()" :class="{'refreshing': isRefreshing}">
+              <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="14" height="14">
+                <path d="M934.4 193.6v225.6c0 8-6.4 14.4-14.4 14.4h-225.6c-8 0-14.4-6.4-14.4-14.4s6.4-14.4 14.4-14.4h177.6c-33.6-100.8-129.6-172.8-241.6-172.8-142.4 0-257.6 115.2-257.6 257.6s115.2 257.6 257.6 257.6c62.4 0 120-22.4 164.8-59.2 6.4-5.6 7.2-15.2 1.6-21.6-5.6-6.4-15.2-7.2-21.6-1.6-38.4 31.2-87.2 50.4-140 50.4-121.6 0-220.8-99.2-220.8-220.8s99.2-220.8 220.8-220.8c92.8 0 173.6 58.4 205.6 140.8v-143.2c0-8 6.4-14.4 14.4-14.4s14.4 6.4 14.4 14.4zM516.8 830.4c-121.6 0-220.8-99.2-220.8-220.8s99.2-220.8 220.8-220.8c62.4 0 120-22.4 164.8-59.2 6.4-5.6 7.2-15.2 1.6-21.6-5.6-6.4-15.2-7.2-21.6-1.6-38.4 31.2-87.2 50.4-140 50.4-142.4 0-257.6 115.2-257.6 257.6s115.2 257.6 257.6 257.6c92.8 0 173.6-58.4 205.6-140.8v143.2c0 8 6.4 14.4 14.4 14.4s14.4-6.4 14.4-14.4v-225.6c0-8-6.4-14.4-14.4-14.4h-225.6c-8 0-14.4 6.4-14.4 14.4s6.4 14.4 14.4 14.4h177.6c-33.6 100.8-129.6 172.8-241.6 172.8z" fill="currentColor"/>
+              </svg>
+              <span>刷新</span>
+            </div>
         </div>
         <div class="header-title-cn">{{recTitle}}</div>
     </div>
@@ -187,6 +214,10 @@
 </template>
 
 <style scoped lang="scss">
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
   .rec-list-item{
     .item-header{
         .header{
@@ -208,6 +239,32 @@
                 width: 100%;
                 height: 1px;
                 background-color: rgb(176 176 176);
+            }
+            .header-refresh{
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: 4px;
+                padding: 4px 10px;
+                font: 10px SourceHanSansCN-Bold;
+                color: rgb(112 112 112);
+                transition: 0.2s;
+                white-space: nowrap;
+                &:hover{
+                    cursor: pointer;
+                    color: black;
+                }
+                &.refreshing{
+                    opacity: 0.6;
+                    cursor: not-allowed;
+                    svg{
+                        animation: spin 1s linear infinite;
+                    }
+                }
+                svg{
+                    width: 12px;
+                    height: 12px;
+                }
             }
             .header-more{
                 width: 60px;

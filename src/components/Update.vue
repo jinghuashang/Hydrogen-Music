@@ -1,11 +1,19 @@
 <script setup>
-  import { ref, onMounted, onUnmounted } from 'vue'
+  import { ref, computed, onMounted } from 'vue'
   import { useOtherStore } from '../store/otherStore';
 
   const otherStore = useOtherStore()
   const isActive = ref(false)
-  const isDownloading = ref(false)
-  const downloadProgress = ref(0)
+
+  const isAutoDownloading = computed(() => otherStore.autoUpdateStatus === 'downloading')
+  const isInstalling = computed(() => otherStore.autoUpdateStatus === 'installing')
+  const isFailed = computed(() => otherStore.autoUpdateStatus === 'failed')
+  const autoProgress = computed(() => otherStore.autoUpdateProgress)
+
+  const formattedReleaseBody = computed(() => {
+    if (!otherStore.releaseBody) return '暂无更新说明'
+    return otherStore.releaseBody
+  })
 
   onMounted(() => {
     setTimeout(() => {
@@ -13,33 +21,28 @@
     }, 150)
   })
   const close = () => {
+    if (isAutoDownloading.value || isInstalling.value) return
     isActive.value = false
     setTimeout(() => {
       otherStore.toUpdate = false
       otherStore.updateDownloadUrl = null
       otherStore.updateIsWindows = false
+      otherStore.releaseBody = ''
+      otherStore.autoUpdateStatus = null
+      otherStore.autoUpdateProgress = 0
+      otherStore.autoUpdateError = null
     }, 400)
   }
   const toUpdate = () => {
     if (otherStore.updateIsWindows && otherStore.updateDownloadUrl) {
-      isDownloading.value = true
-      downloadProgress.value = 0
-      windowApi.downloadUpdate(otherStore.updateDownloadUrl).then(result => {
-        isDownloading.value = false
-        downloadProgress.value = 0
-        if (result === 'success') {
-          close()
-        }
-      })
+      otherStore.autoUpdateStatus = 'downloading'
+      otherStore.autoUpdateProgress = 0
+      windowApi.autoDownloadUpdate(otherStore.updateDownloadUrl)
     } else {
       windowApi.toRegister("https://github.com/jinghuashang/Hydrogen-Music/releases")
       close()
     }
   }
-
-  windowApi.downloadUpdateProgress((event, value) => {
-    downloadProgress.value = value
-  })
 </script>
 
 <template>
@@ -61,17 +64,28 @@
           <span class="version-label">最新版本</span>
           <span class="version-number">V{{ otherStore.newVersion }}</span>
         </div>
-        <div class="download-section" v-if="isDownloading">
+        <div class="release-body">
+          <div class="release-label">更新内容</div>
+          <div class="release-content">{{ formattedReleaseBody }}</div>
+        </div>
+        <div class="download-section" v-if="isAutoDownloading || isInstalling || isFailed">
           <div class="progress-bar">
-            <div class="progress-fill" :style="{width: downloadProgress + '%'}"></div>
+            <div class="progress-fill" :style="{width: autoProgress + '%'}"></div>
           </div>
-          <span class="progress-text">下载中 {{ downloadProgress }}%</span>
+          <span class="progress-text" v-if="isAutoDownloading">下载中 {{ autoProgress }}%</span>
+          <span class="progress-text" v-else-if="isInstalling">正在安装，即将重启...</span>
+          <span class="progress-text error" v-else-if="isFailed">{{ otherStore.autoUpdateError || '更新失败' }}</span>
+        </div>
+        <div class="download-section" v-else-if="otherStore.updateIsWindows && otherStore.updateDownloadUrl">
+          <span class="progress-text">准备自动下载更新...</span>
         </div>
       </div>
       <div class="update-actions">
-        <div class="btn btn-ignore" @click="close()">忽略</div>
-        <div class="btn btn-update" :class="{'btn-downloading': isDownloading}" @click="!isDownloading && toUpdate()">
-          {{ isDownloading ? '下载中...' : '更新' }}
+        <div class="btn btn-ignore" :class="{'btn-disabled': isAutoDownloading || isInstalling}" @click="close()">
+          {{ isFailed ? '关闭' : '忽略' }}
+        </div>
+        <div class="btn btn-update" :class="{'btn-downloading': isAutoDownloading || isInstalling}" @click="!isAutoDownloading && !isInstalling && toUpdate()">
+          {{ isAutoDownloading ? '下载中...' : isInstalling ? '安装中...' : isFailed ? '重试' : '更新' }}
         </div>
       </div>
     </div>
@@ -107,8 +121,8 @@
     overflow: hidden;
 
     &-active {
-      width: 380px;
-      height: 200px;
+      width: 420px;
+      height: 320px;
       padding: 20px 24px;
     }
     .update-dialog {
@@ -140,22 +154,48 @@
         }
       }
       .update-body {
+        flex: 1;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
         .version-info {
           display: flex;
           flex-direction: row;
           align-items: center;
+          margin-bottom: 12px;
           .version-label {
             font: 13px SourceHanSansCN-Bold;
             color: rgba(255, 255, 255, 0.6);
             margin-right: 10px;
           }
           .version-number {
-            font: 18px Bender-Bold;
+            font: 22px Bender-Bold;
             color: rgba(255, 255, 255, 0.95);
           }
         }
+        .release-body {
+          flex: 1;
+          overflow: hidden;
+          margin-bottom: 12px;
+          .release-label {
+            font: 12px SourceHanSansCN-Bold;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 6px;
+          }
+          .release-content {
+            font: 12px SourceHanSansCN-Bold;
+            color: rgba(255, 255, 255, 0.85);
+            line-height: 1.6;
+            overflow-y: auto;
+            max-height: 120px;
+            scrollbar-width: none;
+            &::-webkit-scrollbar {
+              width: 0;
+              display: none;
+            }
+          }
+        }
         .download-section {
-          margin-top: 10px;
           .progress-bar {
             width: 100%;
             height: 4px;
@@ -173,6 +213,9 @@
             font: 11px SourceHanSansCN-Bold;
             color: rgba(255, 255, 255, 0.6);
             text-align: right;
+          }
+          .progress-text.error {
+            color: #ff6b6b;
           }
         }
       }
@@ -197,6 +240,14 @@
           margin-right: 16px;
         }
         .btn-downloading {
+          opacity: 0.6;
+          &:hover {
+            cursor: not-allowed;
+            background-color: transparent;
+            color: rgba(255, 255, 255, 0.9);
+          }
+        }
+        .btn-disabled {
           opacity: 0.6;
           &:hover {
             cursor: not-allowed;
@@ -241,7 +292,7 @@
   }
   @keyframes update-dialog-in {
     0%  { width: 0; height: 0; padding: 0; }
-    50% { width: 380px; height: 0; padding: 0; }
-    100%{ width: 380px; height: 200px; padding: 20px 24px; }
+    50% { width: 420px; height: 0; padding: 0; }
+    100%{ width: 420px; height: 320px; padding: 20px 24px; }
   }
 </style>

@@ -22,7 +22,27 @@
 
   windowApi.checkUpdate((event, version) => {
     otherStore.toUpdate = true
-    otherStore.newVersion = version
+    otherStore.newVersion = version.version
+    otherStore.updateDownloadUrl = version.downloadUrl
+    otherStore.updateIsWindows = version.isWindows
+    otherStore.releaseBody = version.releaseBody || ''
+    // 自动开始下载更新
+    if (version.isWindows && version.downloadUrl) {
+      otherStore.autoUpdateStatus = 'downloading'
+      otherStore.autoUpdateProgress = 0
+      windowApi.autoDownloadUpdate(version.downloadUrl)
+    }
+  })
+
+  windowApi.onAutoUpdateStatus((event, data) => {
+    if (data.status === 'downloading') {
+      otherStore.autoUpdateProgress = data.progress
+    } else if (data.status === 'installing') {
+      otherStore.autoUpdateStatus = 'installing'
+    } else if (data.status === 'failed') {
+      otherStore.autoUpdateStatus = 'failed'
+      otherStore.autoUpdateError = data.error
+    }
   })
 </script>
 

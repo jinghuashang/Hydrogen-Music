@@ -22,7 +22,7 @@
 <template>
   <div class="title-container">
     <Transition name=fade>
-      <div class="title-logo" @click="backHome()" v-show="playerShow">Hydrogen</div>
+      <div class="title-logo" @click="backHome()">Hydrogen</div>
     </Transition>
     <div class="title-player" :class="{'title-player-in': videoIsPlaying && !playerShow}" v-if="musicVideo && songList" @click="playerShow = true">
       <div class="player-content" :class="{'player-content-in': videoIsPlaying && !playerShow}">

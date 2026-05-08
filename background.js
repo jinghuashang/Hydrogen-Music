@@ -91,6 +91,10 @@ const createWindow = () => {
     })
     // 手动检测更新
     const { ipcMain } = require('electron')
+    ipcMain.handle('auto-download-update', async (e, url) => {
+        autoDownloadAndInstall(win, url)
+        return 'started'
+    })
     ipcMain.handle('manual-check-update', async () => {
         return new Promise((resolve) => {
             const https = require('https')
@@ -116,7 +120,8 @@ const createWindow = () => {
                                 hasUpdate: true,
                                 version: latestVersion,
                                 downloadUrl: exeAsset ? exeAsset.browser_download_url : null,
-                                isWindows: process.platform === 'win32'
+                                isWindows: process.platform === 'win32',
+                                releaseBody: release.body || ''
                             })
                         } else {
                             resolve({ hasUpdate: false })
@@ -167,7 +172,8 @@ function checkForGithubUpdate(win) {
                     win.webContents.send('check-update', {
                         version: latestVersion,
                         downloadUrl: exeAsset ? exeAsset.browser_download_url : null,
-                        isWindows: process.platform === 'win32'
+                        isWindows: process.platform === 'win32',
+                        releaseBody: release.body || ''
                     })
                 }
             } catch (e) {}
@@ -175,6 +181,65 @@ function checkForGithubUpdate(win) {
     })
     req.on('error', () => {})
     req.end()
+}
+
+// 自动下载更新并安装
+function autoDownloadAndInstall(win, url) {
+    const https = require('https')
+    const fs = require('fs')
+    const { exec } = require('child_process')
+    const os = require('os')
+
+    const tempDir = os.tmpdir()
+    const fileName = url.split('/').pop() || 'Hydrogen.Music.Setup.exe'
+    const savePath = path.join(tempDir, fileName)
+
+    win.webContents.send('auto-update-status', { status: 'downloading', progress: 0 })
+
+    const followRedirect = (redirectUrl) => {
+        https.get(redirectUrl, (res) => {
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                followRedirect(res.headers.location)
+                return
+            }
+            if (res.statusCode !== 200) {
+                win.webContents.send('auto-update-status', { status: 'failed', error: '下载失败' })
+                return
+            }
+            const total = parseInt(res.headers['content-length'], 10) || 0
+            let downloaded = 0
+            const file = fs.createWriteStream(savePath)
+            res.on('data', (chunk) => {
+                downloaded += chunk.length
+                file.write(chunk)
+                if (total > 0) {
+                    const progress = Math.round(downloaded / total * 100)
+                    win.webContents.send('auto-update-status', { status: 'downloading', progress })
+                    win.setProgressBar(progress / 100)
+                }
+            })
+            res.on('end', () => {
+                file.end()
+                win.setProgressBar(-1)
+                win.webContents.send('auto-update-status', { status: 'installing' })
+                // 运行安装程序
+                exec(`"${savePath}"`, (error) => {
+                    if (error) {
+                        win.webContents.send('auto-update-status', { status: 'failed', error: '安装失败' })
+                    }
+                })
+            })
+            res.on('error', () => {
+                file.close()
+                try { fs.unlinkSync(savePath) } catch (e) {}
+                win.setProgressBar(-1)
+                win.webContents.send('auto-update-status', { status: 'failed', error: '下载失败' })
+            })
+        }).on('error', () => {
+            win.webContents.send('auto-update-status', { status: 'failed', error: '网络连接失败' })
+        })
+    }
+    followRedirect(url)
 }
 
 function isNewerVersion(latest, current) {

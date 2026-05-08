@@ -62,6 +62,7 @@ module.exports = IpcMainEvent = (win, app) => {
             let initSettings = {
                 music: {
                     level: 'standard',
+                    searchResultLimit: 10,
                     lyricSize: '20',
                     tlyricSize: '14',
                     rlyricSize: '12',

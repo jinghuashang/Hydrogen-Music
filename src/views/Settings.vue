@@ -28,6 +28,7 @@ const otherStore = useOtherStore()
 
 const vipInfo = ref(null)
 const musicLevel = ref('standard')
+const searchResultLimit = ref(10)
 const musicLevelOptions = ref([
     {
         label: '标准',
@@ -99,6 +100,7 @@ onActivated(() => {
     windowApi.getSettings().then(settings => {
         if (!settings) return
         musicLevel.value = settings.music.level
+        searchResultLimit.value = settings.music.searchResultLimit || 10
         lyricSize.value = settings.music.lyricSize
         tlyricSize.value = settings.music.tlyricSize
         rlyricSize.value = settings.music.rlyricSize
@@ -130,6 +132,7 @@ const setAppSettings = async () => {
     let settings = {
         music: {
             level: musicLevel.value,
+            searchResultLimit: searchResultLimit.value,
             lyricSize: lyricSize.value,
             tlyricSize: tlyricSize.value,
             rlyricSize: rlyricSize.value,
@@ -389,6 +392,7 @@ const checkForUpdate = async () => {
             otherStore.newVersion = result.version
             otherStore.updateDownloadUrl = result.downloadUrl
             otherStore.updateIsWindows = result.isWindows
+            otherStore.releaseBody = result.releaseBody || ''
         } else {
             noticeOpen(result.error || '当前已是最新版本', 2)
         }
@@ -464,6 +468,12 @@ const toggleUnblock = () => {
                             <div class="option-name">音质选择</div>
                             <div class="option-operation">
                                 <Selector v-model="musicLevel" :options="musicLevelOptions" @update:modelValue="persistWebSettingsFromForm"></Selector>
+                            </div>
+                        </div>
+                        <div class="option">
+                            <div class="option-name">搜索栏显示歌曲数量</div>
+                            <div class="option-operation">
+                                <input v-model.number="searchResultLimit" name="searchResultLimit" type="number" min="1" max="20" @change="persistWebSettingsFromForm">
                             </div>
                         </div>
                         <div class="option">

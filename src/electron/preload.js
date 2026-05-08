@@ -175,6 +175,8 @@ contextBridge.exposeInMainWorld('windowApi', {
     cancelDownloadUpdate: () => ipcRenderer.send('cancel-download-update'),
     setWindowTile,
     manualCheckUpdate: () => ipcRenderer.invoke('manual-check-update'),
+    autoDownloadUpdate: (url) => ipcRenderer.invoke('auto-download-update', url),
+    onAutoUpdateStatus: (callback) => ipcRenderer.on('auto-update-status', callback),
     biliFetch: async (url, options = {}) => {
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
