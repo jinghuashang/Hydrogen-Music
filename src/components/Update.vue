@@ -1,5 +1,6 @@
 <script setup>
   import { ref, computed, onMounted } from 'vue'
+  import { marked } from 'marked'
   import { useOtherStore } from '../store/otherStore';
 
   const otherStore = useOtherStore()
@@ -12,7 +13,11 @@
 
   const formattedReleaseBody = computed(() => {
     if (!otherStore.releaseBody) return '暂无更新说明'
-    return otherStore.releaseBody
+    const filtered = otherStore.releaseBody
+      .split('\n')
+      .filter(line => !/full\s*changelog/i.test(line.trim()))
+      .join('\n')
+    return marked.parse(filtered)
   })
 
   onMounted(() => {
@@ -66,7 +71,7 @@
         </div>
         <div class="release-body">
           <div class="release-label">更新内容</div>
-          <div class="release-content">{{ formattedReleaseBody }}</div>
+          <div class="release-content" v-html="formattedReleaseBody"></div>
         </div>
         <div class="download-section" v-if="isAutoDownloading || isInstalling || isFailed">
           <div class="progress-bar">
@@ -192,6 +197,28 @@
             &::-webkit-scrollbar {
               width: 0;
               display: none;
+            }
+            text-align: left;
+            :deep(h2), :deep(h3) {
+              font-size: 13px;
+              margin: 8px 0 4px;
+              font-weight: bold;
+              color: rgba(255, 255, 255, 0.98);
+            }
+            :deep(ul) {
+              padding-left: 16px;
+              margin: 4px 0;
+            }
+            :deep(li) {
+              margin: 2px 0;
+              color: rgba(255, 255, 255, 0.6);
+            }
+            :deep(p) {
+              margin: 4px 0;
+              color: rgba(255, 255, 255, 0.6);
+            }
+            :deep(a) {
+              color: rgba(180, 210, 230, 0.7);
             }
           }
         }
