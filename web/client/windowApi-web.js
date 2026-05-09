@@ -205,6 +205,17 @@ export function installWebWindowApi() {
     checkUpdate(callback) {
       onSse('check-update', callback)
     },
+    /* Web 端不支持自动更新，以下为 no-op */
+    manualCheckUpdate() {
+      return Promise.resolve({ hasUpdate: false, error: 'Web 端不支持自动更新' })
+    },
+    autoDownloadUpdate() {},
+    onAutoUpdateStatus() {},
+    downloadUpdate() {
+      return Promise.resolve()
+    },
+    downloadUpdateProgress() {},
+    cancelDownloadUpdate() {},
     setWindowTile(title) {
       send('set-window-title', title)
       if (typeof document !== 'undefined') document.title = title || 'Hydrogen Music'
