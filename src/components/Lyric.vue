@@ -1,5 +1,5 @@
 <script setup>
-  import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+  import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
   import { changeProgress, musicVideoCheck, songTime } from '../utils/player'
   import { usePlayerStore } from '../store/playerStore'
   import { storeToRefs } from 'pinia'
@@ -8,6 +8,11 @@
   const { playing, progress, lyric, lyricsObjArr, songList, currentIndex, currentMusic, widgetState, lyricShow, lyricEle, isLyricDelay, lyricSize, tlyricSize, rlyricSize, lyricType, playerChangeSong, lyricInterludeTime, lyricBlur, playerShow, videoIsPlaying } = storeToRefs(playerStore)
 
   const lyricScroll = ref()
+  const lyricScrollArea = ref()
+  const heightVal = ref(0)
+  const minHeightVal = ref(null)
+  const maxHeightVal = ref(null)
+  const lineOffset = ref(0)
   const isLyricActive = ref(true)
   const pauseActiveTimer = ref(null)
   const lyricInterval = ref(null)
@@ -18,11 +23,20 @@
   let interludeInTimer = null
   let interludeOutTimer = null
 
+  let initMax = null
+  let initOffset = null
+  let size = null
+
   let lyricLastPosition = null
-  let expectedScrollTop = null
 
   const regNewLine = /\n/
   const regTime = /\[\d{2}:\d{2}\.\d{2,3}\]?/
+
+  function extractLineText(line, match) {
+    const bracketIdx = line.indexOf(']', match.index)
+    const start = bracketIdx !== -1 ? bracketIdx + 1 : match.index + match[0].length
+    return line.substring(start).trim()
+  }
 
   const formatLyricTime = (time => {
     const regMin = /.*:/
@@ -38,14 +52,6 @@
     }
     return Number(sec + '.' + ms)
   })
-
-  function extractTimestampAndText(line) {
-    const m = line.match(regTime)
-    if (!m) return null
-    const ts = m[0]
-    const rest = line.slice(ts.length).replace(/^\s+/, '')
-    return { timestamp: ts, text: rest }
-  }
   const lyricTypeCheck = (arr, tarr, rarr) => {
     if(arr && lyricType.value.indexOf('noOriginal') != -1) lyricType.value.splice(lyricType.value.indexOf('noOriginal'), 1)
     else if(!arr && lyricType.value.indexOf('noOriginal') == -1) lyricType.value.push('noOriginal')
@@ -61,10 +67,9 @@
     for (let i = 0; i < arr.length; i++) {
       if(arr[i] == '') continue
       const obj = {}
-      const extracted = extractTimestampAndText(arr[i])
-      if(!extracted) continue
-      const lyctime = extracted.timestamp
-      obj.lyric = extracted.text
+      const lyctime = arr[i].match(regTime)
+      if(!lyctime) continue
+      obj.lyric = extractLineText(arr[i], lyctime)
       if(!obj.lyric) continue
       if(obj.lyric.indexOf('纯音乐') != -1 || obj.time > 4500) {
         lyricArr = [{lyric: "纯音乐，请欣赏", time: 0}, {lyric: "", time: Math.trunc(songList.value[currentIndex.value].dt / 1000)}]
@@ -73,10 +78,10 @@
       if(tarr && obj.lyric.indexOf('作词') == -1 && obj.lyric.indexOf('作曲') == -1) {
         for (let j = 0; j < tarr.length; j++) {
           if(tarr[j] == '') continue
-          const tExtracted = extractTimestampAndText(tarr[j])
-          if(!tExtracted) continue
-          if(tExtracted.timestamp === lyctime) {
-            obj.tlyric = tExtracted.text || ''
+          const tTimeCore = lyctime[0].replace(/\]$/, '')
+          if(tarr[j].indexOf(tTimeCore) != -1) {
+            const tMatch = tarr[j].match(regTime)
+            obj.tlyric = tMatch ? extractLineText(tarr[j], tMatch) : ''
             if(!obj.tlyric) {tarr.splice(j, 1);j--;continue}
             tarr.splice(j, 1)
             break
@@ -86,17 +91,17 @@
       if(rarr && obj.lyric.indexOf('作词') == -1 && obj.lyric.indexOf('作曲') == -1) {
         for (let k = 0; k < rarr.length; k++) {
           if(rarr[k] == '') continue
-          const rExtracted = extractTimestampAndText(rarr[k])
-          if(!rExtracted) continue
-          if(rExtracted.timestamp === lyctime) {
-            obj.rlyric = rExtracted.text || ''
+          const rTimeCore = lyctime[0].replace(/\]$/, '')
+          if(rarr[k].indexOf(rTimeCore) != -1) {
+            const rMatch = rarr[k].match(regTime)
+            obj.rlyric = rMatch ? extractLineText(rarr[k], rMatch) : ''
             if(!obj.rlyric) {rarr.splice(k, 1);k--;continue}
             rarr.splice(k, 1)
             break
           }
         }
       }
-      obj.time = formatLyricTime(lyctime.slice(1, lyctime.length - (lyctime.endsWith(']') ? 1 : 0)))
+      obj.time = lyctime ? formatLyricTime(lyctime[0].replace(/[\[\]]/g, '')) : 0
       if (!(obj.lyric === '')) lyricArr.push(obj)
     }
     function sortBy (field) {
@@ -147,12 +152,33 @@
       }, 500);
     }
   }
+  const setMaxHeight = (change) => {
+    if(!lyricsObjArr.value) return
+    size = (parseInt((lyricType.value.indexOf('noOriginal') == -1 && lyricType.value.indexOf('original') != -1 ? lyricSize.value : 0)) + parseInt((lyricType.value.indexOf('noTrans') == -1 && lyricType.value.indexOf('trans') != -1 ? tlyricSize.value : 0)) + parseInt((lyricType.value.indexOf('noRoma') == -1 && lyricType.value.indexOf('roma') != -1 ? rlyricSize.value : 0))) * 1.5 + 30
+    initMax = lyricsObjArr.value.length * size
+    heightVal.value = initMax
+    const containerH = lyricScroll.value ? lyricScroll.value.clientHeight : 260
+    initOffset = -(initMax - containerH)
+    let offset = (lycCurrentIndex.value + 1) * size
+    if(change) {
+      lineOffset.value = initOffset - offset
+      minHeightVal.value = offset
+      maxHeightVal.value = initMax + offset
+    } else {
+      maxHeightVal.value = initMax
+    }
+    if(lyricScrollArea.value)
+      lyricScrollArea.value.style.height = initMax + 'Px'
+  }
   const setDefaultStyle = () => {
     lyric.value = null
     lycCurrentIndex.value = -1
     interludeAnimation.value = false
     lyricEle.value = document.getElementsByClassName('lyric-line')
-    if(lyricScroll.value) lyricScroll.value.scrollTop = 0
+    initMax = 0
+    setMaxHeight(false)
+    minHeightVal.value = 0
+    lineOffset.value = initOffset
     if(!lyricShow.value && !widgetState.value) {
       const changeTimer = setTimeout(() => {
         lyricShow.value = true
@@ -179,6 +205,7 @@
         }
       })
       if(lastIndex != lycCurrentIndex.value) {
+        let offset = 0
         if(lyricShow.value && isLyricDelay.value && lyricEle.value) {
           if(lyricBlur.value)
             for (let i = 0, j = lycCurrentIndex.value * 0.4; i < lycCurrentIndex.value; i++) {
@@ -195,16 +222,13 @@
             }
           }
         }
-        if(lyricScroll.value && isLyricActive.value && lycCurrentIndex.value >= 0) {
-          const containerH = lyricScroll.value.clientHeight
-          let offsetTop = 0
-          for (let i = 0; i < lycCurrentIndex.value; i++) {
-            if(lyricEle.value[i]) offsetTop += lyricEle.value[i].offsetHeight + 10
-          }
-          const target = offsetTop - containerH * 0.5
-          expectedScrollTop = Math.max(0, target)
-          lyricScroll.value.scrollTo({ top: expectedScrollTop, behavior: 'smooth' })
+        for (let i = 0; i <= lycCurrentIndex.value; i++) {
+          if(lyricEle.value[i])
+            offset += lyricEle.value[i].clientHeight + 10
         }
+        lineOffset.value = initOffset - offset
+        minHeightVal.value = offset
+        maxHeightVal.value = initMax + offset
         let interTime = null
         if(lycCurrentIndex.value != length)
           interTime = lyricsObjArr.value[lycCurrentIndex.value + 1].time - currentSeek
@@ -238,17 +262,13 @@
     }, 200);
   }
   const changeProgressLyc = (time, index) => {
+    lyricScrollArea.value.style.height = initMax + 'Px'
     if(!playing.value) {
       lycCurrentIndex.value = index
-      if(lyricScroll.value && index >= 0) {
-        const containerH = lyricScroll.value.clientHeight
-        let offsetTop = 0
-        for (let i = 0; i < index; i++) {
-          if(lyricEle.value[i]) offsetTop += lyricEle.value[i].offsetHeight + 10
-        }
-        expectedScrollTop = Math.max(0, offsetTop - containerH * 0.5)
-        lyricScroll.value.scrollTo({ top: expectedScrollTop, behavior: 'smooth' })
-      }
+      let offset = (lycCurrentIndex.value + 1) * size
+      lineOffset.value = initOffset - offset
+      minHeightVal.value = offset
+      maxHeightVal.value = initMax + offset
     }
     progress.value = time
     changeProgress(time)
@@ -258,7 +278,7 @@
       if(lyricLastPosition && progress.value < lyricLastPosition - 4) {
         clearLycAnimation(true)
         lyricLastPosition = null
-      } else
+      } else 
         clearLycAnimation(false)
       setLyricActive()
     } else {
@@ -276,29 +296,34 @@
     if(!lyricShow.value && !widgetState.value) {
       const changeTimer = setTimeout(() => {
         lyricShow.value = true
+        setMaxHeight(true)
         clearTimeout(changeTimer)
       }, 500);
     }
   }, {deep: true})
-  const handleScroll = () => {
-    if(!lyricScroll.value || expectedScrollTop === null) return
-    const diff = Math.abs(lyricScroll.value.scrollTop - expectedScrollTop)
-    if(diff > 5) {
+  const handleWheel = (e) => {
       isLyricActive.value = false
+      heightVal.value += (e.wheelDeltaY < 0 ? e.wheelDeltaY + 76 : e.wheelDeltaY - 76)
+
+      if(heightVal.value < minHeightVal.value) heightVal.value = minHeightVal.value
+      if(heightVal.value > maxHeightVal.value) heightVal.value = maxHeightVal.value
+
+      lyricScrollArea.value.style.height = heightVal.value + 'Px'
+
       clearTimeout(pauseActiveTimer.value)
       pauseActiveTimer.value = setTimeout(() => {
         isLyricActive.value = true
-        expectedScrollTop = null
+        lyricScrollArea.value.style.height = initMax + 'Px'
+        heightVal.value = initMax
         clearTimeout(pauseActiveTimer.value)
       }, 3000);
-    }
   }
   onMounted(() => {
-    if(lyricScroll.value) lyricScroll.value.addEventListener('scroll', handleScroll)
+    if(lyricScroll.value) lyricScroll.value.addEventListener('wheel', handleWheel)
   })
   onBeforeUnmount(() => {
     clearInterval(lyricInterval.value)
-    if(lyricScroll.value) lyricScroll.value.removeEventListener('scroll', handleScroll)
+    if(lyricScroll.value) lyricScroll.value.removeEventListener('wheel', handleWheel)
   })
 </script>
 
@@ -306,7 +331,8 @@
   <div class="lyric-container">
     <Transition name="fade">
       <div v-show="lyricsObjArr && lyricShow && lyricType.indexOf('original') != -1" class="lyric-area" ref="lyricScroll">
-        <div class="lyric-line" v-for="(item, index) in getLyric" v-show="item.lyric">
+        <div class="lyric-scroll-area" ref="lyricScrollArea"></div>
+        <div class="lyric-line" :style="{transform: 'translateY(' + lineOffset + 'Px)'}" v-for="(item, index) in getLyric" v-show="item.lyric">
           <div class="line" @click="changeProgressLyc(item.time, index)" :class="{'line-highlight': index == lycCurrentIndex, 'lyric-inactive': !isLyricActive || item.active}">
             <span class="roma" :style="{'font-size': rlyricSize + 'px'}" v-if="item.rlyric && lyricType.indexOf('roma') != -1">{{item.rlyric}}</span>
             <span class="original" :style="{'font-size': lyricSize + 'px'}" v-if="lyricType.indexOf('original') != -1">{{item.lyric}}</span>
@@ -361,14 +387,12 @@
     .lyric-area{
       width: calc(100% - 3vh);
       height: calc(100% - 3vh);
-      overflow-y: auto;
-      overflow-x: hidden;
-      scrollbar-width: none;
-      &::-webkit-scrollbar{
-        display: none;
-      }
+      overflow: hidden;
       transition: 0.3s cubic-bezier(.30,0,.12,1);
-      padding-top: 50%;
+      .lyric-scroll-area{
+        width: 100%;
+        transition: 0.3s;
+      }
       .lyric-line{
         margin-bottom: 10Px;
         width: 100%;
