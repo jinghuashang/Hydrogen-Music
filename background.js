@@ -116,10 +116,15 @@ const createWindow = () => {
                         const latestVersion = release.tag_name.replace(/^v/, '')
                         if (isNewerVersion(latestVersion, currentVersion)) {
                             const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
+                            let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
+                            const settings = settingsStore.get('settings')
+                            if (downloadUrl && settings?.other?.updateProxy) {
+                                downloadUrl = settings.other.updateProxy + downloadUrl
+                            }
                             resolve({
                                 hasUpdate: true,
                                 version: latestVersion,
-                                downloadUrl: exeAsset ? exeAsset.browser_download_url : null,
+                                downloadUrl,
                                 isWindows: process.platform === 'win32',
                                 releaseBody: release.body || ''
                             })
@@ -169,9 +174,14 @@ function checkForGithubUpdate(win) {
                 const latestVersion = release.tag_name.replace(/^v/, '')
                 if (isNewerVersion(latestVersion, currentVersion)) {
                     const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
+                    let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
+                    const settings = settingsStore.get('settings')
+                    if (downloadUrl && settings?.other?.updateProxy) {
+                        downloadUrl = settings.other.updateProxy + downloadUrl
+                    }
                     win.webContents.send('check-update', {
                         version: latestVersion,
-                        downloadUrl: exeAsset ? exeAsset.browser_download_url : null,
+                        downloadUrl,
                         isWindows: process.platform === 'win32',
                         releaseBody: release.body || ''
                     })

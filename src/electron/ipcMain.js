@@ -123,7 +123,8 @@ module.exports = IpcMainEvent = (win, app) => {
                 ],
                 other: {
                     globalShortcuts: true,
-                    quitApp:'minimize'
+                    quitApp:'minimize',
+                    updateProxy: ''
                 },
                 unblock: {
                     enabled: true,

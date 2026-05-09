@@ -75,6 +75,7 @@ const selectedShortcut = ref(null)
 const newShortcut = ref([])
 const shortcutCharacter = ['=', '-', '~', '@', '#', '$', '[', ']', ';', "'", ',', '.', '/', '!'];
 const customFont = ref('')
+const updateProxy = ref('')
 const appVersion = ref('')
 const isCheckingUpdate = ref(false)
 const unblockEnabled = ref(false)
@@ -116,6 +117,7 @@ onActivated(() => {
         globalShortcuts.value = settings.other.globalShortcuts
         quitApp.value = settings.other.quitApp
         customFont.value = settings.other.customFont
+        updateProxy.value = settings.other.updateProxy || ''
         if(settings.unblock) {
             unblockEnabled.value = settings.unblock.enabled
             unblockPort.value = settings.unblock.port || '36531:36532'
@@ -152,6 +154,7 @@ const setAppSettings = async () => {
             globalShortcuts: globalShortcuts.value,
             quitApp: quitApp.value,
             customFont: customFont.value,
+            updateProxy: updateProxy.value,
         },
         unblock: {
             enabled: unblockEnabled.value,
@@ -671,6 +674,12 @@ const toggleUnblock = () => {
                             <div class="option-name">退出应用时</div>
                             <div class="option-operation">
                                 <Selector v-model="quitApp" :options="quitAppOptions" @update:modelValue="persistWebSettingsFromForm"></Selector>
+                            </div>
+                        </div>
+                        <div class="option">
+                            <div class="option-name">更新加速地址</div>
+                            <div class="option-operation">
+                                <input type="text" v-model="updateProxy" placeholder="留空不加速，如 https://gh.llkk.cc/" @change="persistWebSettingsFromForm()">
                             </div>
                         </div>
                         <div class="option">

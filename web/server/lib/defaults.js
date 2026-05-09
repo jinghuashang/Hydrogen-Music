@@ -31,6 +31,7 @@ function defaultSettings() {
     other: {
       globalShortcuts: true,
       quitApp: 'minimize',
+      updateProxy: '',
     },
     unblock: {
       enabled: true,
