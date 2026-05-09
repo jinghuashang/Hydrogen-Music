@@ -78,7 +78,6 @@ function createHandlers({ broadcast }) {
   const settingsStore = createStore('settings')
   const lastPlaylistStore = createStore('lastPlaylist')
   const musicVideoStore = createStore('musicVideo')
-  const webProfileStore = createStore('webProfile')
 
   const downloadManager = createDownloadManager({ settingsStore, broadcast })
   const localScan = createLocalScan({ settingsStore, broadcast })
@@ -209,9 +208,6 @@ function createHandlers({ broadcast }) {
       settingsStore.set('settings', settings)
     }
     if (!settings.local) settings.local = { ...defaultSettings().local }
-    if (settings.local.syncProfileToNas === undefined) {
-      settings.local.syncProfileToNas = false
-    }
     return settings
   }
 
@@ -487,16 +483,6 @@ function createHandlers({ broadcast }) {
       kind: 'font',
       message: 'Web 版请输入字体文件在 NAS 上的绝对路径',
     }),
-    /** Web：多浏览器共享的网易云 Cookie + 用户状态（需设置中开启「同步到 NAS」） */
-    'get-web-profile': async () => webProfileStore.get('profile') || null,
-    'set-web-profile': async (_e, profile) => {
-      webProfileStore.set('profile', profile)
-      return true
-    },
-    'clear-web-profile': async () => {
-      webProfileStore.set('profile', null)
-      return true
-    },
   }
 
   function dispatchSend(event, payload) {
@@ -519,9 +505,6 @@ function createHandlers({ broadcast }) {
       case 'set-settings': {
         const next = typeof payload === 'string' ? JSON.parse(payload) : payload
         settingsStore.set('settings', next)
-        if (!next?.local?.syncProfileToNas) {
-          webProfileStore.set('profile', null)
-        }
         break
       }
       case 'save-last-playlist':

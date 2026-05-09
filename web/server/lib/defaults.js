@@ -16,8 +16,6 @@ function defaultSettings() {
       videoFolder: null,
       downloadFolder: null,
       localFolder: [],
-      /** Web：将网易云登录态与用户偏好写入 NAS，多浏览器共用 */
-      syncProfileToNas: false,
     },
     shortcuts: [
       { id: 'play', name: '播放/暂停', shortcut: 'CommandOrControl+P', globalShortcut: 'CommandOrControl+Alt+P' },

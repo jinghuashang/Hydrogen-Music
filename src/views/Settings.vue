@@ -11,11 +11,7 @@ import { usePlayerStore } from '../store/playerStore';
 import { useOtherStore } from '../store/otherStore';
 import { insertCustomFontStyle } from '../utils/setFont';
 import { normalizeLocalDirPath, localDirPathEquals } from '../utils/localPath'
-import {
-    isHydrogenWeb,
-    saveWebProfileIfSyncEnabled,
-    clearWebProfileOnNas,
-} from '../utils/webProfileNas'
+import { isHydrogenWeb } from '../utils/webProfileNas'
 import Selector from '../components/Selector.vue'
 
 const isWebClient = isHydrogenWeb()
@@ -78,8 +74,6 @@ const updateProxy = ref('')
 const appVersion = ref('')
 const isCheckingUpdate = ref(false)
 const unblockEnabled = ref(false)
-/** Web：将网易云登录与用户状态写入 NAS（多设备/多浏览器共用） */
-const syncProfileToNas = ref(false)
 /** 渲染进程用于文案：Linux/Web 下目录选择器或路径习惯与 Windows 不同 */
 const isLinuxLikePath =
     typeof navigator !== 'undefined' &&
@@ -119,7 +113,6 @@ onActivated(() => {
         if(settings.unblock) {
             unblockEnabled.value = settings.unblock.enabled
         }
-        syncProfileToNas.value = !!settings.local?.syncProfileToNas
         const m = settings.music || {}
         if (Object.prototype.hasOwnProperty.call(m, 'coverBlur')) playerStore.coverBlur = !!m.coverBlur
         if (Object.prototype.hasOwnProperty.call(m, 'lyricBlur')) playerStore.lyricBlur = !!m.lyricBlur
@@ -144,7 +137,6 @@ const setAppSettings = async () => {
             videoFolder: videoFolder.value,
             downloadFolder: downloadFolder.value,
             localFolder: localFolder.value,
-            syncProfileToNas: syncProfileToNas.value,
         },
         shortcuts: shortcutsList.value,
         other: {
@@ -177,11 +169,6 @@ onBeforeRouteLeave((to, from, next) => {
         Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))])
     withTimeout(setAppSettings())
         .then(() => withTimeout(initSettings()))
-        .then(() => {
-            if (isWebClient && syncProfileToNas.value) {
-                return saveWebProfileIfSyncEnabled()
-            }
-        })
         .catch(e => console.warn('[Settings] 离开设置页保存失败', e))
 })
 
@@ -337,14 +324,8 @@ const openLyricBlur = async (flag) => {
 }
 const userLogout = () => {
     if (isLogin()) {
-        logout().then(async (result) => {
+        logout().then((result) => {
             if (result.code == 200) {
-                if (isWebClient) {
-                    try {
-                        const s = await windowApi.getSettings()
-                        if (s?.local?.syncProfileToNas) await clearWebProfileOnNas()
-                    } catch (_) {}
-                }
                 window.localStorage.clear()
                 userStore.user = null
                 userStore.biliUser = null
@@ -359,24 +340,7 @@ const save = async () => {
     selectedShortcut.value = null
     await setAppSettings()
     await initSettings()
-    if (isWebClient && syncProfileToNas.value) {
-        try {
-            await saveWebProfileIfSyncEnabled()
-        } catch (_) {}
-    }
     noticeOpen("设置已保存", 2)
-}
-
-/** Web：「同步到 NAS」开关立即写回网关 settings.json，避免仅切页未保存时其他设备看不到 */
-const toggleSyncProfileToNas = async () => {
-    syncProfileToNas.value = !syncProfileToNas.value
-    if (!isWebClient) return
-    try {
-        await setAppSettings()
-        if (syncProfileToNas.value) await saveWebProfileIfSyncEnabled()
-    } catch (e) {
-        console.warn('[Settings] 同步开关保存失败', e)
-    }
 }
 const toGithub = () => {
     windowApi.toRegister("https://github.com/Kaidesuyo/Hydrogen-Music")
@@ -570,21 +534,6 @@ const toggleUnblock = () => {
                                 </div>
                                 <div class="add-option" @click="selectFolder('local')">添加</div>
                                 <div class="add-option add-option-secondary" @click="manualInputFolder('local')">手动输入路径</div>
-                            </div>
-                        </div>
-                        <div class="option option-nas-sync" v-if="isWebClient">
-                            <div class="option-name">账户同步到 NAS</div>
-                            <div class="tip">
-                                此项仅同步网易与 B 站登录态，多浏览器共用；关同步或退出登录会清 NAS 副本。
-                            </div>
-                            <div class="option-operation">
-                                <div class="toggle" @click="toggleSyncProfileToNas">
-                                    <div class="toggle-off" :class="{ 'toggle-on-in': syncProfileToNas }">
-                                        {{ syncProfileToNas ? '已开启' : '已关闭' }}</div>
-                                    <Transition name="toggle">
-                                        <div class="toggle-on" v-show="syncProfileToNas"></div>
-                                    </Transition>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -869,30 +818,6 @@ const toggleUnblock = () => {
                         flex-direction: row;
                         align-items: center;
                         justify-content: space-between;
-
-                        &.option-nas-sync {
-                            align-items: flex-start;
-                            gap: 12px;
-
-                            .option-name {
-                                flex: 0 0 auto;
-                                max-width: 200px;
-                            }
-
-                            .tip {
-                                flex: 1 1 auto;
-                                min-width: 0;
-                                margin-top: 2px;
-                                font: 10px SourceHanSansCN-Bold;
-                                color: black;
-                                text-align: right;
-                            }
-
-                            .option-operation {
-                                flex: 0 0 auto;
-                                margin-top: 0;
-                            }
-                        }
 
                         .option-name {
                             font-family: SourceHanSansCN-Bold;

@@ -8,7 +8,7 @@ import { usePlayerStore } from '../store/playerStore'
 import { useLocalStore } from '../store/localStore'
 import { storeToRefs } from 'pinia'
 import { insertCustomFontStyle } from './setFont'
-import { isHydrogenWeb, pullWebProfileFromNas } from './webProfileNas'
+import { isHydrogenWeb } from './webProfileNas'
 
 const userStore = useUserStore(pinia)
 const playerStore = usePlayerStore()
@@ -50,7 +50,6 @@ function applySettingsPayload(settings) {
     insertCustomFontStyle(settings.other.customFont)
 }
 
-/** 从主进程 / Web 网关拉取设置并写入 Pinia（返回最新 settings 对象供调用方判断 syncProfileToNas 等） */
 export const initSettings = async () => {
     const settings = await windowApi.getSettings()
     applySettingsPayload(settings)
@@ -58,13 +57,12 @@ export const initSettings = async () => {
 }
 
 /**
- * Web：用户切回标签页或从其他设备改完设置后，重新拉取 settings.json 与（若开启）NAS 账户副本。
+ * Web：用户切回标签页后，重新拉取 settings.json。
  */
 export async function refreshWebRemoteState() {
     if (!isHydrogenWeb()) return
     try {
-        const settings = await initSettings()
-        if (settings?.local?.syncProfileToNas) await pullWebProfileFromNas()
+        await initSettings()
         if (isLogin()) {
             const result = await getUserProfile()
             updateUser(result.profile)
@@ -100,12 +98,9 @@ export const getUserLikelist = () => {
 //初始化
 export const init = async () => {
     try {
-        const settings = await initSettings()
-        if (isHydrogenWeb() && settings?.local?.syncProfileToNas) {
-            await pullWebProfileFromNas()
-        }
+        await initSettings()
     } catch (e) {
-        console.warn('[init] 设置或 NAS 账户同步拉取失败', e)
+        console.warn('[init] 设置拉取失败', e)
     }
     loadLastSong()
     if (isLogin()) {

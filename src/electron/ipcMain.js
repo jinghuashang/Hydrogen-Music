@@ -54,7 +54,6 @@ module.exports = IpcMainEvent = (win, app) => {
         const settings =  await settingsStore.get('settings')
         if(settings) {
             if (!settings.local) settings.local = {}
-            if (settings.local.syncProfileToNas === undefined) settings.local.syncProfileToNas = false
             return settings
         }
         else {
@@ -74,7 +73,6 @@ module.exports = IpcMainEvent = (win, app) => {
                     videoFolder: null,
                     downloadFolder: null,
                     localFolder: [],
-                    syncProfileToNas: false,
                 },
                 shortcuts: [
                     {

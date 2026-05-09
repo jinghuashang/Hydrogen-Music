@@ -174,9 +174,6 @@ export function installWebWindowApi() {
     setSettings(settings) {
       return send('set-settings', settings)
     },
-    getWebProfile: () => invoke('get-web-profile'),
-    setWebProfile: (profile) => invoke('set-web-profile', [profile]),
-    clearWebProfile: () => invoke('clear-web-profile'),
     clearLocalMusicData(type) {
       send('clear-local-music-data', type)
     },
