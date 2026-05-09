@@ -37,7 +37,7 @@
   function extractLineText(line, match) {
     const bracketIdx = line.indexOf(']', match.index)
     const start = bracketIdx !== -1 ? bracketIdx + 1 : match.index + match[0].length
-    return line.substring(start).trim()
+    return line.substring(start).replace(/\[\d{2}:\d{2}\.\d{2,3}\]?/g, '').trim()
   }
 
   const formatLyricTime = (time => {
