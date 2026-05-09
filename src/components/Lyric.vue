@@ -1,5 +1,5 @@
 <script setup>
-  import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
+  import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
   import { changeProgress, musicVideoCheck, songTime } from '../utils/player'
   import { usePlayerStore } from '../store/playerStore'
   import { storeToRefs } from 'pinia'
@@ -8,12 +8,9 @@
   const { playing, progress, lyric, lyricsObjArr, songList, currentIndex, currentMusic, widgetState, lyricShow, lyricEle, isLyricDelay, lyricSize, tlyricSize, rlyricSize, lyricType, playerChangeSong, lyricInterludeTime, lyricBlur, playerShow, videoIsPlaying } = storeToRefs(playerStore)
 
   const lyricScroll = ref()
-  const lyricScrollArea = ref()
-  const heightVal = ref(0)
-  const minHeightVal = ref(null)
-  const maxHeightVal = ref(null)
-  const lineOffset = ref(0)
+  const lyricContent = ref()
   const isLyricActive = ref(true)
+  const isManualScroll = ref(false)
   const pauseActiveTimer = ref(null)
   const lyricInterval = ref(null)
   const lycCurrentIndex = ref(null)
@@ -23,11 +20,16 @@
   let interludeInTimer = null
   let interludeOutTimer = null
 
-  let initMax = null
-  let initOffset = null
-  let size = null
+  const FOLLOW_TOP_OFFSET = 260
+  const FOLLOW_BOTTOM_GUTTER = 180
+  const SCROLL_DURATION_MS = 580
+  const SCROLL_EASING = 'cubic-bezier(0.4, 0, 0.12, 1)'
+  const MANUAL_SCROLL_IDLE_MS = 3000
+  const SCROLL_TOLERANCE_PX = 2
 
   let lyricLastPosition = null
+  let scrollAnimation = null
+  let scrollAnimTargetTop = null
 
   const regNewLine = /\n/
   const regTime = /\[\d{2}:\d{2}\.\d{2,3}\]?/
@@ -138,12 +140,107 @@
       if(!lyricsObjArr.value) lyricTypeCheck(null, null, null)
       return lyricsObjArr.value
     }
-  })  
+  })
+
+  function getLineElements() {
+    if (lyricScroll.value) return lyricScroll.value.querySelectorAll('.lyric-line')
+    return []
+  }
+
+  function getFollowTopOffset(scrollEl) {
+    if (!scrollEl) return FOLLOW_TOP_OFFSET
+    return Math.min(FOLLOW_TOP_OFFSET, Math.max(0, scrollEl.clientHeight - FOLLOW_TOP_OFFSET))
+  }
+
+  function cancelScrollAnimation() {
+    if (scrollAnimation) {
+      try { scrollAnimation.cancel() } catch(_) {}
+      scrollAnimation = null
+    }
+    scrollAnimTargetTop = null
+  }
+
+  function animateScrollTo(scrollEl, targetTop) {
+    if (!scrollEl) return
+    const maxTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
+    const normalizedTarget = Math.max(0, Math.min(maxTop, targetTop))
+
+    if (scrollAnimTargetTop !== null && Math.abs(scrollAnimTargetTop - normalizedTarget) <= SCROLL_TOLERANCE_PX) return
+
+    cancelScrollAnimation()
+
+    const startTop = scrollEl.scrollTop
+    const delta = normalizedTarget - startTop
+    if (Math.abs(delta) <= SCROLL_TOLERANCE_PX) {
+      scrollEl.scrollTop = normalizedTarget
+      scrollAnimTargetTop = null
+      return
+    }
+
+    scrollEl.scrollTop = normalizedTarget
+    scrollAnimTargetTop = normalizedTarget
+
+    const contentEl = lyricContent.value
+    if (!contentEl || typeof contentEl.animate !== 'function') return
+
+    try {
+      scrollAnimation = contentEl.animate(
+        [
+          { transform: `translate3d(0, ${delta}px, 0)` },
+          { transform: 'translate3d(0, 0, 0)' }
+        ],
+        { duration: SCROLL_DURATION_MS, easing: SCROLL_EASING, fill: 'both' }
+      )
+      scrollAnimation.onfinish = () => { scrollAnimation = null; scrollAnimTargetTop = null }
+      scrollAnimation.oncancel = () => { scrollAnimation = null; scrollAnimTargetTop = null }
+    } catch(_) {
+      scrollAnimation = null
+      scrollAnimTargetTop = null
+    }
+  }
+
+  function syncLyricScroll({ behavior = 'auto', force = false } = {}) {
+    const scrollEl = lyricScroll.value
+    if (!scrollEl) return
+    if (!force && isManualScroll.value) return
+
+    const idx = lycCurrentIndex.value
+    if (idx == null || idx < 0) {
+      if (force && behavior !== 'smooth') {
+        cancelScrollAnimation()
+        scrollEl.scrollTop = 0
+      }
+      isLyricActive.value = true
+      return
+    }
+
+    const lines = getLineElements()
+    const wrapper = lines[idx]
+    if (!wrapper) return
+
+    const followTop = getFollowTopOffset(scrollEl)
+    const targetTop = Math.max(0, wrapper.offsetTop - followTop)
+
+    if (Math.abs(scrollEl.scrollTop - targetTop) <= SCROLL_TOLERANCE_PX) {
+      isLyricActive.value = true
+      return
+    }
+
+    if (behavior === 'smooth') {
+      animateScrollTo(scrollEl, targetTop)
+    } else {
+      cancelScrollAnimation()
+      scrollEl.scrollTop = targetTop
+    }
+    isLyricActive.value = true
+  }
+
   const clearLycAnimation = (flag) => {
     if(flag) isLyricDelay.value = false
-    for (let i = 0; i < lyricEle.value.length; i++) {
-      lyricEle.value[i].style.transitionDelay = 0 + 's'
-      if(lyricBlur.value) lyricEle.value[i].firstChild.style.setProperty("filter", "blur(0px)");
+    const lines = getLineElements()
+    for (let i = 0; i < lines.length; i++) {
+      lines[i].style.transitionDelay = 0 + 's'
+      if(lyricBlur.value) lines[i].firstChild.style.setProperty("filter", "blur(0px)");
     }
     if(flag) {
       const forbidDelayTimer =  setTimeout(() => {
@@ -152,33 +249,14 @@
       }, 500);
     }
   }
-  const setMaxHeight = (change) => {
-    if(!lyricsObjArr.value) return
-    size = (parseInt((lyricType.value.indexOf('noOriginal') == -1 && lyricType.value.indexOf('original') != -1 ? lyricSize.value : 0)) + parseInt((lyricType.value.indexOf('noTrans') == -1 && lyricType.value.indexOf('trans') != -1 ? tlyricSize.value : 0)) + parseInt((lyricType.value.indexOf('noRoma') == -1 && lyricType.value.indexOf('roma') != -1 ? rlyricSize.value : 0))) * 1.5 + 30
-    initMax = lyricsObjArr.value.length * size
-    heightVal.value = initMax
-    const containerH = lyricScroll.value ? lyricScroll.value.clientHeight : 260
-    initOffset = -(initMax - containerH)
-    let offset = (lycCurrentIndex.value + 1) * size
-    if(change) {
-      lineOffset.value = initOffset - offset
-      minHeightVal.value = offset
-      maxHeightVal.value = initMax + offset
-    } else {
-      maxHeightVal.value = initMax
-    }
-    if(lyricScrollArea.value)
-      lyricScrollArea.value.style.height = initMax + 'Px'
-  }
-  const setDefaultStyle = () => {
+
+  const setDefaultStyle = async () => {
     lyric.value = null
     lycCurrentIndex.value = -1
     interludeAnimation.value = false
-    lyricEle.value = document.getElementsByClassName('lyric-line')
-    initMax = 0
-    setMaxHeight(false)
-    minHeightVal.value = 0
-    lineOffset.value = initOffset
+    await nextTick()
+    lyricEle.value = getLineElements()
+    syncLyricScroll({ force: true })
     if(!lyricShow.value && !widgetState.value) {
       const changeTimer = setTimeout(() => {
         lyricShow.value = true
@@ -192,14 +270,6 @@
     clearInterval(lyricInterval.value)
     const length = lyricsObjArr.value.length - 1
     lyricInterval.value = setInterval(() => {
-      if(lyricScroll.value) {
-        const realH = lyricScroll.value.clientHeight
-        const expectedOffset = -(initMax - realH)
-        if(realH > 0 && initOffset !== expectedOffset) {
-          initOffset = expectedOffset
-          if(lycCurrentIndex.value < 0) lineOffset.value = initOffset
-        }
-      }
       const lastIndex = lycCurrentIndex.value
       const currentSeek = currentMusic.value.seek()
       musicVideoCheck(currentSeek)
@@ -213,30 +283,25 @@
         }
       })
       if(lastIndex != lycCurrentIndex.value) {
-        let offset = 0
-        if(lyricShow.value && isLyricDelay.value && lyricEle.value) {
+        const lines = getLineElements()
+        lyricEle.value = lines
+        if(lyricShow.value && isLyricDelay.value && lines.length) {
           if(lyricBlur.value)
             for (let i = 0, j = lycCurrentIndex.value * 0.4; i < lycCurrentIndex.value; i++) {
-              lyricEle.value[i].firstChild.style.setProperty("filter", "blur(" + j + "px)");
+              lines[i].firstChild.style.setProperty("filter", "blur(" + j + "px)");
               j -= 0.4
             }
-          for (let i = lycCurrentIndex.value, j = 0, k = 0; i < lyricEle.value.length; i++) {
-            lyricEle.value[i].style.transitionDelay = j + 's'
+          for (let i = lycCurrentIndex.value, j = 0, k = 0; i < lines.length; i++) {
+            lines[i].style.transitionDelay = j + 's'
             j += 0.05
             if(lyricBlur.value) {
               if(k > 1.8) k = 1.8
-              lyricEle.value[i].firstChild.style.setProperty("filter", "blur(" + k + "px)");
+              lines[i].firstChild.style.setProperty("filter", "blur(" + k + "px)");
               k += 0.2
             }
           }
         }
-        for (let i = 0; i <= lycCurrentIndex.value; i++) {
-          if(lyricEle.value[i])
-            offset += lyricEle.value[i].clientHeight + 10
-        }
-        lineOffset.value = initOffset - offset
-        minHeightVal.value = offset
-        maxHeightVal.value = initMax + offset
+        syncLyricScroll({ behavior: 'smooth' })
         let interTime = null
         if(lycCurrentIndex.value != length)
           interTime = lyricsObjArr.value[lycCurrentIndex.value + 1].time - currentSeek
@@ -270,13 +335,12 @@
     }, 200);
   }
   const changeProgressLyc = (time, index) => {
-    lyricScrollArea.value.style.height = initMax + 'Px'
     if(!playing.value) {
       lycCurrentIndex.value = index
-      let offset = (lycCurrentIndex.value + 1) * size
-      lineOffset.value = initOffset - offset
-      minHeightVal.value = offset
-      maxHeightVal.value = initMax + offset
+      nextTick(() => {
+        lyricEle.value = getLineElements()
+        syncLyricScroll({ behavior: 'smooth', force: true })
+      })
     }
     progress.value = time
     changeProgress(time)
@@ -286,7 +350,7 @@
       if(lyricLastPosition && progress.value < lyricLastPosition - 4) {
         clearLycAnimation(true)
         lyricLastPosition = null
-      } else 
+      } else
         clearLycAnimation(false)
       setLyricActive()
     } else {
@@ -304,33 +368,32 @@
     if(!lyricShow.value && !widgetState.value) {
       const changeTimer = setTimeout(() => {
         lyricShow.value = true
-        setMaxHeight(true)
+        nextTick(() => {
+          lyricEle.value = getLineElements()
+          syncLyricScroll({ behavior: 'auto', force: true })
+        })
         clearTimeout(changeTimer)
       }, 500);
     }
   }, {deep: true})
-  const handleWheel = (e) => {
-      isLyricActive.value = false
-      heightVal.value += (e.wheelDeltaY < 0 ? e.wheelDeltaY + 76 : e.wheelDeltaY - 76)
-
-      if(heightVal.value < minHeightVal.value) heightVal.value = minHeightVal.value
-      if(heightVal.value > maxHeightVal.value) heightVal.value = maxHeightVal.value
-
-      lyricScrollArea.value.style.height = heightVal.value + 'Px'
-
+  const handleWheel = () => {
+    cancelScrollAnimation()
+    isLyricActive.value = false
+    isManualScroll.value = true
+    clearTimeout(pauseActiveTimer.value)
+    pauseActiveTimer.value = setTimeout(() => {
+      isManualScroll.value = false
+      isLyricActive.value = true
+      syncLyricScroll({ behavior: 'smooth', force: true })
       clearTimeout(pauseActiveTimer.value)
-      pauseActiveTimer.value = setTimeout(() => {
-        isLyricActive.value = true
-        lyricScrollArea.value.style.height = initMax + 'Px'
-        heightVal.value = initMax
-        clearTimeout(pauseActiveTimer.value)
-      }, 3000);
+    }, MANUAL_SCROLL_IDLE_MS);
   }
   onMounted(() => {
-    if(lyricScroll.value) lyricScroll.value.addEventListener('wheel', handleWheel)
+    if(lyricScroll.value) lyricScroll.value.addEventListener('wheel', handleWheel, { passive: true })
   })
   onBeforeUnmount(() => {
     clearInterval(lyricInterval.value)
+    cancelScrollAnimation()
     if(lyricScroll.value) lyricScroll.value.removeEventListener('wheel', handleWheel)
   })
 </script>
@@ -339,32 +402,35 @@
   <div class="lyric-container">
     <Transition name="fade">
       <div v-show="lyricsObjArr && lyricShow && lyricType.indexOf('original') != -1" class="lyric-area" ref="lyricScroll">
-        <div class="lyric-scroll-area" ref="lyricScrollArea"></div>
-        <div class="lyric-line" :style="{transform: 'translateY(' + lineOffset + 'Px)'}" v-for="(item, index) in getLyric" v-show="item.lyric">
-          <div class="line" @click="changeProgressLyc(item.time, index)" :class="{'line-highlight': index == lycCurrentIndex, 'lyric-inactive': !isLyricActive || item.active}">
-            <span class="roma" :style="{'font-size': rlyricSize + 'px'}" v-if="item.rlyric && lyricType.indexOf('roma') != -1">{{item.rlyric}}</span>
-            <span class="original" :style="{'font-size': lyricSize + 'px'}" v-if="lyricType.indexOf('original') != -1">{{item.lyric}}</span>
-            <span class="trans" :style="{'font-size': tlyricSize + 'px'}" v-if="item.tlyric && lyricType.indexOf('trans') != -1">{{item.tlyric}}</span>
-            <div class="hilight" :class="{'hilight-active': index == lycCurrentIndex}" :style="{backgroundColor: videoIsPlaying ? 'rgba(0, 0, 0, 0.8)' : 'black'}"></div>
-          </div>
-          <div v-if="lycCurrentIndex != -1 && interludeIndex == index" class="music-interlude" :class="{'music-interlude-in': interludeAnimation}">
-            <div class="interlude-left">
-              <div class="diamond">
-                <div class="diamond-inner"></div>
-              </div>
+        <div class="lyric-content" ref="lyricContent">
+          <div class="lyric-spacer" :style="{ height: FOLLOW_TOP_OFFSET + 'px' }"></div>
+          <div class="lyric-line" v-for="(item, index) in getLyric" v-show="item.lyric">
+            <div class="line" @click="changeProgressLyc(item.time, index)" :class="{'line-highlight': index == lycCurrentIndex, 'lyric-inactive': !isLyricActive || item.active}">
+              <span class="roma" :style="{'font-size': rlyricSize + 'px'}" v-if="item.rlyric && lyricType.indexOf('roma') != -1">{{item.rlyric}}</span>
+              <span class="original" :style="{'font-size': lyricSize + 'px'}" v-if="lyricType.indexOf('original') != -1">{{item.lyric}}</span>
+              <span class="trans" :style="{'font-size': tlyricSize + 'px'}" v-if="item.tlyric && lyricType.indexOf('trans') != -1">{{item.tlyric}}</span>
+              <div class="hilight" :class="{'hilight-active': index == lycCurrentIndex}" :style="{backgroundColor: videoIsPlaying ? 'rgba(0, 0, 0, 0.8)' : 'black'}"></div>
             </div>
-            <div class="interlude-right">
-              <div class="triangle"></div>
-              <span class="remaining">THE REMAINING TIME: {{interludeRemainingTime}}</span>
-              <div class="interlude-title">
-                <span class="title">MUSIC INTERLUDE</span>
-                <div class="title-style">
-                  <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="49" height="50" viewBox="0 0 49 50" fill="none"><defs><rect id="path_0" x="0" y="0" width="49" height="50"/></defs><g opacity="1" transform="translate(0 0)  rotate(0 24.5 25)"><mask id="bg-mask-0" fill="white"><use xlink:href="#path_0"/></mask><g mask="url(#bg-mask-0)"><path id="line" style="fill:#FFFFFF" transform="translate(46 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(46 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(27 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(27 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(48 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(48 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(19 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:2; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(19 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(34 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(34 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(16 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(16 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(43 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(43 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(43 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(43 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(23 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:2; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(23 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(12 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:2; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(12 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(5 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(5 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(8 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:2; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(8 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(30 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:2; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(30 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(1 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:3; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(1 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(40 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:3; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(40 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/></g></g></svg>
+            <div v-if="lycCurrentIndex != -1 && interludeIndex == index" class="music-interlude" :class="{'music-interlude-in': interludeAnimation}">
+              <div class="interlude-left">
+                <div class="diamond">
+                  <div class="diamond-inner"></div>
                 </div>
               </div>
-              <div class="interlude-progress"></div>
+              <div class="interlude-right">
+                <div class="triangle"></div>
+                <span class="remaining">THE REMAINING TIME: {{interludeRemainingTime}}</span>
+                <div class="interlude-title">
+                  <span class="title">MUSIC INTERLUDE</span>
+                  <div class="title-style">
+                    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="49" height="50" viewBox="0 0 49 50" fill="none"><defs><rect id="path_0" x="0" y="0" width="49" height="50"/></defs><g opacity="1" transform="translate(0 0)  rotate(0 24.5 25)"><mask id="bg-mask-0" fill="white"><use xlink:href="#path_0"/></mask><g mask="url(#bg-mask-0)"><path id="line" style="fill:#FFFFFF" transform="translate(46 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(46 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(27 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(27 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(48 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(48 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(19 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:2; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(19 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(34 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(34 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(16 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(16 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(43 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(43 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(43 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(43 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(23 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:2; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(23 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(12 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:2; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(12 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(5 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:1; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(5 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(8 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:2; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(8 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(30 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:2; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(30 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(1 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:3; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(1 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/><path id="line" style="fill:#FFFFFF" transform="translate(40 0)  rotate(0 0.0005 50)" opacity="1" d=""/><path id="line" style="stroke:#FFFFFF; stroke-width:3; stroke-opacity:1; stroke-dasharray:0 0" transform="translate(40 0)  rotate(0 0.0005 50)" d="M0,0L0,100 "/></g></g></svg>
+                  </div>
+                </div>
+                <div class="interlude-progress"></div>
+              </div>
             </div>
           </div>
+          <div class="lyric-spacer" :style="{ height: FOLLOW_BOTTOM_GUTTER + 'px' }"></div>
         </div>
       </div>
     </Transition>
@@ -395,11 +461,27 @@
     .lyric-area{
       width: calc(100% - 3vh);
       height: calc(100% - 3vh);
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      overscroll-behavior: contain;
       transition: 0.3s cubic-bezier(.30,0,.12,1);
-      .lyric-scroll-area{
+      &::-webkit-scrollbar{
+        width: 0;
+        height: 0;
+        display: none;
+      }
+      .lyric-content{
         width: 100%;
-        transition: 0.3s;
+        transform: translate3d(0, 0, 0);
+        will-change: transform;
+      }
+      .lyric-spacer{
+        width: 100%;
+        flex: none;
+        pointer-events: none;
+        transition: height 0.3s;
       }
       .lyric-line{
         margin-bottom: 10Px;
@@ -576,7 +658,7 @@
         width: 0;
         height: 0;
         position: absolute;
-        background: 
+        background:
         linear-gradient(
           to bottom right,
           rgba(0, 0, 0, 0) 0%,
