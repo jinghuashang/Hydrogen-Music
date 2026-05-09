@@ -7,7 +7,6 @@
 
 ## ⚠️ 注意：
 - 本项目是 [Kaidesuyo/Hydrogen-Music](https://github.com/Kaidesuyo/Hydrogen-Music/) 的备份库，没有根据软件工程规范编写，仅供参考！
-- 项目版本重新计数，目前最新版本为 v0.1.3
 
 ## 📦️ 安装
 
@@ -86,8 +85,7 @@ Powered by Vercel
 
 ## 灵感来源
 
-网易云音乐API：[Binaryify/NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)<br />
-UnblockNeteaseMusic: [UnblockNeteaseMusic](https://github.com/UnblockNeteaseMusic/server)<br />
+网易云音乐API：[NeteaseCloudMusicApiEnhanced/api-enhanced](https://github.com/neteasecloudmusicapienhanced/api-enhanced)<br />
 哔哩哔哩API：[SocialSisterYi/bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect)
 
 - [qier222/YesPlayMusic](https://github.com/qier222/YesPlayMusic)

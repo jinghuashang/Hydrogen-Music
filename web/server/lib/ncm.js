@@ -1,11 +1,10 @@
-const { serveNcmApi } = require('NeteaseCloudMusicApi')
-const generateConfig = require('NeteaseCloudMusicApi/generateConfig')
+const { serveNcmApi } = require('@neteasecloudmusicapienhanced/api')
 
 let started = false
 
 async function startNcm(port = 36530) {
   if (started) return
-  await generateConfig()
+  process.env.ENABLE_GENERAL_UNBLOCK = 'false'
   await serveNcmApi({
     checkVersion: true,
     port,

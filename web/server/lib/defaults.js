@@ -36,8 +36,6 @@ function defaultSettings() {
     },
     unblock: {
       enabled: true,
-      port: '36531:36532',
-      sources: ['qq', 'kugou', 'kuwo', 'bilibili'],
     },
   }
 }

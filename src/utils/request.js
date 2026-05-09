@@ -18,41 +18,19 @@ const request = axios.create({
     timeout: 10000,
 });
 
-let cachedProxy = null
-let lastDisabledCheck = 0
-
-async function getProxyUrl() {
-    const now = Date.now()
-    if (cachedProxy) return cachedProxy
-    // Allow re-checking disabled state every 30 seconds to handle startup race
-    if (cachedProxy === '' && now - lastDisabledCheck < 30000) return ''
-    try {
-        const status = await windowApi.getUnblockStatus()
-        if (status) {
-            const settings = await windowApi.getSettings()
-            const portConfig = settings.unblock?.port || '36531:36532'
-            cachedProxy = `http://localhost:${portConfig.split(':')[0]}`
-        } else {
-            cachedProxy = ''
-            lastDisabledCheck = now
-        }
-    } catch(e) {
-        cachedProxy = ''
-        lastDisabledCheck = now
-    }
-    return cachedProxy
-}
-
-export function clearProxyCache() {
-    cachedProxy = null
-}
+export function clearProxyCache() {}
 
 // 请求拦截器
 request.interceptors.request.use(async function (config) {
-  if (!cachedProxy) await getProxyUrl()
-  if (cachedProxy) {
-    config.params = config.params || {}
-    config.params.proxy = cachedProxy
+  // 解锁灰色歌曲：对 /song/url/v1 请求附加 unblock=true
+  if (config.url === '/song/url/v1') {
+    try {
+      const settings = await windowApi.getSettings()
+      if (settings?.unblock?.enabled !== false) {
+        config.params = config.params || {}
+        config.params.unblock = true
+      }
+    } catch (_) {}
   }
   if (config.url != '/login/qr/check' && isLogin()) {
     const cookieStr = getNeteaseCookieStringForApi()

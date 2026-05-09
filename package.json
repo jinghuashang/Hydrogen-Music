@@ -1,7 +1,7 @@
 {
   "name": "hydrogenmusic",
   "private": true,
-  "version": "0.1.5d",
+  "version": "0.1.6",
   "main": "background.js",
   "author": "Kaidesuyo",
   "contributors": [
@@ -37,13 +37,12 @@
     "marked": "^18.0.3",
     "music-metadata": "^7.13.0",
     "nanoid": "^3.3.4",
-    "NeteaseCloudMusicApi": "^4.31.0",
+    "@neteasecloudmusicapienhanced/api": "^4.32.0",
     "normalize.css": "^8.0.1",
     "pinia": "^2.0.23",
     "pinia-plugin-persistedstate": "^3.0.1",
     "plyr": "^3.7.3",
     "qrcode": "^1.5.1",
-    "unblockneteasemusic": "github:UnblockNeteaseMusic/server",
     "vue": "^3.2.41",
     "vue-router": "^4.1.6",
     "vue-slider-component": "^4.1.0-beta.6",
@@ -61,10 +60,7 @@
     "productName": "Hydrogen Music",
     "appId": "114514",
     "asar": true,
-    "asarUnpack": [
-      "node_modules/unblockneteasemusic/*",
-      "node_modules/unblockneteasemusic/**/*"
-    ],
+    "asarUnpack": [],
     "directories": {
       "output": "release/${version}"
     },

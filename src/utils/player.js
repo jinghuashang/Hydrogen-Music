@@ -286,12 +286,29 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
         return
     }
     setSongToWindows()
-    // 开启unblock代理后，代理会自动解锁付费/灰色歌曲
+    const unblockOn = await windowApi.getSettings().then(s => s?.unblock?.enabled !== false).catch(() => true)
     await checkMusic(id).then(async result => {
         if(result.success == true) {
             getMusicUrl(id, quality.value).then(songInfo => {
                 play(songInfo.data[0].url, autoplay)
                 setSongLevel(songInfo.data[0].level)
+            })
+            getLyric(id).then(songLiric => {
+                lyric.value = songLiric
+            })
+        } else if (unblockOn) {
+            getMusicUrl(id, quality.value).then(songInfo => {
+                if (songInfo.data[0].url) {
+                    play(songInfo.data[0].url, autoplay)
+                    setSongLevel(songInfo.data[0].level)
+                } else {
+                    noticeOpen('当前歌曲无法播放', 2)
+                    clearInterval(musicProgress)
+                    playing.value = false
+                    currentMusic.value = null
+                    lyric.value = null
+                    playNext()
+                }
             })
             getLyric(id).then(songLiric => {
                 lyric.value = songLiric

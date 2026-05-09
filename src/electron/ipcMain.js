@@ -4,7 +4,6 @@ const fs = require('fs')
 const path = require('path')
 const { parseFile } = require('music-metadata')
 const registerShortcuts = require('./shortcuts')
-const { startUnblockNeteaseMusic, stopUnblockNeteaseMusic, restartUnblockNeteaseMusic, getUnblockStatus, getUnblockDiagnostic } = require('./services')
 const Store = require('electron-store')
 const CancelToken = axios.CancelToken
 let cancel = null
@@ -128,9 +127,7 @@ module.exports = IpcMainEvent = (win, app) => {
                     externalUnblockUrl: ''
                 },
                 unblock: {
-                    enabled: true,
-                    port: '36531:36532',
-                    sources: ['qq', 'kugou', 'kuwo', 'bilibili']
+                    enabled: true
                 }
             }
             settingsStore.set('settings', initSettings)
@@ -378,24 +375,6 @@ module.exports = IpcMainEvent = (win, app) => {
         })
         if (canceled || !filePaths?.length) return null
         return path.normalize(filePaths[0])
-    })
-    ipcMain.handle('start-unblock', async () => {
-        startUnblockNeteaseMusic()
-        return getUnblockStatus()
-    })
-    ipcMain.handle('stop-unblock', async () => {
-        stopUnblockNeteaseMusic()
-        return getUnblockStatus()
-    })
-    ipcMain.handle('restart-unblock', async () => {
-        restartUnblockNeteaseMusic()
-        return getUnblockStatus()
-    })
-    ipcMain.handle('get-unblock-status', async () => {
-        return getUnblockStatus()
-    })
-    ipcMain.handle('get-unblock-diag', async () => {
-        return getUnblockDiagnostic()
     })
 
     let updateDownloadCancelled = false

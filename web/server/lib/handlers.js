@@ -8,13 +8,6 @@ const { createStore } = require('./store')
 const { defaultSettings } = require('./defaults')
 const { createDownloadManager } = require('./download-manager')
 const { createLocalScan } = require('./local-scan')
-const {
-  startUnblockNeteaseMusic,
-  stopUnblockNeteaseMusic,
-  restartUnblockNeteaseMusic,
-  getUnblockStatus,
-  getUnblockDiagnostic,
-} = require('./unblock')
 
 const pkg = require('../../../package.json')
 
@@ -494,20 +487,6 @@ function createHandlers({ broadcast }) {
       kind: 'font',
       message: 'Web 版请输入字体文件在 NAS 上的绝对路径',
     }),
-    'start-unblock': async () => {
-      startUnblockNeteaseMusic(settingsStore)
-      return getUnblockStatus()
-    },
-    'stop-unblock': async () => {
-      stopUnblockNeteaseMusic()
-      return getUnblockStatus()
-    },
-    'restart-unblock': async () => {
-      restartUnblockNeteaseMusic(settingsStore)
-      return getUnblockStatus()
-    },
-    'get-unblock-status': async () => getUnblockStatus(),
-    'get-unblock-diag': async () => getUnblockDiagnostic(),
     /** Web：多浏览器共享的网易云 Cookie + 用户状态（需设置中开启「同步到 NAS」） */
     'get-web-profile': async () => webProfileStore.get('profile') || null,
     'set-web-profile': async (_e, profile) => {
@@ -543,7 +522,6 @@ function createHandlers({ broadcast }) {
         if (!next?.local?.syncProfileToNas) {
           webProfileStore.set('profile', null)
         }
-        restartUnblockNeteaseMusic(settingsStore)
         break
       }
       case 'save-last-playlist':
@@ -605,10 +583,6 @@ function createHandlers({ broadcast }) {
     }
   }
 
-  function bootstrapUnblock() {
-    startUnblockNeteaseMusic(settingsStore)
-  }
-
   const biliCookieHeader = biliCookieHeaderFromStore
 
   /** GET /api/bili-cdn?u=<encodeURIComponent(bilibiliUrl)> */
@@ -664,7 +638,6 @@ function createHandlers({ broadcast }) {
   return {
     invokeRoute,
     sendRoute,
-    bootstrapUnblock,
     settingsStore,
     handleBiliCdn,
   }

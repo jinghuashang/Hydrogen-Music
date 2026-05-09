@@ -1,6 +1,5 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 const startNeteaseMusicApi = require('./src/electron/services')
-const { startUnblockNeteaseMusic } = require('./src/electron/services')
 const IpcMainEvent = require('./src/electron/ipcMain')
 const MusicDownload = require('./src/electron/download')
 const LocalFiles = require('./src/electron/localmusic')
@@ -144,8 +143,6 @@ const createWindow = () => {
     })
     //api初始化
     startNeteaseMusicApi()
-    //启动UnblockNeteaseMusic
-    startUnblockNeteaseMusic()
     //ipcMain初始化
     IpcMainEvent(win, app)
     MusicDownload(win)

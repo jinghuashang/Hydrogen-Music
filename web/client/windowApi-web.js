@@ -234,11 +234,6 @@ export function installWebWindowApi() {
     clearUnusedVideo: (state) => invoke('clear-unused-video', [state]),
     deleteMusicVideo: (id) => invoke('delete-music-video', [id]),
     getLocalMusicLyric: (filePath) => invoke('get-local-music-lyric', [filePath]),
-    startUnblock: () => invoke('start-unblock'),
-    stopUnblock: () => invoke('stop-unblock'),
-    restartUnblock: () => invoke('restart-unblock'),
-    getUnblockStatus: () => invoke('get-unblock-status'),
-    getUnblockDiag: () => invoke('get-unblock-diag'),
     getAppVersion: () => invoke('get-app-version'),
     selectFile: async () => {
       const r = await invoke('select-file')

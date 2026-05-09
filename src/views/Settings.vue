@@ -10,7 +10,6 @@ import { useUserStore } from '../store/userStore';
 import { usePlayerStore } from '../store/playerStore';
 import { useOtherStore } from '../store/otherStore';
 import { insertCustomFontStyle } from '../utils/setFont';
-import { clearProxyCache } from '../utils/request'
 import { normalizeLocalDirPath, localDirPathEquals } from '../utils/localPath'
 import {
     isHydrogenWeb,
@@ -76,11 +75,9 @@ const newShortcut = ref([])
 const shortcutCharacter = ['=', '-', '~', '@', '#', '$', '[', ']', ';', "'", ',', '.', '/', '!'];
 const customFont = ref('')
 const updateProxy = ref('')
-const externalUnblockUrl = ref('')
 const appVersion = ref('')
 const isCheckingUpdate = ref(false)
 const unblockEnabled = ref(false)
-const unblockPort = ref('36531:36532')
 /** Web：将网易云登录与用户状态写入 NAS（多设备/多浏览器共用） */
 const syncProfileToNas = ref(false)
 /** 渲染进程用于文案：Linux/Web 下目录选择器或路径习惯与 Windows 不同 */
@@ -119,10 +116,8 @@ onActivated(() => {
         quitApp.value = settings.other.quitApp
         customFont.value = settings.other.customFont
         updateProxy.value = settings.other.updateProxy || ''
-        externalUnblockUrl.value = settings.other.externalUnblockUrl || ''
         if(settings.unblock) {
             unblockEnabled.value = settings.unblock.enabled
-            unblockPort.value = settings.unblock.port || '36531:36532'
         }
         syncProfileToNas.value = !!settings.local?.syncProfileToNas
         const m = settings.music || {}
@@ -157,15 +152,11 @@ const setAppSettings = async () => {
             quitApp: quitApp.value,
             customFont: customFont.value,
             updateProxy: updateProxy.value,
-            externalUnblockUrl: externalUnblockUrl.value,
         },
         unblock: {
             enabled: unblockEnabled.value,
-            port: unblockPort.value,
-            sources: ['qq', 'kugou', 'kuwo', 'bilibili']
         }
     }
-    clearProxyCache()
     const sent = windowApi.setSettings(JSON.stringify(settings))
     if (sent && typeof sent.then === 'function') await sent
 }
@@ -426,16 +417,7 @@ const toggleGlobalShortcuts = async () => {
 const toggleUnblock = () => {
     unblockEnabled.value = !unblockEnabled.value
     setAppSettings()
-    clearProxyCache()
-    if(unblockEnabled.value) {
-        windowApi.restartUnblock().then(status => {
-            noticeOpen(status ? 'UnblockNeteaseMusic已启动' : '启动失败，请检查是否已安装', status ? 1 : 2)
-        })
-    } else {
-        windowApi.stopUnblock().then(() => {
-            noticeOpen('UnblockNeteaseMusic已停止', 2)
-        })
-    }
+    noticeOpen(unblockEnabled.value ? '解锁灰色歌曲已开启' : '解锁灰色歌曲已关闭', 1)
 }
 </script>
 
@@ -690,8 +672,8 @@ const toggleUnblock = () => {
                                 <input type="text" v-model="updateProxy" placeholder="留空不加速，如 https://gh.llkk.cc/" @change="persistWebSettingsFromForm()">
                             </div>
                         </div>
-                        <div class="option" v-if="!isWebClient">
-                            <div class="option-name">解锁灰色歌曲 (UnblockNeteaseMusic)</div>
+                        <div class="option">
+                            <div class="option-name">解锁灰色歌曲</div>
                             <div class="option-operation">
                                 <div class="toggle" @click="toggleUnblock()">
                                     <div class="toggle-off" :class="{ 'toggle-on-in': unblockEnabled }">
@@ -700,18 +682,6 @@ const toggleUnblock = () => {
                                         <div class="toggle-on" v-show="unblockEnabled"></div>
                                     </Transition>
                                 </div>
-                            </div>
-                        </div>
-                        <div class="option" v-if="!isWebClient && unblockEnabled">
-                            <div class="option-name">代理端口 (HTTP:HTTPS)</div>
-                            <div class="option-operation">
-                                <input v-model="unblockPort" name="unblockPort" @change="setAppSettings()">
-                            </div>
-                        </div>
-                        <div class="option" v-if="isWebClient">
-                            <div class="option-name">外部解锁服务地址</div>
-                            <div class="option-operation">
-                                <input type="text" v-model="externalUnblockUrl" placeholder="如 http://your-server:36531" @change="persistWebSettingsFromForm()">
                             </div>
                         </div>
                     </div>

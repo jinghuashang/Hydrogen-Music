@@ -42,7 +42,6 @@ async function main() {
   app.use(express.static(webDist))
 
   await startNcm(NCM_PORT)
-  handlers.bootstrapUnblock()
 
   app.listen(GATEWAY_PORT, '0.0.0.0', () => {
     console.log(`[gateway] http://0.0.0.0:${GATEWAY_PORT}`)
