@@ -17,6 +17,16 @@ class TimedRecorder extends AudioWorkletProcessor {
           this.recording = true
           this.port.postMessage({ message: '[rec.js] Recording started' })
           break
+        case 'stop':
+          if (this.recording) {
+            this.recording = false
+            this.port.postMessage({ message: '[rec.js] Recording stopped' })
+            this.port.postMessage({
+              message: 'finished',
+              recording: this.recbuffer,
+            })
+          }
+          break
       }
     }
   }

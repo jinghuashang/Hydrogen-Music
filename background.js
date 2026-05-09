@@ -6,7 +6,7 @@ const LocalFiles = require('./src/electron/localmusic')
 const InitTray = require('./src/electron/tray')
 const registerShortcuts = require('./src/electron/shortcuts')
 
-const { app, BrowserWindow, globalShortcut, shell } = require('electron')
+const { app, BrowserWindow, globalShortcut, shell, session } = require('electron')
 const Winstate = require('electron-win-state').default
 const path = require('path')
 const Store = require('electron-store');
@@ -28,6 +28,11 @@ app.on('second-instance', (event, commandLine, workingDirectory) => {
 })
 
 app.whenReady().then(() => {
+    // 自动授权媒体设备权限（麦克风/摄像头/屏幕共享）
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+        const allowed = ['media', 'display-capture', 'mediaKeySystem']
+        callback(allowed.includes(permission))
+    })
     createWindow()
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -158,6 +163,13 @@ const createWindow = () => {
             return { hasUpdate: false, error: '检查更新失败' }
         }
     })
+    // 桌面音频源捕获（用于听歌识曲-系统音频模式）
+    const { ipcMain: mainIpc, desktopCapturer } = require('electron')
+    mainIpc.handle('get-desktop-sources', async () => {
+        const sources = await desktopCapturer.getSources({ types: ['screen'] })
+        return sources.map(s => ({ id: s.id, name: s.name }))
+    })
+
     //api初始化
     startNeteaseMusicApi()
     //ipcMain初始化

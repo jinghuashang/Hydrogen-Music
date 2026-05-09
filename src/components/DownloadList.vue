@@ -14,14 +14,29 @@
   
   const currentIndex = ref(-1)
   const download = () => {
-    let id = downloadList.value[currentIndex.value].id
+    const song = downloadList.value[currentIndex.value]
+    const id = song.id
     checkMusic(id).then(result => {
       if(result.success == true) {
-        getMusicUrl(id, quality.value).then(songInfo => {
+        getMusicUrl(id, quality.value).then(async songInfo => {
+          // 读取下载选项
+          let options = { cover: false, info: false, lyric: false }
+          try {
+            const settings = await windowApi.getSettings()
+            const local = settings?.local || {}
+            options.cover = !!local.downloadCover
+            options.info = !!local.downloadInfo
+            options.lyric = !!local.downloadLyric
+          } catch {}
+          const artists = (song.ar || song.artists || []).map(a => a.name).join(' / ')
+          const album = (song.al || song.album)?.name || ''
+          const picUrl = (song.al || song.album)?.picUrl || ''
           let fileObj = {
             url: songInfo.data[0].url,
-            name: downloadList.value[currentIndex.value].name,
-            type: songInfo.data[0].type
+            name: song.name,
+            type: songInfo.data[0].type,
+            meta: { id: song.id, name: song.name, artists, album, picUrl },
+            options,
           }
           windowApi.download(fileObj)
         })

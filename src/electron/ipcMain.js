@@ -55,6 +55,9 @@ module.exports = IpcMainEvent = (win, app) => {
         if(settings) {
             if (!settings.local) settings.local = {}
             if (!Object.prototype.hasOwnProperty.call(settings.local, 'syncProfileToNas')) settings.local.syncProfileToNas = false
+            if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadCover')) settings.local.downloadCover = false
+            if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadInfo')) settings.local.downloadInfo = false
+            if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadLyric')) settings.local.downloadLyric = false
             return settings
         }
         else {
@@ -75,6 +78,9 @@ module.exports = IpcMainEvent = (win, app) => {
                     downloadFolder: null,
                     localFolder: [],
                     syncProfileToNas: false,
+                    downloadCover: false,
+                    downloadInfo: false,
+                    downloadLyric: false,
                 },
                 shortcuts: [
                     {
@@ -128,7 +134,7 @@ module.exports = IpcMainEvent = (win, app) => {
                 },
                 unblock: {
                     enabled: true
-                }
+                },
             }
             settingsStore.set('settings', initSettings)
             registerShortcuts(win)

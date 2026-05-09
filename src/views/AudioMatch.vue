@@ -1,21 +1,21 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onActivated, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { noticeOpen } from '../utils/dialog'
 import { audioMatch } from '../api/audioMatch'
-import { usePlayerStore } from '../store/playerStore'
+import { addToNext } from '../utils/player'
 import { useUserStore } from '../store/userStore'
 
 const router = useRouter()
-const playerStore = usePlayerStore()
 const userStore = useUserStore()
-
-const DURATION = 3
 
 const status = ref('idle')
 const countdown = ref(0)
+const elapsed = ref(0)
+const maxDuration = ref(5)
 const canvasRef = ref(null)
 const results = ref([])
+const noResult = ref(false)
 const logs = ref([])
 const error = ref('')
 
@@ -50,71 +50,132 @@ async function ensureScripts() {
   scriptsLoaded = true
 }
 
-async function initAudio() {
-  if (audioCtx) return true
-  try {
+function initAudio() {
+  if (audioCtx && recorderNode) return Promise.resolve(true)
+  return new Promise((resolve) => {
     audioCtx = new AudioContext({ sampleRate: 8000 })
-    await audioCtx.audioWorklet.addModule('./rec.js')
-    recorderNode = new AudioWorkletNode(audioCtx, 'timed-recorder')
 
-    recorderNode.port.onmessage = (event) => {
-      switch (event.data.message) {
-        case 'finished':
-          onRecordingFinished(event.data.recording)
-          break
-        case 'bufferhealth':
-          bufferHealth.value = event.data.health
-          audioBuffer = event.data.recording
-          break
-        case '[rec.js] Recording started':
-          log('录音已开始')
-          break
-        case '[rec.js] Recording finished':
-          log('录音完成，正在生成指纹...')
-          break
+    function tryInit() {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().then(() => {
+          if (audioCtx.state === 'suspended') {
+            log('AudioContext 仍为 suspended, 100ms 后重试...')
+            setTimeout(tryInit, 100)
+            return
+          }
+          setupWorklet()
+        }).catch(() => {
+          setTimeout(tryInit, 100)
+        })
+        return
       }
+      setupWorklet()
     }
 
-    micStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: false,
-        autoGainControl: false,
-        noiseSuppression: false,
-        latency: 0,
-      },
-    })
-    micSourceNode = audioCtx.createMediaStreamSource(micStream)
-    micSourceNode.connect(recorderNode)
-    recorderNode.connect(audioCtx.destination)
-    log('麦克风已就绪')
-    return true
-  } catch (e) {
-    console.error('[AudioMatch] init error', e)
-    error.value = e.name === 'NotAllowedError'
-      ? '麦克风权限被拒绝，请在浏览器设置中允许访问麦克风'
-      : '初始化音频失败：' + e.message
-    log('初始化失败：' + e.message)
-    return false
-  }
+    function setupWorklet() {
+      log('AudioContext state: ' + audioCtx.state)
+      audioCtx.audioWorklet.addModule('./rec.js').then(() => {
+        recorderNode = new AudioWorkletNode(audioCtx, 'timed-recorder')
+
+        recorderNode.port.onmessage = (event) => {
+          switch (event.data.message) {
+            case 'finished':
+              onRecordingFinished(event.data.recording)
+              break
+            case 'bufferhealth':
+              bufferHealth.value = event.data.health
+              audioBuffer = event.data.recording
+              break
+            default:
+              log(event.data.message)
+          }
+        }
+
+        // 获取系统音频：Electron 通过 desktopCapturer IPC，Web 通过 getDisplayMedia
+        if (typeof windowApi.getDesktopSources === 'function') {
+          windowApi.getDesktopSources().then(sources => {
+            const screenSource = sources.find(s => s.id.startsWith('screen:')) || sources[0]
+            if (!screenSource) { resolve(false); error.value = '未找到屏幕源'; return }
+            return navigator.mediaDevices.getUserMedia({
+              audio: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: screenSource.id } },
+              video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: screenSource.id } },
+            })
+          }).then(stream => {
+            if (!stream) return
+            stream.getVideoTracks().forEach(t => t.stop())
+            micStream = stream
+            micSourceNode = audioCtx.createMediaStreamSource(micStream)
+            micSourceNode.connect(recorderNode)
+            log('系统音频已就绪')
+            resolve(true)
+          }).catch(e => {
+            error.value = '获取系统音频失败：' + e.message
+            log('系统音频获取失败：' + e.message)
+            resolve(false)
+          })
+        } else {
+          navigator.mediaDevices.getDisplayMedia({ audio: true, video: true }).then(displayStream => {
+            displayStream.getVideoTracks().forEach(t => t.stop())
+            micStream = new MediaStream(displayStream.getAudioTracks())
+            micSourceNode = audioCtx.createMediaStreamSource(micStream)
+            micSourceNode.connect(recorderNode)
+            log('系统音频已就绪')
+            resolve(true)
+          }).catch(e => {
+            error.value = '获取系统音频失败：' + e.message
+            log('系统音频获取失败：' + e.message)
+            resolve(false)
+          })
+        }
+      }).catch(e => {
+        error.value = '加载录音模块失败：' + e.message
+        log('worklet 加载失败：' + e.message)
+        resolve(false)
+      })
+    }
+
+    tryInit()
+  })
 }
 
 function startRecording() {
-  if (!recorderNode) return
+  if (!recorderNode || !audioCtx) return
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().then(() => doStartRecording())
+    return
+  }
+  doStartRecording()
+}
+
+function doStartRecording() {
   status.value = 'recording'
-  countdown.value = DURATION
+  const dur = Math.min(Math.max(Number(maxDuration.value) || 5, 1), 15)
+  maxDuration.value = dur
+  countdown.value = dur
+  elapsed.value = 0
   results.value = []
+  noResult.value = false
   error.value = ''
   bufferHealth.value = 0
   audioBuffer = null
 
-  recorderNode.port.postMessage({ message: 'start', duration: DURATION })
+  recorderNode.port.postMessage({ message: 'start', duration: dur })
 
   countdownTimer = setInterval(() => {
-    countdown.value = Math.max(0, countdown.value - 0.1)
-    if (countdown.value <= 0) clearInterval(countdownTimer)
+    elapsed.value = Math.min(dur, elapsed.value + 0.1)
+    countdown.value = Math.max(0, dur - elapsed.value)
+    if (countdown.value <= 0) {
+      clearInterval(countdownTimer)
+    }
   }, 100)
 
   startCanvas()
+}
+
+function stopRecording() {
+  if (status.value !== 'recording' || !recorderNode) return
+  clearInterval(countdownTimer)
+  recorderNode.port.postMessage({ message: 'stop' })
 }
 
 async function onRecordingFinished(recording) {
@@ -122,28 +183,55 @@ async function onRecordingFinished(recording) {
   clearInterval(countdownTimer)
   countdown.value = 0
   status.value = 'processing'
-  log('正在查询识别结果...')
+  noResult.value = false
+  // 计算实际录音时长（秒）
+  const actualDuration = Math.round(elapsed.value) || 1
+  const sampleCount = actualDuration * 8000
+  log('录音数据已接收，时长: ' + actualDuration + 's, 样本: ' + sampleCount)
 
   try {
-    const sampleBuffer = new Float32Array(recording.subarray(0, DURATION * 8000))
-    const FP = await GenerateFP(sampleBuffer)
-    log('指纹生成完成，正在请求 API...')
+    const sampleBuffer = new Float32Array(recording.subarray(0, sampleCount))
+    const hasSignal = sampleBuffer.some((v) => Math.abs(v) > 0.001)
+    log('有效样本: ' + sampleBuffer.length + ', 有信号: ' + hasSignal)
+    if (!hasSignal) {
+      log('警告: 录音数据全为静音，请检查麦克风')
+    }
 
-    const resp = await audioMatch(DURATION, FP)
-    if (!resp || !resp.data || !resp.data.result || resp.data.result.length === 0) {
-      status.value = 'no-result'
+    if (typeof GenerateFP !== 'function') {
+      throw new Error('GenerateFP 未加载，请刷新页面重试')
+    }
+    log('正在生成音频指纹...')
+    const FP = await GenerateFP(sampleBuffer)
+    log('指纹长度: ' + (FP ? FP.length : 0) + ' 字符')
+    if (!FP || FP.length === 0) {
+      throw new Error('指纹生成失败，返回为空')
+    }
+    log('指纹前20字符: ' + FP.substring(0, 20) + '...')
+
+    log('正在请求 API...')
+    const resp = await audioMatch(actualDuration, FP)
+    log('API 响应: ' + JSON.stringify(resp).substring(0, 200))
+
+    if (!resp || resp.code !== 200) {
+      noResult.value = true
+      log('API 返回错误: ' + JSON.stringify(resp))
+      return
+    }
+    const resultData = resp.data?.result || resp.result || (Array.isArray(resp.data) ? resp.data : null)
+    if (!resultData || resultData.length === 0) {
+      noResult.value = true
       log('未识别到匹配的歌曲')
       return
     }
 
-    results.value = resp.data.result
-    status.value = 'done'
-    log(`识别完成，共 ${resp.data.result.length} 个结果`)
+    results.value = resultData
+    log(`识别完成，共 ${resultData.length} 个结果`)
   } catch (e) {
     console.error('[AudioMatch] match error', e)
     error.value = '识别请求失败：' + (e.message || '未知错误')
-    status.value = 'error'
     log('识别失败：' + e.message)
+  } finally {
+    status.value = 'idle'
   }
 }
 
@@ -158,24 +246,15 @@ function onClickRecognize() {
   }
 }
 
-async function onClickPlay(song) {
-  try {
-    const { getMusicUrl } = await import('../api/song')
-    const res = await getMusicUrl(song.id, 'exhigh')
-    if (res.data?.[0]?.url) {
-      playerStore.play(res.data[0].url, {
-        id: song.id,
-        name: song.name,
-        artist: song.ar || song.artists || [],
-        album: song.al || song.album || {},
-        picUrl: (song.al || song.album)?.picUrl || '',
-      })
-    } else {
-      noticeOpen('无法获取播放链接', 2)
-    }
-  } catch (e) {
-    noticeOpen('播放失败', 2)
+function onClickPlay(song) {
+  const songData = {
+    id: song.id,
+    name: song.name,
+    ar: song.ar || song.artists || [],
+    al: song.al || song.album || {},
+    dt: song.dt || 0,
   }
+  addToNext(songData, true)
 }
 
 function startCanvas() {
@@ -227,6 +306,8 @@ onMounted(async () => {
   await ensureScripts()
 })
 
+onActivated(() => {})
+
 onBeforeUnmount(() => {
   stopCanvas()
   clearInterval(countdownTimer)
@@ -252,22 +333,28 @@ onBeforeUnmount(() => {
       <div class="match-panel">
         <div class="panel-content">
           <div class="mic-area">
+            <div v-if="status !== 'recording' && status !== 'processing'" class="duration-control">
+              <span class="duration-label">识别时长</span>
+              <input type="range" v-model.number="maxDuration" min="1" max="15" step="1" class="duration-slider">
+              <span class="duration-value">{{ maxDuration }}s</span>
+            </div>
             <div
               class="mic-btn"
               :class="{ 'mic-recording': status === 'recording', 'mic-processing': status === 'processing' }"
-              @click="onClickRecognize"
+              @click="status === 'recording' ? stopRecording() : onClickRecognize()"
             >
-              <svg v-if="status !== 'processing'" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <svg v-if="status === 'idle'" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 1C10.34 1 9 2.34 9 4V12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12V4C15 2.34 13.66 1 12 1Z" fill="currentColor"/>
                 <path d="M17 12C17 14.76 14.76 17 12 17C9.24 17 7 14.76 7 12H5C5 15.53 7.61 18.43 11 18.92V22H13V18.92C16.39 18.43 19 15.53 19 12H17Z" fill="currentColor"/>
               </svg>
+              <div v-else-if="status === 'recording'" class="stop-icon"></div>
               <div v-else class="loading-spinner"></div>
             </div>
             <div class="countdown" v-if="status === 'recording'">
-              {{ countdown.toFixed(1) }}s
+              {{ elapsed.toFixed(1) }}s / {{ maxDuration }}s
             </div>
-            <div class="mic-hint" v-if="status === 'idle'">点击开始识别</div>
-            <div class="mic-hint" v-if="status === 'recording'">正在聆听...</div>
+            <div class="mic-hint" v-if="status === 'idle'">点击识别系统音频</div>
+            <div class="mic-hint" v-if="status === 'recording'">点击停止识别</div>
             <div class="mic-hint" v-if="status === 'processing'">识别中...</div>
           </div>
           <canvas ref="canvasRef" class="waveform" :class="{ 'waveform-active': status === 'recording' }"></canvas>
@@ -299,7 +386,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div class="result-section" v-if="status === 'no-result'">
+      <div class="result-section" v-if="noResult">
         <div class="result-empty">未识别到匹配的歌曲，请重试</div>
       </div>
 
@@ -366,6 +453,52 @@ onBeforeUnmount(() => {
           flex-direction: column;
           align-items: center;
           gap: 12Px;
+
+          .duration-control {
+            display: flex;
+            align-items: center;
+            gap: 10Px;
+
+            .duration-label {
+              font: 11Px SourceHanSansCN-Bold;
+              color: rgba(0, 0, 0, 0.5);
+              white-space: nowrap;
+            }
+
+            .duration-slider {
+              width: 100Px;
+              height: 3Px;
+              -webkit-appearance: none;
+              appearance: none;
+              background: rgba(0, 0, 0, 0.15);
+              border-radius: 2Px;
+              outline: none;
+              cursor: pointer;
+
+              &::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 12Px;
+                height: 12Px;
+                border-radius: 50%;
+                background: black;
+                cursor: pointer;
+              }
+            }
+
+            .duration-value {
+              font: 11Px SourceHanSansCN-Bold;
+              color: black;
+              min-width: 22Px;
+              text-align: right;
+            }
+          }
+
+          .stop-icon {
+            width: 22Px;
+            height: 22Px;
+            background: white;
+            border-radius: 3Px;
+          }
 
           .mic-btn {
             width: 80Px;

@@ -169,6 +169,7 @@ contextBridge.exposeInMainWorld('windowApi', {
     downloadUpdate: (url) => ipcRenderer.invoke('download-update', url),
     cancelDownloadUpdate: () => ipcRenderer.send('cancel-download-update'),
     setWindowTile,
+    getDesktopSources: () => ipcRenderer.invoke('get-desktop-sources'),
     manualCheckUpdate: () => ipcRenderer.invoke('manual-check-update'),
     autoDownloadUpdate: (url) => ipcRenderer.invoke('auto-download-update', url),
     onAutoUpdateStatus: (callback) => ipcRenderer.on('auto-update-status', callback),

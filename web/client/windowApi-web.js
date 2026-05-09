@@ -249,6 +249,8 @@ export function installWebWindowApi() {
       }
       return invoke('get-bili-fetch', [{ url, option: { ...options, headers } }])
     },
+    // Web 端无 desktopCapturer，返回 undefined 以便组件判断环境
+    getDesktopSources: undefined,
   }
 
   document.documentElement.classList.add('hydrogen-web')

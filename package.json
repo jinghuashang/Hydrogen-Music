@@ -1,7 +1,7 @@
 {
   "name": "hydrogenmusic",
   "private": true,
-  "version": "0.1.6c",
+  "version": "0.1.7",
   "main": "background.js",
   "author": "Kaidesuyo",
   "contributors": [
@@ -22,6 +22,7 @@
     "vercel-build": "npm run web:build"
   },
   "dependencies": {
+    "@neteasecloudmusicapienhanced/api": "^4.32.0",
     "axios": "^1.2.0",
     "cors": "^2.8.5",
     "dayjs": "^1.11.6",
@@ -37,7 +38,7 @@
     "marked": "^18.0.3",
     "music-metadata": "^7.13.0",
     "nanoid": "^3.3.4",
-    "@neteasecloudmusicapienhanced/api": "^4.32.0",
+    "node-taglib-sharp": "^6.0.3",
     "normalize.css": "^8.0.1",
     "pinia": "^2.0.23",
     "pinia-plugin-persistedstate": "^3.0.1",

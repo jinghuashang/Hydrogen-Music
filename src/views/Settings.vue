@@ -80,6 +80,9 @@ const appVersion = ref('')
 const isCheckingUpdate = ref(false)
 const unblockEnabled = ref(false)
 const syncProfileToNas = ref(false)
+const downloadCover = ref(false)
+const downloadInfo = ref(false)
+const downloadLyric = ref(false)
 const showNasSync = isWebClient && !isVercelDeployment()
 /** 渲染进程用于文案：Linux/Web 下目录选择器或路径习惯与 Windows 不同 */
 const isLinuxLikePath =
@@ -121,6 +124,9 @@ onActivated(() => {
             unblockEnabled.value = settings.unblock.enabled
         }
         syncProfileToNas.value = !!settings.local?.syncProfileToNas
+        downloadCover.value = !!settings.local?.downloadCover
+        downloadInfo.value = !!settings.local?.downloadInfo
+        downloadLyric.value = !!settings.local?.downloadLyric
         const m = settings.music || {}
         if (Object.prototype.hasOwnProperty.call(m, 'coverBlur')) playerStore.coverBlur = !!m.coverBlur
         if (Object.prototype.hasOwnProperty.call(m, 'lyricBlur')) playerStore.lyricBlur = !!m.lyricBlur
@@ -146,6 +152,9 @@ const setAppSettings = async () => {
             downloadFolder: downloadFolder.value,
             localFolder: localFolder.value,
             syncProfileToNas: syncProfileToNas.value,
+            downloadCover: downloadCover.value,
+            downloadInfo: downloadInfo.value,
+            downloadLyric: downloadLyric.value,
         },
         shortcuts: shortcutsList.value,
         other: {
@@ -156,7 +165,7 @@ const setAppSettings = async () => {
         },
         unblock: {
             enabled: unblockEnabled.value,
-        }
+        },
     }
     const sent = windowApi.setSettings(JSON.stringify(settings))
     if (sent && typeof sent.then === 'function') await sent
@@ -582,6 +591,48 @@ const toggleUnblock = () => {
                                         {{ syncProfileToNas ? '已开启' : '已关闭' }}</div>
                                     <Transition name="toggle">
                                         <div class="toggle-on" v-show="syncProfileToNas"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-item">
+                    <h2 class="item-title">下载</h2>
+                    <div class="line"></div>
+                    <div class="item-options">
+                        <div class="option">
+                            <div class="option-name">下载歌曲封面</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="downloadCover = !downloadCover; setAppSettings()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': downloadCover }">
+                                        {{ downloadCover ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="downloadCover"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option">
+                            <div class="option-name">下载歌曲信息</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="downloadInfo = !downloadInfo; setAppSettings()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': downloadInfo }">
+                                        {{ downloadInfo ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="downloadInfo"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option">
+                            <div class="option-name">下载歌词</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="downloadLyric = !downloadLyric; setAppSettings()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': downloadLyric }">
+                                        {{ downloadLyric ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="downloadLyric"></div>
                                     </Transition>
                                 </div>
                             </div>

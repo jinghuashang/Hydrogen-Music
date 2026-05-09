@@ -17,6 +17,9 @@ function defaultSettings() {
       downloadFolder: null,
       localFolder: [],
       syncProfileToNas: false,
+      downloadCover: false,
+      downloadInfo: false,
+      downloadLyric: false,
     },
     shortcuts: [
       { id: 'play', name: '播放/暂停', shortcut: 'CommandOrControl+P', globalShortcut: 'CommandOrControl+Alt+P' },
