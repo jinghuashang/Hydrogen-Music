@@ -233,14 +233,19 @@ function checkForGithubUpdate(win) {
 function autoDownloadAndInstall(win, url) {
     const https = require('https')
     const fs = require('fs')
-    const { exec } = require('child_process')
     const os = require('os')
 
     const tempDir = os.tmpdir()
     const fileName = url.split('/').pop() || 'Hydrogen.Music.Setup.exe'
     const savePath = path.join(tempDir, fileName)
 
-    win.webContents.send('auto-update-status', { status: 'downloading', progress: 0 })
+    const formatSize = (bytes) => {
+        if (bytes < 1024) return bytes + ' B'
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+        return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+    }
+
+    win.webContents.send('auto-update-status', { status: 'downloading', progress: 0, totalSize: 0, downloadedSize: 0 })
 
     const followRedirect = (redirectUrl) => {
         https.get(redirectUrl, (res) => {
@@ -260,7 +265,12 @@ function autoDownloadAndInstall(win, url) {
                 file.write(chunk)
                 if (total > 0) {
                     const progress = Math.round(downloaded / total * 100)
-                    win.webContents.send('auto-update-status', { status: 'downloading', progress })
+                    win.webContents.send('auto-update-status', {
+                        status: 'downloading',
+                        progress,
+                        totalSize: formatSize(total),
+                        downloadedSize: formatSize(downloaded),
+                    })
                     win.setProgressBar(progress / 100)
                 }
             })
@@ -268,12 +278,10 @@ function autoDownloadAndInstall(win, url) {
                 file.end()
                 win.setProgressBar(-1)
                 win.webContents.send('auto-update-status', { status: 'installing' })
-                // 运行安装程序
-                exec(`"${savePath}"`, (error) => {
-                    if (error) {
-                        win.webContents.send('auto-update-status', { status: 'failed', error: '安装失败' })
-                    }
-                })
+                // 启动安装程序并退出应用
+                const { shell } = require('electron')
+                shell.openPath(savePath)
+                setTimeout(() => { app.exit(0) }, 500)
             })
             res.on('error', () => {
                 file.close()

@@ -10,6 +10,8 @@
   const isInstalling = computed(() => otherStore.autoUpdateStatus === 'installing')
   const isFailed = computed(() => otherStore.autoUpdateStatus === 'failed')
   const autoProgress = computed(() => otherStore.autoUpdateProgress)
+  const totalSize = computed(() => otherStore.autoUpdateTotalSize)
+  const downloadedSize = computed(() => otherStore.autoUpdateDownloadedSize)
 
   const formattedReleaseBody = computed(() => {
     if (!otherStore.releaseBody) return '暂无更新说明'
@@ -77,8 +79,11 @@
           <div class="progress-bar">
             <div class="progress-fill" :style="{width: autoProgress + '%'}"></div>
           </div>
-          <span class="progress-text" v-if="isAutoDownloading">下载中 {{ autoProgress }}%</span>
-          <span class="progress-text" v-else-if="isInstalling">正在安装，即将重启...</span>
+          <div class="progress-info" v-if="isAutoDownloading">
+            <span class="progress-text">下载中 {{ autoProgress }}%</span>
+            <span class="progress-size" v-if="totalSize">{{ downloadedSize }} / {{ totalSize }}</span>
+          </div>
+          <span class="progress-text" v-else-if="isInstalling">下载完成，正在启动安装程序...</span>
           <span class="progress-text error" v-else-if="isFailed">{{ otherStore.autoUpdateError || '更新失败' }}</span>
         </div>
         <div class="download-section" v-else-if="otherStore.updateIsWindows && otherStore.updateDownloadUrl">
@@ -232,6 +237,19 @@
               height: 100%;
               background-color: rgba(255, 255, 255, 0.8);
               transition: width 0.2s;
+            }
+          }
+          .progress-info {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 4px;
+            .progress-text {
+              font: 11px SourceHanSansCN-Bold;
+              color: rgba(255, 255, 255, 0.6);
+            }
+            .progress-size {
+              font: 11px SourceHanSansCN-Bold;
+              color: rgba(255, 255, 255, 0.4);
             }
           }
           .progress-text {

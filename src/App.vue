@@ -37,6 +37,8 @@
   windowApi.onAutoUpdateStatus((event, data) => {
     if (data.status === 'downloading') {
       otherStore.autoUpdateProgress = data.progress
+      otherStore.autoUpdateTotalSize = data.totalSize || ''
+      otherStore.autoUpdateDownloadedSize = data.downloadedSize || ''
     } else if (data.status === 'installing') {
       otherStore.autoUpdateStatus = 'installing'
     } else if (data.status === 'failed') {

@@ -95,6 +95,8 @@ export const useOtherStore = defineStore('otherStore', {
           releaseBody: '',
           autoUpdateStatus: null,
           autoUpdateProgress: 0,
+          autoUpdateTotalSize: '',
+          autoUpdateDownloadedSize: '',
           autoUpdateError: null,
         }
     },
