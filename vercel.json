@@ -1,4 +1,5 @@
 {
+  "buildCommand": "npm run web:build",
   "outputDirectory": "web/dist",
   "rewrites": [
     {
