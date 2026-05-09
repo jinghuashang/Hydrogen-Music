@@ -95,51 +95,68 @@ const createWindow = () => {
         return 'started'
     })
     ipcMain.handle('manual-check-update', async () => {
-        return new Promise((resolve) => {
-            const https = require('https')
-            const currentVersion = require('./package.json').version
-            const options = {
-                hostname: 'api.github.com',
-                path: '/repos/jinghuashang/Hydrogen-Music/releases/latest',
-                headers: {
-                    'User-Agent': 'Hydrogen-Music',
-                    'Accept': 'application/vnd.github.v3+json'
+        const https = require('https')
+        const currentVersion = require('./package.json').version
+        const settings = settingsStore.get('settings')
+        const proxy = settings?.other?.updateProxy || ''
+
+        function fetchRelease(urlStr) {
+            return new Promise((resolve, reject) => {
+                const { URL } = require('url')
+                const parsed = new URL(urlStr)
+                const options = {
+                    hostname: parsed.hostname,
+                    port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+                    path: parsed.pathname + parsed.search,
+                    headers: {
+                        'User-Agent': 'Hydrogen-Music',
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                }
+                const req = https.get(options, (res) => {
+                    let data = ''
+                    res.on('data', chunk => data += chunk)
+                    res.on('end', () => {
+                        try { resolve(JSON.parse(data)) } catch (e) { reject(e) }
+                    })
+                })
+                req.on('error', reject)
+                req.end()
+            })
+        }
+
+        const apiUrl = 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
+        let release
+        try {
+            release = await fetchRelease(apiUrl)
+        } catch (_) {
+            if (proxy) {
+                try { release = await fetchRelease(proxy + apiUrl) } catch (_) {}
+            }
+        }
+        if (!release) {
+            return { hasUpdate: false, error: '网络连接失败，请手动查看更新' }
+        }
+        try {
+            const latestVersion = release.tag_name.replace(/^v/, '')
+            if (isNewerVersion(latestVersion, currentVersion)) {
+                const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
+                let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
+                if (downloadUrl && proxy) {
+                    downloadUrl = proxy + downloadUrl
+                }
+                return {
+                    hasUpdate: true,
+                    version: latestVersion,
+                    downloadUrl,
+                    isWindows: process.platform === 'win32',
+                    releaseBody: release.body || ''
                 }
             }
-            const req = https.get(options, (res) => {
-                let data = ''
-                res.on('data', chunk => data += chunk)
-                res.on('end', () => {
-                    try {
-                        const release = JSON.parse(data)
-                        const latestVersion = release.tag_name.replace(/^v/, '')
-                        if (isNewerVersion(latestVersion, currentVersion)) {
-                            const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
-                            let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
-                            const settings = settingsStore.get('settings')
-                            if (downloadUrl && settings?.other?.updateProxy) {
-                                downloadUrl = settings.other.updateProxy + downloadUrl
-                            }
-                            resolve({
-                                hasUpdate: true,
-                                version: latestVersion,
-                                downloadUrl,
-                                isWindows: process.platform === 'win32',
-                                releaseBody: release.body || ''
-                            })
-                        } else {
-                            resolve({ hasUpdate: false })
-                        }
-                    } catch (e) {
-                        resolve({ hasUpdate: false, error: '检查更新失败' })
-                    }
-                })
-            })
-            req.on('error', () => {
-                resolve({ hasUpdate: false, error: '网络连接失败' })
-            })
-            req.end()
-        })
+            return { hasUpdate: false }
+        } catch (e) {
+            return { hasUpdate: false, error: '检查更新失败' }
+        }
     })
     //api初始化
     startNeteaseMusicApi()
@@ -153,41 +170,63 @@ const createWindow = () => {
 
 function checkForGithubUpdate(win) {
     const https = require('https')
+    const { URL } = require('url')
     const currentVersion = require('./package.json').version
-    const options = {
-        hostname: 'api.github.com',
-        path: '/repos/jinghuashang/Hydrogen-Music/releases/latest',
-        headers: {
-            'User-Agent': 'Hydrogen-Music',
-            'Accept': 'application/vnd.github.v3+json'
-        }
-    }
-    const req = https.get(options, (res) => {
-        let data = ''
-        res.on('data', chunk => data += chunk)
-        res.on('end', () => {
-            try {
-                const release = JSON.parse(data)
-                const latestVersion = release.tag_name.replace(/^v/, '')
-                if (isNewerVersion(latestVersion, currentVersion)) {
-                    const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
-                    let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
-                    const settings = settingsStore.get('settings')
-                    if (downloadUrl && settings?.other?.updateProxy) {
-                        downloadUrl = settings.other.updateProxy + downloadUrl
-                    }
-                    win.webContents.send('check-update', {
-                        version: latestVersion,
-                        downloadUrl,
-                        isWindows: process.platform === 'win32',
-                        releaseBody: release.body || ''
-                    })
+    const settings = settingsStore.get('settings')
+    const proxy = settings?.other?.updateProxy || ''
+
+    function fetchRelease(urlStr) {
+        return new Promise((resolve, reject) => {
+            const parsed = new URL(urlStr)
+            const options = {
+                hostname: parsed.hostname,
+                port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+                path: parsed.pathname + parsed.search,
+                headers: {
+                    'User-Agent': 'Hydrogen-Music',
+                    'Accept': 'application/vnd.github.v3+json'
                 }
-            } catch (e) {}
+            }
+            const req = https.get(options, (res) => {
+                let data = ''
+                res.on('data', chunk => data += chunk)
+                res.on('end', () => {
+                    try { resolve(JSON.parse(data)) } catch (e) { reject(e) }
+                })
+            })
+            req.on('error', reject)
+            req.end()
         })
-    })
-    req.on('error', () => {})
-    req.end()
+    }
+
+    const apiUrl = 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
+    ;(async () => {
+        let release
+        try {
+            release = await fetchRelease(apiUrl)
+        } catch (_) {
+            if (proxy) {
+                try { release = await fetchRelease(proxy + apiUrl) } catch (_) {}
+            }
+        }
+        if (!release) return
+        try {
+            const latestVersion = release.tag_name.replace(/^v/, '')
+            if (isNewerVersion(latestVersion, currentVersion)) {
+                const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
+                let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
+                if (downloadUrl && proxy) {
+                    downloadUrl = proxy + downloadUrl
+                }
+                win.webContents.send('check-update', {
+                    version: latestVersion,
+                    downloadUrl,
+                    isWindows: process.platform === 'win32',
+                    releaseBody: release.body || ''
+                })
+            }
+        } catch (e) {}
+    })()
 }
 
 // 自动下载更新并安装
