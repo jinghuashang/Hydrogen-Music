@@ -192,6 +192,14 @@
     clearInterval(lyricInterval.value)
     const length = lyricsObjArr.value.length - 1
     lyricInterval.value = setInterval(() => {
+      if(lyricScroll.value) {
+        const realH = lyricScroll.value.clientHeight
+        const expectedOffset = -(initMax - realH)
+        if(realH > 0 && initOffset !== expectedOffset) {
+          initOffset = expectedOffset
+          if(lycCurrentIndex.value < 0) lineOffset.value = initOffset
+        }
+      }
       const lastIndex = lycCurrentIndex.value
       const currentSeek = currentMusic.value.seek()
       musicVideoCheck(currentSeek)
