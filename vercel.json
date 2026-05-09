@@ -5,6 +5,10 @@
     {
       "source": "/api/:match*",
       "destination": "https://neteasecloudmusicapi.jinghuashang.cn/:match*"
+    },
+    {
+      "source": "/ncm/:match*",
+      "destination": "https://neteasecloudmusicapi.jinghuashang.cn/:match*"
     }
   ]
 }
