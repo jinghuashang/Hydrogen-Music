@@ -145,7 +145,7 @@ const createWindow = () => {
         try {
             const latestVersion = release.tag_name.replace(/^v/, '')
             if (isNewerVersion(latestVersion, currentVersion)) {
-                const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
+                const exeAsset = release.assets.find(a => a.name.includes('Setup') && a.name.endsWith('.exe')) || release.assets.find(a => a.name.endsWith('.exe'))
                 let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
                 if (downloadUrl && proxy) {
                     downloadUrl = proxy + downloadUrl
@@ -225,7 +225,7 @@ function checkForGithubUpdate(win) {
         try {
             const latestVersion = release.tag_name.replace(/^v/, '')
             if (isNewerVersion(latestVersion, currentVersion)) {
-                const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
+                const exeAsset = release.assets.find(a => a.name.includes('Setup') && a.name.endsWith('.exe')) || release.assets.find(a => a.name.endsWith('.exe'))
                 let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
                 if (downloadUrl && proxy) {
                     downloadUrl = proxy + downloadUrl
