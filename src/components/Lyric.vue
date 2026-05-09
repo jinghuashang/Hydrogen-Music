@@ -1,5 +1,5 @@
 <script setup>
-  import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
+  import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
   import { changeProgress, musicVideoCheck, songTime } from '../utils/player'
   import { usePlayerStore } from '../store/playerStore'
   import { storeToRefs } from 'pinia'
@@ -30,7 +30,7 @@
   let lyricLastPosition = null
 
   const regNewLine = /\n/
-  const regTime = /\[\d{2}:\d{2}.\d{2,3}\]/
+  const regTime = /\[\d{2}:\d{2}\.\d{2,3}\]?/
 
   const formatLyricTime = (time => {
     const regMin = /.*:/
@@ -46,6 +46,14 @@
     }
     return Number(sec + '.' + ms)
   })
+
+  function extractTimestampAndText(line) {
+    const m = line.match(regTime)
+    if (!m) return null
+    const ts = m[0]
+    const rest = line.slice(ts.length).replace(/^\s+/, '')
+    return { timestamp: ts, text: rest }
+  }
   const lyricTypeCheck = (arr, tarr, rarr) => {
     if(arr && lyricType.value.indexOf('noOriginal') != -1) lyricType.value.splice(lyricType.value.indexOf('noOriginal'), 1)
     else if(!arr && lyricType.value.indexOf('noOriginal') == -1) lyricType.value.push('noOriginal')
@@ -61,9 +69,10 @@
     for (let i = 0; i < arr.length; i++) {
       if(arr[i] == '') continue
       const obj = {}
-      const lyctime = arr[i].match(regTime)
-      if(!lyctime) continue
-      obj.lyric = arr[i].split(']')[1].trim() === '' ? '' : arr[i].split(']')[1].trim()
+      const extracted = extractTimestampAndText(arr[i])
+      if(!extracted) continue
+      const lyctime = extracted.timestamp
+      obj.lyric = extracted.text
       if(!obj.lyric) continue
       if(obj.lyric.indexOf('纯音乐') != -1 || obj.time > 4500) {
         lyricArr = [{lyric: "纯音乐，请欣赏", time: 0}, {lyric: "", time: Math.trunc(songList.value[currentIndex.value].dt / 1000)}]
@@ -72,8 +81,10 @@
       if(tarr && obj.lyric.indexOf('作词') == -1 && obj.lyric.indexOf('作曲') == -1) {
         for (let j = 0; j < tarr.length; j++) {
           if(tarr[j] == '') continue
-          if(tarr[j].indexOf(lyctime[0].substring(0, lyctime[0].length - 1)) != -1) {
-            obj.tlyric = tarr[j].split(']')[1].trim() === '' ? '' : tarr[j].split(']')[1].trim()
+          const tExtracted = extractTimestampAndText(tarr[j])
+          if(!tExtracted) continue
+          if(tExtracted.timestamp === lyctime) {
+            obj.tlyric = tExtracted.text || ''
             if(!obj.tlyric) {tarr.splice(j, 1);j--;continue}
             tarr.splice(j, 1)
             break
@@ -83,15 +94,17 @@
       if(rarr && obj.lyric.indexOf('作词') == -1 && obj.lyric.indexOf('作曲') == -1) {
         for (let k = 0; k < rarr.length; k++) {
           if(rarr[k] == '') continue
-          if(rarr[k].indexOf(lyctime[0].substring(0, lyctime[0].length - 1)) != -1) {
-            obj.rlyric = rarr[k].split(']')[1].trim() === '' ? '' : rarr[k].split(']')[1].trim()
+          const rExtracted = extractTimestampAndText(rarr[k])
+          if(!rExtracted) continue
+          if(rExtracted.timestamp === lyctime) {
+            obj.rlyric = rExtracted.text || ''
             if(!obj.rlyric) {rarr.splice(k, 1);k--;continue}
             rarr.splice(k, 1)
             break
           }
         }
       }
-      obj.time = lyctime ? formatLyricTime(lyctime[0].slice(1, lyctime[0].length - 1)) : 0
+      obj.time = formatLyricTime(lyctime.slice(1, lyctime.length - (lyctime.endsWith(']') ? 1 : 0)))
       if (!(obj.lyric === '')) lyricArr.push(obj)
     }
     function sortBy (field) {
@@ -147,7 +160,7 @@
     size = (parseInt((lyricType.value.indexOf('noOriginal') == -1 && lyricType.value.indexOf('original') != -1 ? lyricSize.value : 0)) + parseInt((lyricType.value.indexOf('noTrans') == -1 && lyricType.value.indexOf('trans') != -1 ? tlyricSize.value : 0)) + parseInt((lyricType.value.indexOf('noRoma') == -1 && lyricType.value.indexOf('roma') != -1 ? rlyricSize.value : 0))) * 1.5 + 30
     initMax = lyricsObjArr.value.length * size
     heightVal.value = initMax
-    initOffset = -(initMax - 260)
+    initOffset = -(initMax - getContainerHeight())
     let offset = (lycCurrentIndex.value + 1) * size
     if(change) {
       lineOffset.value = initOffset - offset
@@ -165,9 +178,11 @@
     interludeAnimation.value = false
     lyricEle.value = document.getElementsByClassName('lyric-line')
     initMax = 0
-    setMaxHeight(false)
     minHeightVal.value = 0
-    lineOffset.value = initOffset
+    nextTick(() => {
+      setMaxHeight(false)
+      lineOffset.value = initOffset
+    })
     if(!lyricShow.value && !widgetState.value) {
       const changeTimer = setTimeout(() => {
         lyricShow.value = true
@@ -175,6 +190,10 @@
         clearTimeout(changeTimer)
       }, 400);
     }
+  }
+  const getContainerHeight = () => {
+    if(lyricScroll.value) return lyricScroll.value.clientHeight
+    return 260
   }
 
   const setLyricActive = () => {
@@ -211,6 +230,7 @@
             }
           }
         }
+        offset = 0
         for (let i = 0; i <= lycCurrentIndex.value; i++) {
           if(lyricEle.value[i])
             offset += lyricEle.value[i].clientHeight + 10
