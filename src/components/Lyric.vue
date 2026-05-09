@@ -308,7 +308,7 @@
       }, 3000);
   }
   onMounted(() => {
-    lyricScroll.value.addEventListener('wheel', handleWheel)
+    if(lyricScroll.value) lyricScroll.value.addEventListener('wheel', handleWheel)
   })
   onBeforeUnmount(() => {
     clearInterval(lyricInterval.value)

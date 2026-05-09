@@ -60,12 +60,12 @@
     <WindowControl v-if="!isWebClient" class="window-control"></WindowControl>
   </div>
   <Transition name="widget">
-    <div class="musicWidget" v-if="playerStore.songList" v-show="playerStore.widgetState">
+    <div class="musicWidget" v-if="playerStore.songList && playerStore.songList[playerStore.currentIndex]" v-show="playerStore.widgetState">
       <MusicWidget></MusicWidget>
     </div>
   </Transition>
   <Transition name="player">
-    <div class="musicPlayer" v-if="playerStore.songList" v-show="!playerStore.widgetState">
+    <div class="musicPlayer" v-if="playerStore.songList && playerStore.songList[playerStore.currentIndex]" v-show="!playerStore.widgetState">
       <MusicPlayer></MusicPlayer>
     </div>
   </Transition>

@@ -21,10 +21,8 @@
 
 <template>
   <div class="title-container">
-    <Transition name=fade>
-      <div class="title-logo" @click="backHome()">Hydrogen</div>
-    </Transition>
-    <div class="title-player" :class="{'title-player-in': videoIsPlaying && !playerShow}" v-if="musicVideo && songList" @click="playerShow = true">
+    <div class="title-logo" @click="backHome()">Hydrogen</div>
+    <div class="title-player" :class="{'title-player-in': videoIsPlaying && !playerShow}" v-if="musicVideo && songList && songList[currentIndex]" @click="playerShow = true">
       <div class="player-content" :class="{'player-content-in': videoIsPlaying && !playerShow}">
         <div class="cover">
           <img v-if="songList[currentIndex].type != 'local'" :src="songList[currentIndex].al.picUrl + '?param=100y100'" alt="">
@@ -47,8 +45,10 @@
   .title-container{
     position: relative;
     .title-logo{
-      font: 28Px Gilroy-ExtraBold;
+      font: 28Px Gilroy-ExtraBold, Arial, sans-serif;
       color: rgb(26, 26, 26);
+      position: relative;
+      z-index: 1;
     }
     .title-player{
       width: 0;
@@ -125,15 +125,5 @@
       visibility: visible;
       transition: 0.4s 0.8s cubic-bezier(.06,.52,.29,1);
     }
-  }
-  .fade-enter-active,
-  .fade-leave-active {
-    transition: 0.2s;
-  }
-
-  .fade-enter-from,
-  .fade-leave-to {
-    transform: scale(0.9);
-    opacity: 0;
   }
 </style>

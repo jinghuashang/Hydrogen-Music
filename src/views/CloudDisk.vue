@@ -19,7 +19,7 @@
 
   onMounted(() => {
     typeChange(1)
-    uploadCloudDiskFile.value.addEventListener('change', function (e) {
+    if(uploadCloudDiskFile.value) uploadCloudDiskFile.value.addEventListener('change', function (e) {
       let currentIndx = 0
       fileLength = this.files.length
       for (const item of this.files) {

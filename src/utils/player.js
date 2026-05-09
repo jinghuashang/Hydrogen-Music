@@ -560,9 +560,10 @@ export function musicVideoCheck(seek, update) {
                 musicVideoDOM.value.currentTime = vt
                 if(Math.abs(musicVideoDOM.value.currentTime - vt) > 1) return
                 currentTiming = currentMusicVideo.value.timing[i]
-                videoIsPlaying.value = true
+                if (playing.value) videoIsPlaying.value = true
                 // 仅迷你条模式下自动「切到视频层」；全屏播放器 (!widgetState) 下勿收起，否则封面进入播放页后会被立刻加上 player-hide
-                if (!update && widgetState.value) playerShow.value = false
+                // 仅在歌曲实际播放时才隐藏搜索栏，避免初始化时 seek=0 导致标题被 title-player 覆盖
+                if (!update && widgetState.value && playing.value) playerShow.value = false
                 return
             }
         }
