@@ -179,22 +179,27 @@ const persistWebSettingsFromForm = async () => {
     } catch (_) {}
 }
 
-onBeforeRouteLeave(async (to, from, next) => {
-    await setAppSettings()
-    await initSettings()
-    if (isWebClient && syncProfileToNas.value) {
-        try {
-            await saveWebProfileIfSyncEnabled()
-        } catch (e) {
-            console.warn('[Settings] 保存 NAS 账户配置失败', e)
-        }
-    }
+onBeforeRouteLeave((to, from, next) => {
     next()
     noticeOpen("设置已保存", 2)
+    const withTimeout = (p, ms = 3000) =>
+        Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))])
+    withTimeout(setAppSettings())
+        .then(() => withTimeout(initSettings()))
+        .then(() => {
+            if (isWebClient && syncProfileToNas.value) {
+                return saveWebProfileIfSyncEnabled()
+            }
+        })
+        .catch(e => console.warn('[Settings] 离开设置页保存失败', e))
 })
 
 const routerChange = () => {
-    router.back()
+    if (window.history.length > 1) {
+        router.back()
+    } else {
+        router.push('/')
+    }
 }
 
 function applyLocalFolderPath(type, raw) {

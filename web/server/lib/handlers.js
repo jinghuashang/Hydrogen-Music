@@ -223,7 +223,16 @@ function createHandlers({ broadcast }) {
   }
 
   const invokeHandlers = {
-    'get-app-version': async () => pkg.version,
+    'get-app-version': async () => {
+      try {
+        const res = await fetch('https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest')
+        if (!res.ok) return pkg.version
+        const data = await res.json()
+        return (data.tag_name || '').replace(/^v/, '') || pkg.version
+      } catch {
+        return pkg.version
+      }
+    },
     'get-image-base64': async (_e, filePath) => {
       const data = await parseFile(filePath)
       if (data.common.picture) {
