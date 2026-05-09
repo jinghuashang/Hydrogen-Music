@@ -98,16 +98,9 @@ const createWindow = () => {
         return new Promise((resolve) => {
             const https = require('https')
             const currentVersion = require('./package.json').version
-            const settings = settingsStore.get('settings')
-            const proxy = settings?.other?.updateProxy || ''
-            const apiUrl = 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
-            const fetchUrl = proxy ? proxy + apiUrl : apiUrl
-            const { URL } = require('url')
-            const parsed = new URL(fetchUrl)
             const options = {
-                hostname: parsed.hostname,
-                port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
-                path: parsed.pathname + parsed.search,
+                hostname: 'api.github.com',
+                path: '/repos/jinghuashang/Hydrogen-Music/releases/latest',
                 headers: {
                     'User-Agent': 'Hydrogen-Music',
                     'Accept': 'application/vnd.github.v3+json'
@@ -123,8 +116,9 @@ const createWindow = () => {
                         if (isNewerVersion(latestVersion, currentVersion)) {
                             const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
                             let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
-                            if (downloadUrl && proxy) {
-                                downloadUrl = proxy + downloadUrl
+                            const settings = settingsStore.get('settings')
+                            if (downloadUrl && settings?.other?.updateProxy) {
+                                downloadUrl = settings.other.updateProxy + downloadUrl
                             }
                             resolve({
                                 hasUpdate: true,
@@ -159,17 +153,10 @@ const createWindow = () => {
 
 function checkForGithubUpdate(win) {
     const https = require('https')
-    const { URL } = require('url')
     const currentVersion = require('./package.json').version
-    const settings = settingsStore.get('settings')
-    const proxy = settings?.other?.updateProxy || ''
-    const apiUrl = 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
-    const fetchUrl = proxy ? proxy + apiUrl : apiUrl
-    const parsed = new URL(fetchUrl)
     const options = {
-        hostname: parsed.hostname,
-        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
-        path: parsed.pathname + parsed.search,
+        hostname: 'api.github.com',
+        path: '/repos/jinghuashang/Hydrogen-Music/releases/latest',
         headers: {
             'User-Agent': 'Hydrogen-Music',
             'Accept': 'application/vnd.github.v3+json'
@@ -185,8 +172,9 @@ function checkForGithubUpdate(win) {
                 if (isNewerVersion(latestVersion, currentVersion)) {
                     const exeAsset = release.assets.find(a => a.name.endsWith('.exe'))
                     let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
-                    if (downloadUrl && proxy) {
-                        downloadUrl = proxy + downloadUrl
+                    const settings = settingsStore.get('settings')
+                    if (downloadUrl && settings?.other?.updateProxy) {
+                        downloadUrl = settings.other.updateProxy + downloadUrl
                     }
                     win.webContents.send('check-update', {
                         version: latestVersion,
