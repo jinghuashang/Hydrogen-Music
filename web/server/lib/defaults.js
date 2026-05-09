@@ -32,6 +32,7 @@ function defaultSettings() {
       globalShortcuts: true,
       quitApp: 'minimize',
       updateProxy: '',
+      externalUnblockUrl: '',
     },
     unblock: {
       enabled: true,

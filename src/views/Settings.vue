@@ -76,6 +76,7 @@ const newShortcut = ref([])
 const shortcutCharacter = ['=', '-', '~', '@', '#', '$', '[', ']', ';', "'", ',', '.', '/', '!'];
 const customFont = ref('')
 const updateProxy = ref('')
+const externalUnblockUrl = ref('')
 const appVersion = ref('')
 const isCheckingUpdate = ref(false)
 const unblockEnabled = ref(false)
@@ -118,6 +119,7 @@ onActivated(() => {
         quitApp.value = settings.other.quitApp
         customFont.value = settings.other.customFont
         updateProxy.value = settings.other.updateProxy || ''
+        externalUnblockUrl.value = settings.other.externalUnblockUrl || ''
         if(settings.unblock) {
             unblockEnabled.value = settings.unblock.enabled
             unblockPort.value = settings.unblock.port || '36531:36532'
@@ -155,6 +157,7 @@ const setAppSettings = async () => {
             quitApp: quitApp.value,
             customFont: customFont.value,
             updateProxy: updateProxy.value,
+            externalUnblockUrl: externalUnblockUrl.value,
         },
         unblock: {
             enabled: unblockEnabled.value,
@@ -676,13 +679,13 @@ const toggleUnblock = () => {
                                 <Selector v-model="quitApp" :options="quitAppOptions" @update:modelValue="persistWebSettingsFromForm"></Selector>
                             </div>
                         </div>
-                        <div class="option">
+                        <div class="option" v-if="!isWebClient">
                             <div class="option-name">更新加速地址</div>
                             <div class="option-operation">
                                 <input type="text" v-model="updateProxy" placeholder="留空不加速，如 https://gh.llkk.cc/" @change="persistWebSettingsFromForm()">
                             </div>
                         </div>
-                        <div class="option">
+                        <div class="option" v-if="!isWebClient">
                             <div class="option-name">解锁灰色歌曲 (UnblockNeteaseMusic)</div>
                             <div class="option-operation">
                                 <div class="toggle" @click="toggleUnblock()">
@@ -694,10 +697,16 @@ const toggleUnblock = () => {
                                 </div>
                             </div>
                         </div>
-                        <div class="option" v-if="unblockEnabled">
+                        <div class="option" v-if="!isWebClient && unblockEnabled">
                             <div class="option-name">代理端口 (HTTP:HTTPS)</div>
                             <div class="option-operation">
                                 <input v-model="unblockPort" name="unblockPort" @change="setAppSettings()">
+                            </div>
+                        </div>
+                        <div class="option" v-if="isWebClient">
+                            <div class="option-name">外部解锁服务地址</div>
+                            <div class="option-operation">
+                                <input type="text" v-model="externalUnblockUrl" placeholder="如 http://your-server:36531" @change="persistWebSettingsFromForm()">
                             </div>
                         </div>
                     </div>
@@ -708,7 +717,7 @@ const toggleUnblock = () => {
                     <img src="../assets/icon/icon.ico" alt="">
                 </div>
                 <div class="version">V{{ appVersion }}</div>
-                <div class="check-update-btn" @click="checkForUpdate()" :class="{ 'checking': isCheckingUpdate }">
+                <div v-if="!isWebClient" class="check-update-btn" @click="checkForUpdate()" :class="{ 'checking': isCheckingUpdate }">
                     {{ isCheckingUpdate ? '检查中...' : '检查更新' }}
                 </div>
                 <div class="app-author" @click="toGithub()">Made by Kaidesuyo</div>
