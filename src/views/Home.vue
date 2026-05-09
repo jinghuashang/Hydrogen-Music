@@ -45,7 +45,8 @@
           <!-- <div class="logout" @click="userLogout()">退出登录</div> -->
           <router-link class="button-home" :style="{color: router.currentRoute.value.name == 'homepage' ? 'black' : '#353535'}" to="/" v-if="userStore.homePage">首页</router-link>
           <router-link class="button-cloud" :style="{color: router.currentRoute.value.name == 'clouddisk' ? 'black' : '#353535'}" to="/cloud" v-if="userStore.cloudDiskPage">云盘</router-link>
-          <router-link class="button-music" :style="{color: router.currentRoute.value.name == 'mymusic' ? 'black' : '#353535'}" to="/mymusic" v-if="userStore.homePage || userStore.cloudDiskPage">我的音乐</router-link>
+          <router-link class="button-match" :style="{color: router.currentRoute.value.name == 'audiomatch' ? 'black' : '#353535'}" to="/audiomatch" v-if="userStore.audioMatchPage">听歌识曲</router-link>
+          <router-link class="button-music" :style="{color: router.currentRoute.value.name == 'mymusic' ? 'black' : '#353535'}" to="/mymusic" v-if="userStore.homePage || userStore.cloudDiskPage || userStore.audioMatchPage">我的音乐</router-link>
           <div class="user">
             <div class="user-container">
               <div class="user-head" @click="userStore.appOptionShow = true">
@@ -66,7 +67,7 @@
               </transition>
             </div>
           </div>
-          <div v-if="userStore.homePage && userStore.cloudDiskPage" v-show="router.currentRoute.value.name != 'search' && router.currentRoute.value.name != 'settings'" :class="{'router-tracker': true, 'router-tracker0': router.currentRoute.value.name == 'homepage', 'router-tracker1': router.currentRoute.value.name == 'clouddisk', 'router-tracker2': router.currentRoute.value.fullPath.split('/')[1] == 'mymusic' || router.currentRoute.value.fullPath.split('/')[1] == 'login'}">
+          <div v-show="router.currentRoute.value.name != 'search' && router.currentRoute.value.name != 'settings'" :class="{'router-tracker': true, 'router-tracker0': router.currentRoute.value.name == 'homepage', 'router-tracker1': router.currentRoute.value.name == 'clouddisk', 'router-tracker2': router.currentRoute.value.name == 'audiomatch', 'router-tracker3': router.currentRoute.value.fullPath.split('/')[1] == 'mymusic' || router.currentRoute.value.fullPath.split('/')[1] == 'login'}">
           </div>
         </div>
       </div>
@@ -106,6 +107,9 @@
       .button-cloud{
         margin-right: 40px;
       }
+      .button-match{
+        margin-right: 40px;
+      }
       .router-tracker{
         width: 14px;
         height: 2px;
@@ -121,6 +125,9 @@
       }
       .router-tracker2{
         transform: translateX(180px);
+      }
+      .router-tracker3{
+        transform: translateX(280px);
       }
       .user{
         position: absolute;

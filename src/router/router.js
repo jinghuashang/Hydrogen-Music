@@ -11,6 +11,7 @@ import RecommendSongs from '../components/RecommendSongs.vue'
 import LocalMusicDetail from '../components/LocalMusicDetail.vue'
 import SearchResult from '../views/SearchResult.vue'
 import Settings from '../views/Settings.vue'
+import AudioMatch from '../views/AudioMatch.vue'
 
 import { useUserStore } from '../store/userStore'
 import { useLibraryStore } from '../store/libraryStore'
@@ -158,6 +159,15 @@ const routes = [
         component: Settings,
         beforeEnter: (to, from, next) => {
             next()
+        }
+    },
+    {
+        path: '/audiomatch',
+        name: 'audiomatch',
+        component: AudioMatch,
+        beforeEnter: (to, from, next) => {
+            if(!userStore.audioMatchPage) next({name: 'mymusic'})
+            else next()
         }
     },
 ]

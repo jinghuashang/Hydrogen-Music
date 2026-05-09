@@ -652,6 +652,18 @@ const toggleUnblock = () => {
                             </div>
                         </div>
                         <div class="option">
+                            <div class="option-name">开启听歌识曲</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="userStore.audioMatchPage = !userStore.audioMatchPage">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': userStore.audioMatchPage }">
+                                        {{ userStore.audioMatchPage ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="userStore.audioMatchPage"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option">
                             <div class="option-name">自定义字体</div>
                             <div class="custom-font local-folder">
                                 <!-- <div class="custom-font-path">{{customFont ? customFont : '未设置'}}</div> -->
