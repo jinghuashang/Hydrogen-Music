@@ -309,6 +309,13 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
                     lyric.value = null
                     playNext()
                 }
+            }).catch(() => {
+                noticeOpen('当前歌曲无法播放', 2)
+                clearInterval(musicProgress)
+                playing.value = false
+                currentMusic.value = null
+                lyric.value = null
+                playNext()
             })
             getLyric(id).then(songLiric => {
                 lyric.value = songLiric

@@ -24,13 +24,16 @@ export function clearProxyCache() {}
 request.interceptors.request.use(async function (config) {
   // 解锁灰色歌曲：对 /song/url/v1 请求附加 unblock=true
   if (config.url === '/song/url/v1') {
+    let unblockOn = true
     try {
       const settings = await windowApi.getSettings()
-      if (settings?.unblock?.enabled !== false) {
-        config.params = config.params || {}
-        config.params.unblock = true
-      }
+      if (settings?.unblock?.enabled === false) unblockOn = false
     } catch (_) {}
+    if (unblockOn) {
+      config.params = config.params || {}
+      config.params.unblock = true
+      config.timeout = 30000
+    }
   }
   if (config.url != '/login/qr/check' && isLogin()) {
     const cookieStr = getNeteaseCookieStringForApi()
