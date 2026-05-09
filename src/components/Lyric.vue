@@ -201,7 +201,7 @@
           for (let i = 0; i < lycCurrentIndex.value; i++) {
             if(lyricEle.value[i]) offsetTop += lyricEle.value[i].offsetHeight + 10
           }
-          const target = offsetTop - containerH * 0.3
+          const target = offsetTop - containerH * 0.5
           expectedScrollTop = Math.max(0, target)
           lyricScroll.value.scrollTo({ top: expectedScrollTop, behavior: 'smooth' })
         }
@@ -246,7 +246,7 @@
         for (let i = 0; i < index; i++) {
           if(lyricEle.value[i]) offsetTop += lyricEle.value[i].offsetHeight + 10
         }
-        expectedScrollTop = Math.max(0, offsetTop - containerH * 0.3)
+        expectedScrollTop = Math.max(0, offsetTop - containerH * 0.5)
         lyricScroll.value.scrollTo({ top: expectedScrollTop, behavior: 'smooth' })
       }
     }
@@ -368,7 +368,7 @@
         display: none;
       }
       transition: 0.3s cubic-bezier(.30,0,.12,1);
-      padding-top: 30%;
+      padding-top: 50%;
       .lyric-line{
         margin-bottom: 10Px;
         width: 100%;
