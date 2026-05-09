@@ -78,6 +78,7 @@ function createHandlers({ broadcast }) {
   const settingsStore = createStore('settings')
   const lastPlaylistStore = createStore('lastPlaylist')
   const musicVideoStore = createStore('musicVideo')
+  const webProfileStore = createStore('webProfile')
 
   const downloadManager = createDownloadManager({ settingsStore, broadcast })
   const localScan = createLocalScan({ settingsStore, broadcast })
@@ -208,6 +209,7 @@ function createHandlers({ broadcast }) {
       settingsStore.set('settings', settings)
     }
     if (!settings.local) settings.local = { ...defaultSettings().local }
+    if (!Object.prototype.hasOwnProperty.call(settings.local, 'syncProfileToNas')) settings.local.syncProfileToNas = false
     return settings
   }
 
@@ -483,6 +485,17 @@ function createHandlers({ broadcast }) {
       kind: 'font',
       message: 'Web 版请输入字体文件在 NAS 上的绝对路径',
     }),
+    'get-web-profile': async () => {
+      return webProfileStore.get('profile') || null
+    },
+    'set-web-profile': async (_e, profile) => {
+      webProfileStore.set('profile', profile)
+      return true
+    },
+    'clear-web-profile': async () => {
+      webProfileStore.delete('profile')
+      return true
+    },
   }
 
   function dispatchSend(event, payload) {
@@ -504,7 +517,11 @@ function createHandlers({ broadcast }) {
         break
       case 'set-settings': {
         const next = typeof payload === 'string' ? JSON.parse(payload) : payload
+        const prev = settingsStore.get('settings')
         settingsStore.set('settings', next)
+        if (prev?.local?.syncProfileToNas && !next?.local?.syncProfileToNas) {
+          webProfileStore.delete('profile')
+        }
         break
       }
       case 'save-last-playlist':

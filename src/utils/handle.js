@@ -3,6 +3,7 @@ import { setCookies } from '../utils/authority'
 import { getUserProfile } from '../api/user'
 import { getUserLikelist } from './initApp'
 import { useUserStore } from '../store/userStore'
+import { saveWebProfileIfSyncEnabled } from './webProfileNas'
 
 const userStore = useUserStore(pinia)
 const { updateUser } = userStore
@@ -13,5 +14,6 @@ export function loginHandle(data, type) {
     getUserProfile().then(result => {
         updateUser(result.profile)
         getUserLikelist()
+        saveWebProfileIfSyncEnabled().catch(() => {})
     })
 }

@@ -16,6 +16,7 @@ function defaultSettings() {
       videoFolder: null,
       downloadFolder: null,
       localFolder: [],
+      syncProfileToNas: false,
     },
     shortcuts: [
       { id: 'play', name: '播放/暂停', shortcut: 'CommandOrControl+P', globalShortcut: 'CommandOrControl+Alt+P' },

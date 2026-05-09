@@ -8,7 +8,7 @@ import { usePlayerStore } from '../store/playerStore'
 import { useLocalStore } from '../store/localStore'
 import { storeToRefs } from 'pinia'
 import { insertCustomFontStyle } from './setFont'
-import { isHydrogenWeb } from './webProfileNas'
+import { isHydrogenWeb, pullWebProfileFromNas } from './webProfileNas'
 
 const userStore = useUserStore(pinia)
 const playerStore = usePlayerStore()
@@ -57,12 +57,13 @@ export const initSettings = async () => {
 }
 
 /**
- * Web：用户切回标签页后，重新拉取 settings.json。
+ * Web：用户切回标签页后，重新拉取 settings.json 与（若开启）NAS 账户副本。
  */
 export async function refreshWebRemoteState() {
     if (!isHydrogenWeb()) return
     try {
-        await initSettings()
+        const settings = await initSettings()
+        if (settings?.local?.syncProfileToNas) await pullWebProfileFromNas()
         if (isLogin()) {
             const result = await getUserProfile()
             updateUser(result.profile)
@@ -98,9 +99,12 @@ export const getUserLikelist = () => {
 //初始化
 export const init = async () => {
     try {
-        await initSettings()
+        const settings = await initSettings()
+        if (isHydrogenWeb() && settings?.local?.syncProfileToNas) {
+            await pullWebProfileFromNas()
+        }
     } catch (e) {
-        console.warn('[init] 设置拉取失败', e)
+        console.warn('[init] 设置或 NAS 账户同步拉取失败', e)
     }
     loadLastSong()
     if (isLogin()) {

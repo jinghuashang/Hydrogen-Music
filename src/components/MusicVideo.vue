@@ -5,6 +5,7 @@
   import { songTime2, loadMusicVideo, unloadMusicVideo } from '../utils/player';
   import {
     isHydrogenWeb,
+    saveWebProfileIfSyncEnabled,
     getBiliCookieForApi,
     persistFullBiliSessionCookieHeader,
     clearBiliStoredSession,
@@ -78,6 +79,7 @@
         clearBiliStoredSession()
         userStore.biliUser = null
         qrKey.value = null
+        saveWebProfileIfSyncEnabled().catch(() => {})
     }
   }
   const getQRCode = () => {
@@ -144,6 +146,7 @@
     if(userInfo.data.code == 0) {
         noticeOpen('登录成功', 2)
         userStore.biliUser = userInfo.data.data
+        saveWebProfileIfSyncEnabled().catch(() => {})
     } else {
         noticeOpen('登录失败', 2)
         loginOrLogout()
