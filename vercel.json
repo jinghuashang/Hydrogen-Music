@@ -1,4 +1,5 @@
 {
+  "outputDirectory": "web/dist",
   "rewrites": [
     {
       "source": "/api/:match*",
