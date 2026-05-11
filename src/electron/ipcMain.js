@@ -8,6 +8,37 @@ const Store = require('electron-store')
 const CancelToken = axios.CancelToken
 let cancel = null
 
+// 主进程顶层预加载 UNM 模块，避免打包后在 handler 内动态 require 失败
+let unmMatch = null
+try {
+    unmMatch = require('@unblockneteasemusic/server')
+    console.log('[unblock] UNM module preloaded successfully')
+} catch (e) {
+    console.error('[unblock] Failed to preload UNM module:', e.message)
+}
+
+// 验证 URL 是否为完整歌曲（非试听），通过 Content-Length 判断
+function verifyFullSong(url, minSize = 500 * 1024) {
+    return new Promise((resolve) => {
+        try {
+            const mod = url.startsWith('https') ? require('https') : require('http')
+            const req = mod.get(url, { timeout: 5000 }, (res) => {
+                if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+                    verifyFullSong(res.headers.location, minSize).then(resolve)
+                    return
+                }
+                const len = parseInt(res.headers['content-length'] || '0', 10)
+                res.resume()
+                resolve(len >= minSize)
+            })
+            req.on('error', () => resolve(true))
+            req.on('timeout', () => { req.destroy(); resolve(true) })
+        } catch {
+            resolve(true)
+        }
+    })
+}
+
 module.exports = IpcMainEvent = (win, app) => {
     const settingsStore = new Store({name: 'settings'})
     const lastPlaylistStore = new Store({name: 'lastPlaylist'})
@@ -444,11 +475,15 @@ module.exports = IpcMainEvent = (win, app) => {
         updateDownloadCancelled = true
     })
 
-    // 解锁灰色歌曲：主进程直连 UNM 音源匹配（打包后不受 ASAR / moduleDefs 影响）
+    // 解锁灰色歌曲：主进程 UNM 全源匹配（SELECT_MAX_BR 等所有源，选码率最高）
     ipcMain.handle('unblock-song-url', async (_e, { id, name, artist, album, duration }) => {
         if (!id || !name) return null
         try {
-            const unmMatch = require('@unblockneteasemusic/server')
+            const match = unmMatch || require('@unblockneteasemusic/server')
+            if (!match) {
+                console.error('[unblock] UNM module not available')
+                return null
+            }
             const songData = {
                 id: Number(id),
                 name,
@@ -456,9 +491,30 @@ module.exports = IpcMainEvent = (win, app) => {
                 album: { id: 0, name: album || '' },
                 duration: Number(duration) || 0,
             }
-            const resp = await unmMatch(Number(id), ['bodian', 'kuwo', 'kugou', 'qq', 'migu', 'bilibili'], songData)
-            if (resp && resp.url) return resp.url
-        } catch (_) {}
+            const sources = ['bodian', 'kuwo', 'kugou', 'qq', 'migu', 'bilibili']
+            console.log(`[unblock] IPC matching: ${name} (id=${id})`)
+
+            const prevMaxBr = process.env.SELECT_MAX_BR
+            process.env.SELECT_MAX_BR = 'true'
+            let resp
+            try {
+                resp = await match(Number(id), sources, songData)
+            } finally {
+                process.env.SELECT_MAX_BR = prevMaxBr
+            }
+
+            if (resp && resp.url) {
+                const isFull = await verifyFullSong(resp.url)
+                if (!isFull) {
+                    console.warn(`[unblock] IPC matched (trial): ${resp.source}`)
+                } else {
+                    console.log(`[unblock] IPC matched (full): ${resp.source}`)
+                }
+                return resp.url
+            }
+        } catch (e) {
+            console.error('[unblock] IPC match error:', e.message)
+        }
         return null
     })
 }

@@ -1,7 +1,7 @@
 {
   "name": "hydrogenmusic",
   "private": true,
-  "version": "0.1.7b",
+  "version": "0.1.7c",
   "main": "background.js",
   "author": "Kaidesuyo",
   "contributors": [
@@ -62,7 +62,16 @@
     "productName": "Hydrogen Music",
     "appId": "114514",
     "asar": true,
-    "asarUnpack": [],
+    "asarUnpack": [
+      "node_modules/@unblockneteasemusic/server/**",
+      "node_modules/@neteasecloudmusicapienhanced/unblockmusic-utils/**",
+      "node_modules/pino/**",
+      "node_modules/pino-pretty/**",
+      "node_modules/sonic-boom/**",
+      "node_modules/atomic-sleep/**",
+      "node_modules/on-exit-leak-free/**",
+      "node_modules/quick-format-unescaped/**"
+    ],
     "directories": {
       "output": "release/${version}"
     },

@@ -307,6 +307,7 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
                     try {
                         const song = (songList.value || [])[currentIndex.value]
                         if (song && song.name) {
+                            console.log(`[unblock] Trying IPC fallback for: ${song.name} (id=${id})`)
                             fallbackUrl = await windowApi.unblockSongUrl({
                                 id,
                                 name: song.name,
@@ -315,7 +316,9 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
                                 duration: song.dt || 0,
                             })
                         }
-                    } catch (_) {}
+                    } catch (e) {
+                        console.error('[unblock] IPC fallback error:', e)
+                    }
                     if (fallbackUrl) {
                         play(fallbackUrl, autoplay)
                     } else {
@@ -333,6 +336,7 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
                 try {
                     const song = (songList.value || [])[currentIndex.value]
                     if (song && song.name) {
+                        console.log(`[unblock] Request failed, trying IPC fallback for: ${song.name} (id=${id})`)
                         fallbackUrl = await windowApi.unblockSongUrl({
                             id,
                             name: song.name,
@@ -341,7 +345,9 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
                             duration: song.dt || 0,
                         })
                     }
-                } catch (_) {}
+                } catch (e) {
+                    console.error('[unblock] IPC fallback error:', e)
+                }
                 if (fallbackUrl) {
                     play(fallbackUrl, autoplay)
                 } else {
