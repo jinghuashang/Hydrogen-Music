@@ -1,4 +1,5 @@
 <script setup>
+  import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
   import Home from './views/Home.vue'
   import Title from './components/Title.vue'
   import SearchInput from './components/SearchInput.vue'
@@ -19,6 +20,87 @@
 
   const isWebClient =
     import.meta.env.VITE_WEB === 'true' || import.meta.env.VITE_WEB === '1'
+
+  const hasCurrentSong = computed(
+    () => !!(playerStore.songList && playerStore.songList[playerStore.currentIndex]),
+  )
+
+  /** Web：宽屏或系统全屏时，主页在左约 74%，播放器列在右约 26% */
+  const webHomeSplit = ref(false)
+
+  function isBrowserFullscreen() {
+    if (typeof document === 'undefined') return false
+    const d = document
+    return !!(
+      d.fullscreenElement ||
+      d.webkitFullscreenElement ||
+      d.mozFullScreenElement ||
+      d.msFullscreenElement
+    )
+  }
+
+  function refreshWebHomeSplit() {
+    if (!isWebClient) {
+      webHomeSplit.value = false
+      return
+    }
+    const w = typeof window !== 'undefined' ? window.innerWidth : 0
+    const wide = w >= 1180
+    const fullscreen = isBrowserFullscreen()
+    webHomeSplit.value =
+      wide &&
+      (fullscreen || w >= 1360) &&
+      !!playerStore.widgetState &&
+      hasCurrentSong.value
+  }
+
+  watch(
+    [() => playerStore.widgetState, hasCurrentSong],
+    () => {
+      refreshWebHomeSplit()
+    },
+    { flush: 'post' },
+  )
+
+  watch(
+    webHomeSplit,
+    (split) => {
+      const embed = !!(isWebClient && split)
+      playerStore.webHomeSplitEmbed = embed
+      if (embed) {
+        playerStore.videoIsPlaying = false
+        playerStore.playerShow = true
+      }
+    },
+    { immediate: true },
+  )
+
+  onMounted(() => {
+    refreshWebHomeSplit()
+    if (!isWebClient) return
+    window.addEventListener('resize', refreshWebHomeSplit)
+    document.addEventListener('fullscreenchange', refreshWebHomeSplit)
+    document.addEventListener('webkitfullscreenchange', refreshWebHomeSplit)
+  })
+
+  onUnmounted(() => {
+    if (!isWebClient) return
+    window.removeEventListener('resize', refreshWebHomeSplit)
+    document.removeEventListener('fullscreenchange', refreshWebHomeSplit)
+    document.removeEventListener('webkitfullscreenchange', refreshWebHomeSplit)
+  })
+
+  /** Web：从右侧嵌入栏进全屏用横向过渡，从底栏迷你条进全屏沿用原有纵向过渡 */
+  const fullPlayerTransitionName = computed(() => {
+    if (!isWebClient) return 'player'
+    return playerStore.fullPlayerOpenSource === 'webRightEmbed'
+      ? 'player-web-embed'
+      : 'player'
+  })
+
+  function onFullPlayerAfterLeave() {
+    playerStore.fullPlayerOpenSource = null
+  }
 
   windowApi.checkUpdate((event, version) => {
     otherStore.toUpdate = true
@@ -49,10 +131,23 @@
 </script>
 
 <template>
-  <div class="mainWindow">
-    <Transition name="home">
-      <Home class="home" v-show="playerStore.widgetState"></Home>
-    </Transition>
+  <div class="mainWindow" :class="{ 'mainWindow--web-split': webHomeSplit }">
+    <div class="mainWindow__content" :class="{ 'web-split-pane-home': webHomeSplit }">
+      <Transition name="home">
+        <Home class="home" v-show="playerStore.widgetState"></Home>
+      </Transition>
+    </div>
+    <div v-if="webHomeSplit" class="web-split-pane-player">
+      <Transition name="web-split-player">
+        <div
+          v-if="hasCurrentSong"
+          class="musicPlayer musicPlayer--web-split-pane"
+          key="web-home-embed-player"
+        >
+          <MusicPlayer embed-mode="webHomeLeft" />
+        </div>
+      </Transition>
+    </div>
   </div>
   <div class="globalWidget">
     <Title class="widget-title"></Title>
@@ -62,13 +157,24 @@
     <WindowControl v-if="!isWebClient" class="window-control"></WindowControl>
   </div>
   <Transition name="widget">
-    <div class="musicWidget" v-if="playerStore.songList && playerStore.songList[playerStore.currentIndex]" v-show="playerStore.widgetState">
+    <div
+      class="musicWidget"
+      v-if="playerStore.songList && playerStore.songList[playerStore.currentIndex]"
+      v-show="playerStore.widgetState && !webHomeSplit"
+    >
       <MusicWidget></MusicWidget>
     </div>
   </Transition>
-  <Transition name="player">
-    <div class="musicPlayer" v-if="playerStore.songList && playerStore.songList[playerStore.currentIndex]" v-show="!playerStore.widgetState">
-      <MusicPlayer></MusicPlayer>
+  <Transition
+    :name="fullPlayerTransitionName"
+    @after-leave="onFullPlayerAfterLeave"
+  >
+    <div
+      class="musicPlayer"
+      v-if="hasCurrentSong"
+      v-show="!playerStore.widgetState"
+    >
+      <MusicPlayer embed-mode="full" />
     </div>
   </Transition>
   <Transition name="video">
@@ -121,6 +227,67 @@
     .home{
       height: calc(100% - 78Px);
     }
+    &--web-split {
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      box-sizing: border-box;
+      /** 底部迷你条已隐藏，勿再预留 78px，否则左侧会出现空背景条 */
+      .home {
+        height: 100%;
+      }
+    }
+  }
+  .web-split-pane-player {
+    flex: 0 0 26%;
+    width: 26%;
+    max-width: 26%;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    overflow: visible;
+    z-index: 2;
+    box-sizing: border-box;
+  }
+
+  .web-split-player-enter-active {
+    transition: 0.55s cubic-bezier(0.4, 0, 0.12, 1);
+  }
+  .web-split-player-leave-active {
+    transition: 0.35s cubic-bezier(0.4, 0, 1, 1);
+  }
+  .web-split-player-enter-from {
+    opacity: 0;
+    transform: translateX(16px) scale(0.96);
+  }
+  .web-split-player-enter-to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  .web-split-player-leave-from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  .web-split-player-leave-to {
+    opacity: 0;
+    transform: translateX(12px) scale(0.98);
+  }
+  .mainWindow__content {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    /** 首页模块用 cqw 时以此为参照，避免 vw 跟全屏视口走导致分栏/超宽变形 */
+    container-type: inline-size;
+    container-name: home-pane;
+    &.web-split-pane-home {
+      flex: 0 0 74%;
+      width: 74%;
+      max-width: 74%;
+      position: relative;
+      z-index: 1;
+    }
   }
   .globalWidget{
     display: flex;
@@ -165,11 +332,15 @@
     box-shadow: 0 0 15Px 2Px rgba(189, 189, 189, 0.1);
   }
   .musicPlayer{
-    width: 100%;  
+    width: 100%;
     height: 100%;
     position: absolute;
     top: 0;
     left: 0;
+    &.musicPlayer--web-split-pane {
+      position: relative;
+      overflow: visible;
+    }
   }
   .videoPlayer{
     width: 100%;
@@ -221,6 +392,24 @@
   .player-leave-to {
     transform: translateY(100%);
   }
+
+  .player-web-embed-enter-active,
+  .player-web-embed-leave-active {
+    transition: 0.5s cubic-bezier(.14, .91, .58, 1);
+  }
+  .player-web-embed-enter-from {
+    transform: translateX(100%);
+  }
+  .player-web-embed-enter-to {
+    transform: translateX(0);
+  }
+  .player-web-embed-leave-from {
+    transform: translateX(0);
+  }
+  .player-web-embed-leave-to {
+    transform: translateX(100%);
+  }
+
   .video-enter-active,
   .video-leave-active {
     transition: 0.1s;

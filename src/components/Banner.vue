@@ -111,7 +111,7 @@
             </div>
         </div>
         <div class="banner-img" @mouseenter="bannerMouse(true)" @mouseleave="bannerMouse(false)">
-            <div class="img-box" :style="{left:`-${leftVal}vw`,transition:`${transitionTime}s`}">
+            <div class="img-box" :style="{left:`-${leftVal}cqw`,transition:`${transitionTime}s`}">
                 <template v-for="(item, index) in bannerList" :key="index">
                     <img v-if="item && (item.pic || item.imageUrl)" @click="bannerItem(item, index)" :src="(item.pic || item.imageUrl) + '?param=720y280'" alt="">
                 </template>
@@ -132,8 +132,8 @@
   .banner{
         position: relative;
         .banner-img{
-            width: 35vw;
-            height: 13.7vw;
+            width: 35cqw;
+            height: 13.7cqw;
             position: relative;
             overflow: hidden;
             .img-box{
@@ -146,8 +146,8 @@
                 top: 0px;
                 left: 0px;
                 img{
-                    width: 35vw;
-                    height: 13.7vw;
+                    width: 35cqw;
+                    height: 13.7cqw;
                     object-fit: cover;
                     flex-shrink: 0;
                     &:hover{
@@ -158,32 +158,32 @@
         }
         .selector-box{
             width: 100%;
-            height: 0.4vw;
+            height: 0.4cqw;
             display: flex;
             flex-direction: row;
             align-items: center;
             position: absolute;
-            bottom: -1vw;
+            bottom: -1cqw;
             .selector{
-                padding: 1.2vw 0.6vw 1.2vw 0;
+                padding: 1.2cqw 0.6cqw 1.2cqw 0;
                 &:hover{
                     cursor: pointer;
                     .selector-style{
-                        height: 0.3vw;
+                        height: 0.3cqw;
                         background-color: black;
                         opacity: 1;
                     }
                 }
                 .selector-style{
-                    width: 2.2vw;
+                    width: 2.2cqw;
                     height: 1px;
                     background-color: rgb(106, 106, 106);
                     opacity: 0.5;
                     transition: 0.3s;
                 }
                 .selector-style-active{
-                    width: 4.5vw;
-                    height: 0.3vw;
+                    width: 4.5cqw;
+                    height: 0.3cqw;
                     background-color: black;
                     opacity: 1;
                     transition-delay: 0.05s;
@@ -197,12 +197,12 @@
             justify-content: space-between;
             align-items: center;
             position: absolute;
-            top: -1.4vw;
+            top: -1.4cqw;
             left: 0;
             .banner-title{
-                padding: 0.1vw 4vw 0.1vw 0.2vw;
+                padding: 0.1cqw 4cqw 0.1cqw 0.2cqw;
                 background-color: black;
-                font: 0.65vw Geometos;
+                font: 0.65cqw Geometos;
                 color: white;
             }
             .banner-timer{
@@ -211,16 +211,16 @@
                 flex-direction: row;
                 align-items: center;
                 .line{
-                    width: 9vw;
+                    width: 9cqw;
                     height: 0.5px;
                     background-color: black;
                 }
                 .timer{
-                    width: 0.8vw;
-                    height: 0.8vw;
+                    width: 0.8cqw;
+                    height: 0.8cqw;
                     border: 1px solid black;
                     position: relative;
-                    right: -0.6vw;
+                    right: -0.6cqw;
                     transition: 0s;
                     .timer-animation{
                         width: 0px;
@@ -242,7 +242,7 @@
                         94%{opacity: 1;}
                         96%{opacity: 0;}
                         98%{opacity: 1;}
-                        100%{width: 0.8vw;;height: 0.8vw;;opacity: 0;}
+                        100%{width: 0.8cqw;height: 0.8cqw;opacity: 0;}
                     }
                 }
                 .timer-active{
@@ -252,20 +252,20 @@
             }
         }
         .banner-next{
-            width: 4vw;
-            height: 4vw;
+            width: 4cqw;
+            height: 4cqw;
             border: {
                 right: 1px solid black;
                 bottom: 1px solid black;
             };
             position: absolute;
-            right: -0.9vw;
-            bottom: -0.9vw;
+            right: -0.9cqw;
+            bottom: -0.9cqw;
             transition: 0.3s;
             &:hover{
                 cursor: pointer;
-                right: -1.1vw;
-                bottom: -1.1vw;
+                right: -1.1cqw;
+                bottom: -1.1cqw;
             }
         }
     }

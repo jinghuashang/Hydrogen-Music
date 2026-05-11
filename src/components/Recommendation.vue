@@ -73,8 +73,8 @@
 
 <style scoped lang="scss">
   .recommendation{
-    width: 27vw;
-    height: 13.6vw;
+    width: 27cqw;
+    height: 13.6cqw;
     background-color: rgba(255, 255, 255, 0.35);
     display: flex;
     flex-direction: row;
@@ -84,27 +84,27 @@
     }
     .rec-left{
         width: 50%;
-        margin-left: 2vw;
+        margin-left: 2cqw;
         position: relative;
         display: flex;
         align-items: center;
         .rec-title-border1{
-            width: 2.2vw;
-            height: 2.2vw;
+            width: 2.2cqw;
+            height: 2.2cqw;
             position: absolute;
-            top: 1vw;
+            top: 1cqw;
             left: 0px;
         }
         .rec-title-border2{
-            width: 2.2vw;
-            height: 2.2vw;
+            width: 2.2cqw;
+            height: 2.2cqw;
             position: absolute;
             right: 0px;
-            bottom: 1vw;
+            bottom: 1cqw;
         }
         .rec-title{
-            font: 3.7vw SourceHanSansCN-Heavy;
-            // font: 3.7vw Source Han Sans;
+            font: 3.7cqw SourceHanSansCN-Heavy;
+            // font: 3.7cqw Source Han Sans;
             font-weight: bolder;
             color: transparent;
             -webkit-text-stroke-width: 1px;
@@ -126,20 +126,20 @@
                 100%{opacity: 1;}
         }
         .rec-title-en{
-            font: 0.7vw Gilroy-ExtraBold;
+            font: 0.7cqw Gilroy-ExtraBold;
             position: absolute;
             width: 100%;
             text-align: center;
         }
     }
     .rec-middle{
-        margin-left: 1vw;
+        margin-left: 1cqw;
         width: 15%;
         display: flex;
         align-items: center;
         .rec-play-background{
-            width: 3.5vw;
-            height: 3.5vw;
+            width: 3.5cqw;
+            height: 3.5cqw;
             background: linear-gradient(135deg, #0000 25%, #000 0, #000 50%, #0000 0, #0000 75%, #000 0);
             background-size:5px 5px;
             opacity: 0.7;
@@ -149,8 +149,8 @@
             align-items: center;
             animation: rec-play-background 8s linear infinite;
             .rec-play{
-                width: 2.5vw;
-                height: 2.5vw;
+                width: 2.5cqw;
+                height: 2.5cqw;
                 transition: 0.2s;
                 &:hover{
                     transform: scale(1.08);
@@ -161,12 +161,12 @@
                 }
             }
             .rec-play-border{
-                width: 0.4vw;
-                height: 0.4vw;
+                width: 0.4cqw;
+                height: 0.4cqw;
                 background-color: black;
                 position: absolute;
             }
-            $borderOffset: -0.1vw;
+            $borderOffset: -0.1cqw;
             .rec-play-border1{
                 top: $borderOffset;
                 left: $borderOffset;
@@ -190,22 +190,22 @@
         }
     }
     .rec-right{
-        margin-right: 1.5vw;
+        margin-right: 1.5cqw;
         width: 35%;
         display: flex;
         align-items: center;
         .rec-date{
-            font: 4.7vw Gilroy-ExtraBold;
+            font: 4.7cqw Gilroy-ExtraBold;
         }
     }
     .rec-background{
-        width: 0.7vw;
-        height: 0.7vw;
+        width: 0.7cqw;
+        height: 0.7cqw;
         border-radius: 50%;
         background-color: rgba(204, 204, 204, 0.7);
         position: absolute;
-        top: 1vw;
-        right: 1vw;
+        top: 1cqw;
+        right: 1cqw;
     }
   }
 </style>

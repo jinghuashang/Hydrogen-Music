@@ -1,35 +1,65 @@
 <script setup>
+  import { computed } from 'vue'
   import Player from '../components/Player.vue'
   import Lyric from '../components/Lyric.vue'
   import MusicVideo from '../components/MusicVideo.vue';
   import PlayerVideo from '../components/PlayerVideo.vue';
   import { usePlayerStore } from '../store/playerStore';
+
+  const props = defineProps({
+    /** full：全屏播放页；webHomeLeft：Web 主页分栏时右侧嵌入的播放器列 */
+    embedMode: {
+      type: String,
+      default: 'full',
+      validator: (v) => v === 'full' || v === 'webHomeLeft',
+    },
+  })
+
   const playerStore = usePlayerStore()
+  const isEmbedWebHomeLeft = computed(() => props.embedMode === 'webHomeLeft')
 </script>
 
 <template>
-  <div class="music-player">
+  <div class="music-player" :class="{ 'music-player--embed-left': isEmbedWebHomeLeft }">
     <Transition name="fade3">
-      <div class="back-drop" :style="{'backgroundImage': 'url(' + playerStore.coverUrl + ')'}" v-if="playerStore.coverBlur && !playerStore.videoIsPlaying"></div>
+      <div
+        class="back-drop"
+        :style="{'backgroundImage': 'url(' + playerStore.coverUrl + ')'}"
+        v-if="!isEmbedWebHomeLeft && playerStore.coverBlur && !playerStore.videoIsPlaying"
+      ></div>
     </Transition>
-    <Player class="player-container" :class="{'player-hide': playerStore.videoIsPlaying && !playerStore.playerShow, 'player-blur': playerStore.videoIsPlaying ,'cover-blur': playerStore.coverBlur}"></Player>
-    <Lyric class="lyric-container" :class="{'lyric-hide': playerStore.videoIsPlaying && !playerStore.playerShow}"></Lyric>
+    <Player
+      class="player-container"
+      :web-home-left-embed="isEmbedWebHomeLeft"
+      :class="{
+        'player-hide': playerStore.videoIsPlaying && !playerStore.playerShow && !isEmbedWebHomeLeft,
+        'player-blur': playerStore.videoIsPlaying && !isEmbedWebHomeLeft,
+        'cover-blur': playerStore.coverBlur && !isEmbedWebHomeLeft,
+      }"
+    ></Player>
+    <Lyric v-if="!isEmbedWebHomeLeft" class="lyric-container" :class="{'lyric-hide': playerStore.videoIsPlaying && !playerStore.playerShow}"></Lyric>
     <Transition name="fade">
       <MusicVideo class="music-video" v-if="playerStore.addMusicVideo"></MusicVideo>
     </Transition>
     <Transition name="fade2">
-      <PlayerVideo class="back-video" v-show="playerStore.videoIsPlaying" v-if="playerStore.currentMusicVideo && playerStore.musicVideo"></PlayerVideo>
+      <PlayerVideo
+        class="back-video"
+        v-show="playerStore.videoIsPlaying"
+        v-if="!isEmbedWebHomeLeft && playerStore.currentMusicVideo && playerStore.musicVideo"
+      ></PlayerVideo>
     </Transition>
   </div>
 </template>
 
 <style scoped lang="scss">
-  @media screen and (max-aspect-ratio: 5/6) { 
-    .player-container{
-      display: none;
-    }
-    .lyric-container{
-      width: 100% !important;
+  @media screen and (max-aspect-ratio: 5/6) {
+    .music-player:not(.music-player--embed-left) {
+      .player-container{
+        display: none;
+      }
+      .lyric-container{
+        width: 100% !important;
+      }
     }
   }
   .music-player{
@@ -52,9 +82,11 @@
       z-index: 0;
       width: 120%;
       height: 120%;
-      background-size: contain;
+      background-position: center center;
+      background-size: cover;
+      background-repeat: no-repeat;
       filter: blur(50px);
-      transform: translate(-10%, -10%); //开启GPU硬件加速
+      transform: translate(-10%, -10%); // 略放大避免模糊裁切白边，兼开 GPU
       transition: 0.3s;
     }
     .back-drop::before{
@@ -167,5 +199,60 @@
   .fade2-enter-from,
   .fade2-leave-to {
     opacity: 0;
+  }
+
+  /** Web 主页分栏：背景透出外层 mainWindow，与右侧首页一致；无封面模糊底；允许右侧悬停工具栏与播放列表溢出显示 */
+  .music-player.music-player--embed-left {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 95Px 10Px 60Px 10Px;
+    overflow: visible !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    /** 分栏时音乐视频层勿用 fixed，否则会盖住整页（含左侧主页） */
+    .back-video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+    .player-container {
+      position: relative;
+      z-index: 1;
+      width: 0;
+      height: 0;
+      opacity: 0;
+      max-width: 100%;
+      margin: 0 auto;
+      animation: web-embed-player-in 0.72s 0.14s cubic-bezier(0.4, 0, 0.12, 1) forwards;
+      @keyframes web-embed-player-in {
+        0% {
+          width: 0;
+          height: 0;
+          opacity: 0;
+          transform: scale(0.94);
+        }
+        40% {
+          width: min(42vh, 100%);
+          height: 0;
+          opacity: 1;
+          transform: scale(1);
+        }
+        100% {
+          width: min(42vh, 100%);
+          height: 100%;
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+    }
+    .player-hide {
+      animation: none !important;
+    }
   }
 </style>

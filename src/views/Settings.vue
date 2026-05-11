@@ -639,7 +639,7 @@ const toggleUnblock = () => {
                         </div>
                     </div>
                 </div>
-                <div class="settings-item">
+                <div class="settings-item" v-if="!isWebClient">
                     <h2 class="item-title">快捷键</h2>
                     <div class="line"></div>
                     <div class="item-options" tabindex='0' @keydown="inputShortcut($event)">
