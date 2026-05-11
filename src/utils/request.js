@@ -2,8 +2,10 @@ import axios from "axios";
 import { isLogin, getNeteaseCookieStringForApi } from '../utils/authority'
 import pinia from "../store/pinia";
 import { useLibraryStore } from '../store/libraryStore'
+import { usePlayerStore } from '../store/playerStore'
 
 const libraryStore = useLibraryStore(pinia)
+const playerStore = usePlayerStore(pinia)
 
 import { noticeOpen } from "./dialog";
 
@@ -22,7 +24,7 @@ export function clearProxyCache() {}
 
 // 请求拦截器
 request.interceptors.request.use(async function (config) {
-  // 解锁灰色歌曲：对 /song/url/v1 请求附加 unblock=true
+  // 解锁灰色歌曲：对 /song/url/v1 请求附加 unblock=true 和歌曲元数据
   if (config.url === '/song/url/v1') {
     let unblockOn = true
     try {
@@ -33,6 +35,25 @@ request.interceptors.request.use(async function (config) {
       config.params = config.params || {}
       config.params.unblock = true
       config.timeout = 30000
+      // 附带歌曲元数据供解灰源匹配（绕过网易云被版权方下架后 API 返回 name:null）
+      try {
+        const list = playerStore.songList
+        if (list && list.length) {
+          const song = list[playerStore.currentIndex]
+          if (song && song.name) {
+            config.params.unblock_name = song.name
+            if (song.ar && song.ar.length) {
+              config.params.unblock_artist = song.ar.map(a => a.name).join('/')
+            }
+            if (song.al && song.al.name) {
+              config.params.unblock_album = song.al.name
+            }
+            if (song.dt) {
+              config.params.unblock_duration = song.dt
+            }
+          }
+        }
+      } catch (_) {}
     }
   }
   if (config.url != '/login/qr/check' && isLogin()) {
