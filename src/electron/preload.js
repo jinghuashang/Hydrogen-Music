@@ -116,6 +116,7 @@ function setWindowTile(title) {
     ipcRenderer.send('set-window-title', title)
 }
 contextBridge.exposeInMainWorld('windowApi', {
+    unblockSongUrl: (payload) => ipcRenderer.invoke('unblock-song-url', payload),
     windowMin,
     windowMax,
     windowClose,

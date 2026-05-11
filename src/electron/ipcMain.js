@@ -443,4 +443,22 @@ module.exports = IpcMainEvent = (win, app) => {
     ipcMain.on('cancel-download-update', () => {
         updateDownloadCancelled = true
     })
+
+    // 解锁灰色歌曲：主进程直连 UNM 音源匹配（打包后不受 ASAR / moduleDefs 影响）
+    ipcMain.handle('unblock-song-url', async (_e, { id, name, artist, album, duration }) => {
+        if (!id || !name) return null
+        try {
+            const unmMatch = require('@unblockneteasemusic/server')
+            const songData = {
+                id: Number(id),
+                name,
+                artists: (artist || name).split('/').map((n, i) => ({ id: i, name: n.trim() })),
+                album: { id: 0, name: album || '' },
+                duration: Number(duration) || 0,
+            }
+            const resp = await unmMatch(Number(id), ['bodian', 'kuwo', 'kugou', 'qq', 'migu', 'bilibili'], songData)
+            if (resp && resp.url) return resp.url
+        } catch (_) {}
+        return null
+    })
 }

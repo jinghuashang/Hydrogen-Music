@@ -297,10 +297,53 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
                 lyric.value = songLiric
             })
         } else if (unblockOn) {
-            getMusicUrl(id, quality.value).then(songInfo => {
+            getMusicUrl(id, quality.value).then(async songInfo => {
                 if (songInfo.data[0].url) {
                     play(songInfo.data[0].url, autoplay)
                     setSongLevel(songInfo.data[0].level)
+                } else {
+                    // API 未返回 URL，尝试主进程 IPC 直连 UNM 匹配
+                    let fallbackUrl = null
+                    try {
+                        const song = (songList.value || [])[currentIndex.value]
+                        if (song && song.name) {
+                            fallbackUrl = await windowApi.unblockSongUrl({
+                                id,
+                                name: song.name,
+                                artist: song.ar ? song.ar.map(a => a.name).join('/') : '',
+                                album: song.al ? song.al.name : '',
+                                duration: song.dt || 0,
+                            })
+                        }
+                    } catch (_) {}
+                    if (fallbackUrl) {
+                        play(fallbackUrl, autoplay)
+                    } else {
+                        noticeOpen('当前歌曲无法播放', 2)
+                        clearInterval(musicProgress)
+                        playing.value = false
+                        currentMusic.value = null
+                        lyric.value = null
+                        playNext()
+                    }
+                }
+            }).catch(async () => {
+                // 请求失败也尝试 IPC 兜底
+                let fallbackUrl = null
+                try {
+                    const song = (songList.value || [])[currentIndex.value]
+                    if (song && song.name) {
+                        fallbackUrl = await windowApi.unblockSongUrl({
+                            id,
+                            name: song.name,
+                            artist: song.ar ? song.ar.map(a => a.name).join('/') : '',
+                            album: song.al ? song.al.name : '',
+                            duration: song.dt || 0,
+                        })
+                    }
+                } catch (_) {}
+                if (fallbackUrl) {
+                    play(fallbackUrl, autoplay)
                 } else {
                     noticeOpen('当前歌曲无法播放', 2)
                     clearInterval(musicProgress)
@@ -309,13 +352,6 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
                     lyric.value = null
                     playNext()
                 }
-            }).catch(() => {
-                noticeOpen('当前歌曲无法播放', 2)
-                clearInterval(musicProgress)
-                playing.value = false
-                currentMusic.value = null
-                lyric.value = null
-                playNext()
             })
             getLyric(id).then(songLiric => {
                 lyric.value = songLiric
