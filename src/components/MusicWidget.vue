@@ -33,6 +33,7 @@
   }
 
   const showPlayer = () => {
+    playerStore.fullPlayerOpenSource = 'widget'
     playerStore.widgetState = false
     playerStore.playerShow = true
     lyricShow.value = true

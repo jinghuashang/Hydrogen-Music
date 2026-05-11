@@ -13,6 +13,14 @@
   const userStore = useUserStore()
   const localStore = useLocalStore()
   const playerStore = usePlayerStore()
+  const props = defineProps({
+    /** Web 主页分栏嵌入列：封面悬停/点击展开全屏播放页 */
+    webHomeLeftEmbed: {
+      type: Boolean,
+      default: false,
+    },
+  })
+
   const { playing, progress, volume, playMode, currentIndex, songList, songId, widgetState, lyricShow, lyricType, playlistWidgetShow, time, playerChangeSong, localBase64Img, musicVideo, addMusicVideo, videoIsPlaying, playerShow, coverBlur } = storeToRefs(playerStore)
 
   const checkIsLike = computed(() => (id) => {
@@ -58,16 +66,36 @@
   const backToVideo = () => {
     if(videoIsPlaying.value) playerShow.value = false
   }
+
+  /** Web 主页左侧：与底栏封面一致，进入全屏播放页 */
+  const showPlayer = () => {
+    playerStore.fullPlayerOpenSource = 'webRightEmbed'
+    playerStore.widgetState = false
+    playerStore.playerShow = true
+    lyricShow.value = true
+  }
+
+  const onCoverClick = () => {
+    if (videoIsPlaying.value) backToVideo()
+    else if (props.webHomeLeftEmbed) showPlayer()
+  }
 </script>
 
 <template>
-  <div class="player-container">
+  <div class="player-container" :class="{ 'player-container--web-home-embed': webHomeLeftEmbed }">
     <div class="player">
         <div class="player-cover">
-            <div class="cover" :class="{'cover-change': playerChangeSong, 'back-Video': videoIsPlaying}" @click="backToVideo()">
+            <div
+              class="cover"
+              :class="{'cover-change': playerChangeSong, 'back-Video': videoIsPlaying, 'cover--web-embed': webHomeLeftEmbed}"
+              @click="onCoverClick()"
+            >
                 <img v-if="songList[currentIndex].type != 'local'" :src="songList[currentIndex].al.picUrl + '?param=600y600'" alt="">
                 <img v-else v-show="localBase64Img" :src="localBase64Img" alt="">
                 <img v-if="songList[currentIndex].type == 'local' && !localBase64Img" src="http://p3.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg?param=140y140" alt="">
+                <div v-if="webHomeLeftEmbed && !videoIsPlaying" class="open-player">
+                  <svg t="1670207990373" class="open-player-icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5640" width="200" height="200"><path d="M960.1 699.7l-72.8 72.8L512 397.1 136.7 772.5l-72.8-72.8L512 251.5z" fill="#ffffff" p-id="5641"></path></svg>
+                </div>
             </div>
             <div class="c-border c-border1"></div>
             <div class="c-border c-border2"></div>
@@ -80,9 +108,9 @@
                 <span class="music-name" :class="{'music-name-in': playerChangeSong}">{{songList[currentIndex].name || songList[currentIndex].localName}}</span>
             </div>
             <div class="info-music">
-                <div class="music-author-lable" :class="{'music-author-lable-video': videoIsPlaying || coverBlur}"></div>
+                <div class="music-author-lable" :class="{'music-author-lable-video': (videoIsPlaying || coverBlur) && !webHomeLeftEmbed}"></div>
                 <div class="music-author">
-                    <span @click="checkArtist(singer.id)" class="author" :style="{color: videoIsPlaying || coverBlur ? 'black' : 'rgb(105, 105, 105)'}" v-for="(singer, index) in songList[currentIndex].ar">{{singer.name || ''}}{{index == songList[currentIndex].ar.length -1 ? '' : ' / '}}</span>
+                    <span @click="checkArtist(singer.id)" class="author" :style="{color: (videoIsPlaying || coverBlur) && !webHomeLeftEmbed ? 'black' : 'rgb(105, 105, 105)'}" v-for="(singer, index) in songList[currentIndex].ar">{{singer.name || ''}}{{index == songList[currentIndex].ar.length -1 ? '' : ' / '}}</span>
                 </div>
             </div>
         </div>
@@ -149,6 +177,23 @@
   .player-container{
     position: relative;
     z-index: 99;
+    &--web-home-embed {
+      overflow: visible;
+      z-index: 120;
+      .player {
+        overflow: visible;
+      }
+      .song-control {
+        z-index: 130;
+        right: auto;
+        left: -50Px;
+      }
+      .playlist-widget-player {
+        z-index: 125;
+        right: auto;
+        left: -370Px;
+      }
+    }
     &:hover{
       .song-control{
         animation: song-control 0.1s forwards;
@@ -194,6 +239,38 @@
           opacity: 1;
           transform: scale(1);
           transition: 0.1s cubic-bezier(.3,.79,.55,.99);
+            &.cover--web-embed {
+            position: relative;
+            cursor: pointer;
+            .open-player {
+              width: 100%;
+              height: 100%;
+              overflow: hidden;
+              position: absolute;
+              top: 0;
+              left: 0;
+              box-sizing: border-box;
+              transition: 0.2s;
+              pointer-events: none;
+              .open-player-icon {
+                width: 40%;
+                height: 40%;
+                position: absolute;
+                top: 50%;
+                left: 118%;
+                transform: translate(-50%, -50%) rotate(-90deg);
+                transition: 0.2s cubic-bezier(0, 1.06, 0.77, 0.99);
+              }
+            }
+            &:hover .open-player {
+              background-color: rgba(0, 0, 0, 0.5);
+              pointer-events: auto;
+              .open-player-icon {
+                top: 50%;
+                left: 50%;
+              }
+            }
+          }
           img{
             width: 100%;
             max-height: 38vh;

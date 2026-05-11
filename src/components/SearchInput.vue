@@ -7,7 +7,9 @@
   import { mapSongsPlayableStatus } from '../utils/songStatus';
   import { addSong, addToNext } from '../utils/player';
   import { usePlayerStore } from '../store/playerStore';
+  import { isHydrogenWeb } from '../utils/webProfileNas'
   const playerStore = usePlayerStore()
+  const isWebClient = isHydrogenWeb()
   const router = useRouter()
 
   const searchInput = ref(null)
@@ -40,12 +42,12 @@
     if (state === 'focus') {
         event.target.placeholder = ''
         searchShow.value = true
-        windowApi.unregisterShortcuts()
+        if (!isWebClient) windowApi.unregisterShortcuts()
         if (!JTrim(searchKeyword.value) && !recommendLoaded.value) {
           loadRecommendSongs()
         }
     } else {
-        windowApi.registerShortcuts()
+        if (!isWebClient) windowApi.registerShortcuts()
         event.target.placeholder = 'SEARCH'
         searchShow.value = false
         updatePreviewVisibility()

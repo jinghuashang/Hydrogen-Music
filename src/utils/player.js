@@ -576,6 +576,17 @@ export function songTime2(time) {
  * 音乐视频监测
  */
 export function musicVideoCheck(seek, update) {
+    if (playerStore.webHomeSplitEmbed) {
+        if (videoIsPlaying.value) {
+            videoIsPlaying.value = false
+            playerShow.value = true
+        }
+        currentTiming = null
+        try {
+            musicVideoDOM.value?.pause()
+        } catch (_) {}
+        return
+    }
     if(musicVideo.value && currentMusicVideo.value && !videoIsPlaying.value || update) {
         for (let i = 0; i < currentMusicVideo.value.timing.length; i++) {
             if(seek >= currentMusicVideo.value.timing[i].start && seek < currentMusicVideo.value.timing[i].end) {

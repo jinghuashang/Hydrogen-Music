@@ -59,19 +59,19 @@
 
 <style scoped lang="scss">
   .newest-song{
-    width: 24.4vw;
-    height: 13.7vw;
+    width: 24.4cqw;
+    height: 13.7cqw;
     display: flex;
     flex-direction: column;
     justify-content: start;
     position: relative;
     .newest-song-title{
-        margin-bottom: 1vw;
-        font: 1.5vw SourceHanSansCN-Bold;
+        margin-bottom: 1cqw;
+        font: 1.5cqw SourceHanSansCN-Bold;
         color: black;
         text-align: left;
         position: absolute;
-        top: -2.8vw;
+        top: -2.8cqw;
         left: 0;
     }
     .song-list{
@@ -82,8 +82,8 @@
             display: none;
         }
         .list-item{
-            padding-bottom: 0.8vw;
-            margin-bottom: 0.8vw;
+            padding-bottom: 0.8cqw;
+            margin-bottom: 0.8cqw;
             border: {
                 bottom: 1px solid black;
             };
@@ -98,22 +98,22 @@
                 display: flex;
                 flex-direction: row;
                 .song-img{
-                    width: 3.45vw;
-                    height: 3.45vw;
-                    margin-right: 1vw;
+                    width: 3.45cqw;
+                    height: 3.45cqw;
+                    margin-right: 1cqw;
                     img{
                         width: 100%;
                         height: 100%;
                     }
                 }
                 .song-other{
-                    width: 17vw;
+                    width: 17cqw;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
                     text-align: left;
                     .song-name{
-                        font: 1.2vw SourceHanSansCN-Bold;
+                        font: 1.2cqw SourceHanSansCN-Bold;
                         color: black;
                         text-align: left;
                         overflow: hidden;
@@ -123,7 +123,7 @@
                         word-break: break-all;
                     }
                     .song-author{
-                        font: 1vw SourceHanSansCN-Bold;
+                        font: 1cqw SourceHanSansCN-Bold;
                         color: rgb(131, 131, 131);
                         span{
                             transition: 0.2s;
@@ -136,8 +136,8 @@
                 }
             }
             .item-play{
-                width: 2vw;
-                height: 2vw;
+                width: 2cqw;
+                height: 2cqw;
                 transition: 0.2s;
                 &:hover{
                     cursor: pointer;

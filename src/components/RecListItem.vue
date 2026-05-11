@@ -228,9 +228,9 @@
             .header-title-en{
                 margin-right: 6px;
                 padding: 1px 0 1px 2px;
-                width: 20vw;
+                width: 20cqw;
                 background-color: black;
-                font: 0.7vw Geometos;
+                font: 0.7cqw Geometos;
                 color: white;
                 text-align: left;
                 white-space: nowrap;
@@ -280,8 +280,8 @@
         }
         .header-title-cn{
             text-align: left;
-            font: 2.1vw SourceHanSansCN-Bold;
-            line-height: 2.5vw;
+            font: 2.1cqw SourceHanSansCN-Bold;
+            line-height: 2.5cqw;
             color: black;
         }
     }
@@ -290,7 +290,7 @@
         width: 100%;
         display: grid;
         grid-template-columns: repeat(5, 1fr);
-        gap: 3.4vw 2.5vw;
+        gap: 3.4cqw 2.5cqw;
         .item{
             .item-img{
                 // width: 168px;
@@ -320,7 +320,7 @@
             .item-name,.item-sub{
                 margin-top: 5px;
                 text-align: left;
-                font: 1.5vw SourceHanSansCN-Bold;
+                font: 1.5cqw SourceHanSansCN-Bold;
                 font-weight: bold;
                 color: black;
                 overflow: hidden;
@@ -339,7 +339,7 @@
                 text-align: center;
             }
             .item-sub{
-                font: 1.2vw Source Han Sans;
+                font: 1.2cqw Source Han Sans;
                 font-weight: normal;
                 color: rgb(109, 109, 109);
                 &:hover{

@@ -28,7 +28,7 @@
     display: flex;
     flex-direction: column;
     .page-header{
-      padding-top: 2.8vw;
+      padding-top: 2.8cqw;
       display: flex;
       flex-direction: row;
       justify-content: space-between;
