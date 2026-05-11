@@ -19,11 +19,11 @@
     "web:build": "vite build --config web/vite.config.mjs",
     "web:dev": "vite --config web/vite.config.mjs",
     "web:server": "node web/server/server.js",
-    "vercel-build": "npm run web:build",
-    "postinstall": "patch-package"
+    "vercel-build": "npm run web:build"
   },
   "dependencies": {
     "@neteasecloudmusicapienhanced/api": "^4.32.0",
+    "@unblockneteasemusic/server": "^0.28.0",
     "axios": "^1.2.0",
     "cors": "^2.8.5",
     "dayjs": "^1.11.6",
@@ -55,7 +55,6 @@
     "electron": "^21.2.0",
     "electron-builder": "^23.6.0",
     "nodemon": "^2.0.20",
-    "patch-package": "^8.0.1",
     "sass": "^1.56.1",
     "vite": "^3.2.0"
   },
