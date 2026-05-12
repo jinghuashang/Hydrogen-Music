@@ -22,7 +22,8 @@
     "vercel-build": "npm run web:build"
   },
   "dependencies": {
-    "@neteasecloudmusicapienhanced/api": "^4.32.0",
+    "@neteasecloudmusicapienhanced/unblockmusic-utils": "^0.2.4",
+    "NeteaseCloudMusicApi": "^4.31.0",
     "@unblockneteasemusic/server": "^0.28.0",
     "axios": "^1.2.0",
     "cors": "^2.8.5",

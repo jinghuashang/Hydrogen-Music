@@ -35,6 +35,8 @@ function defaultSettings() {
       quitApp: 'minimize',
       updateProxy: '',
       externalUnblockUrl: '',
+      /** Web：宽屏首页右侧分栏播放器；默认关，写入 settings.json */
+      webHomeSidePlayer: false,
     },
     unblock: {
       enabled: true,

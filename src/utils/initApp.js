@@ -48,6 +48,11 @@ function applySettingsPayload(settings) {
         windowApi.clearLocalMusicData('local')
     }
     insertCustomFontStyle(settings.other.customFont)
+    if (settings.other && Object.prototype.hasOwnProperty.call(settings.other, 'webHomeSidePlayer')) {
+        playerStore.webHomeSidePlayer = !!settings.other.webHomeSidePlayer
+    } else {
+        playerStore.webHomeSidePlayer = false
+    }
 }
 
 export const initSettings = async () => {

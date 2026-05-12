@@ -8,6 +8,10 @@
   const playerStore = usePlayerStore()
   const { widgetState, lyricShow, musicVideo, videoIsPlaying, songList, currentIndex, localBase64Img, progress, time, playerShow } = storeToRefs(playerStore)
 
+  /** 与 App.vue 一致；Web 主页无系统托盘迷你窗，不应出现「视频同步时左上角曲目条」 */
+  const isWebClient =
+    import.meta.env.VITE_WEB === 'true' || import.meta.env.VITE_WEB === '1'
+
   const backHome = () => {
     if(widgetState.value) router.push('/')
     if(videoIsPlaying.value) videoIsPlaying.value = false
@@ -22,7 +26,12 @@
 <template>
   <div class="title-container">
     <div class="title-logo" @click="backHome()">Hydrogen</div>
-    <div class="title-player" :class="{'title-player-in': videoIsPlaying && !playerShow}" v-if="musicVideo && songList && songList[currentIndex]" @click="playerShow = true">
+    <div
+      class="title-player"
+      :class="{'title-player-in': videoIsPlaying && !playerShow}"
+      v-if="musicVideo && songList && songList[currentIndex] && (!isWebClient || !widgetState)"
+      @click="playerShow = true"
+    >
       <div class="player-content" :class="{'player-content-in': videoIsPlaying && !playerShow}">
         <div class="cover">
           <img v-if="songList[currentIndex].type != 'local'" :src="songList[currentIndex].al.picUrl + '?param=100y100'" alt="">

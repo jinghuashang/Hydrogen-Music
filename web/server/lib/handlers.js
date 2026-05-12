@@ -213,6 +213,8 @@ function createHandlers({ broadcast }) {
     if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadCover')) settings.local.downloadCover = false
     if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadInfo')) settings.local.downloadInfo = false
     if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadLyric')) settings.local.downloadLyric = false
+    if (!settings.other) settings.other = { ...defaultSettings().other }
+    if (!Object.prototype.hasOwnProperty.call(settings.other, 'webHomeSidePlayer')) settings.other.webHomeSidePlayer = false
     return settings
   }
 

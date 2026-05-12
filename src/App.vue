@@ -44,6 +44,10 @@
       webHomeSplit.value = false
       return
     }
+    if (!playerStore.webHomeSidePlayer) {
+      webHomeSplit.value = false
+      return
+    }
     const w = typeof window !== 'undefined' ? window.innerWidth : 0
     const wide = w >= 1180
     const fullscreen = isBrowserFullscreen()
@@ -55,7 +59,7 @@
   }
 
   watch(
-    [() => playerStore.widgetState, hasCurrentSong],
+    [() => playerStore.widgetState, hasCurrentSong, () => playerStore.webHomeSidePlayer],
     () => {
       refreshWebHomeSplit()
     },

@@ -45,6 +45,8 @@ export const usePlayerStore = defineStore('playerStore', {
             fullPlayerOpenSource: null,
             /** Web 主页分栏右侧嵌入：为 true 时不启用音乐视频层与封面模糊（不写入 persist） */
             webHomeSplitEmbed: false,
+            /** Web：是否允许宽屏/全屏时首页右侧分栏播放器（并隐藏底部迷你条）；由 settings.other 加载 */
+            webHomeSidePlayer: false,
         }
     },
     actions: {

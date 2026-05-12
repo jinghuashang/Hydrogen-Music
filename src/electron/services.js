@@ -1,4 +1,4 @@
-const { serveNcmApi, getModulesDefinitions } = require('@neteasecloudmusicapienhanced/api')
+const { serveNcmApi, getModulesDefinitions } = require('NeteaseCloudMusicApi')
 const path = require('path')
 
 // 主进程顶层预加载 UNM 模块，确保 ASAR 内 require 能命中缓存
@@ -15,7 +15,7 @@ module.exports = async function startNeteaseMusicApi() {
   process.env.ENABLE_GENERAL_UNBLOCK = 'true'
 
   // 加载默认模块并替换 /song/url/v1
-  const apiModulesDir = path.resolve(__dirname, '../../node_modules/@neteasecloudmusicapienhanced/api/module')
+  const apiModulesDir = path.resolve(__dirname, '../../node_modules/NeteaseCloudMusicApi/module')
   const defaultModules = await getModulesDefinitions(apiModulesDir,
     {
       'daily_signin.js': '/daily_signin',

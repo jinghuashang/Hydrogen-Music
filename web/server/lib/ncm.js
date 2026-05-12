@@ -1,4 +1,4 @@
-const { serveNcmApi, getModulesDefinitions } = require('@neteasecloudmusicapienhanced/api')
+const { serveNcmApi, getModulesDefinitions } = require('NeteaseCloudMusicApi')
 const path = require('path')
 
 let started = false
@@ -7,7 +7,7 @@ async function startNcm(port = 36530) {
   if (started) return
   process.env.ENABLE_GENERAL_UNBLOCK = 'true'
 
-  const apiModulesDir = path.resolve(__dirname, '../../../node_modules/@neteasecloudmusicapienhanced/api/module')
+  const apiModulesDir = path.resolve(__dirname, '../../../node_modules/NeteaseCloudMusicApi/module')
   const defaultModules = await getModulesDefinitions(apiModulesDir,
     {
       'daily_signin.js': '/daily_signin',

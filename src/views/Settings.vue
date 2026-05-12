@@ -79,6 +79,8 @@ const updateProxy = ref('')
 const appVersion = ref('')
 const isCheckingUpdate = ref(false)
 const unblockEnabled = ref(false)
+/** Web：宽屏首页右侧分栏播放器（写入 settings.other，默认关） */
+const webHomeSidePlayer = ref(false)
 const syncProfileToNas = ref(false)
 const downloadCover = ref(false)
 const downloadInfo = ref(false)
@@ -123,6 +125,12 @@ onActivated(() => {
         if(settings.unblock) {
             unblockEnabled.value = settings.unblock.enabled
         }
+        if (settings.other && Object.prototype.hasOwnProperty.call(settings.other, 'webHomeSidePlayer')) {
+            webHomeSidePlayer.value = !!settings.other.webHomeSidePlayer
+        } else {
+            webHomeSidePlayer.value = false
+        }
+        playerStore.webHomeSidePlayer = webHomeSidePlayer.value
         syncProfileToNas.value = !!settings.local?.syncProfileToNas
         downloadCover.value = !!settings.local?.downloadCover
         downloadInfo.value = !!settings.local?.downloadInfo
@@ -162,6 +170,7 @@ const setAppSettings = async () => {
             quitApp: quitApp.value,
             customFont: customFont.value,
             updateProxy: updateProxy.value,
+            webHomeSidePlayer: webHomeSidePlayer.value,
         },
         unblock: {
             enabled: unblockEnabled.value,
@@ -427,6 +436,13 @@ const toggleUnblock = () => {
     setAppSettings()
     noticeOpen(unblockEnabled.value ? '解锁灰色歌曲已开启' : '解锁灰色歌曲已关闭', 1)
 }
+
+const toggleWebHomeSidePlayer = async () => {
+    webHomeSidePlayer.value = !webHomeSidePlayer.value
+    playerStore.webHomeSidePlayer = webHomeSidePlayer.value
+    if (isWebClient) await persistWebSettingsFromForm()
+    else await setAppSettings()
+}
 </script>
 
 <template>
@@ -690,6 +706,18 @@ const toggleUnblock = () => {
                                 </div>
                             </div>
                         </div>
+                        <div class="option" v-if="isWebClient">
+                            <div class="option-name">宽屏首页右侧播放器</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleWebHomeSidePlayer">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': webHomeSidePlayer }">
+                                        {{ webHomeSidePlayer ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="webHomeSidePlayer"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
                         <div class="option">
                             <div class="option-name">开启云盘页面</div>
                             <div class="option-operation">
@@ -929,30 +957,34 @@ const toggleUnblock = () => {
                         margin-bottom: 32px;
                         display: flex;
                         flex-direction: row;
-                        align-items: center;
-                        justify-content: space-between;
+                        align-items: flex-start;
+                        justify-content: flex-start;
+                        gap: 16px 24px;
+                        flex-wrap: wrap;
 
                         &.option-nas-sync {
                             align-items: flex-start;
                             gap: 12px;
 
                             .option-name {
-                                flex: 0 0 auto;
-                                max-width: 200px;
+                                flex: 0 0 168px;
+                                min-width: 168px;
+                                max-width: 220px;
                             }
 
                             .tip {
-                                flex: 1 1 auto;
+                                flex: 1 1 200px;
                                 min-width: 0;
                                 margin-top: 2px;
                                 font: 10px SourceHanSansCN-Bold;
                                 color: black;
-                                text-align: right;
+                                text-align: left;
                             }
 
                             .option-operation {
                                 flex: 0 0 auto;
                                 margin-top: 0;
+                                align-self: center;
                             }
                         }
 
@@ -961,6 +993,19 @@ const toggleUnblock = () => {
                             font-size: 16px;
                             color: black;
                             text-align: left;
+                            flex: 0 0 168px;
+                            min-width: 168px;
+                            max-width: 220px;
+                            flex-shrink: 0;
+                            white-space: normal;
+                            word-break: keep-all;
+                            line-height: 1.35;
+                            padding-top: 4px;
+                        }
+
+                        .option-operation {
+                            flex: 0 0 auto;
+                            align-self: center;
                         }
 
                         input,
@@ -1052,20 +1097,31 @@ const toggleUnblock = () => {
                             display: flex;
                             flex-direction: row;
                             align-items: center;
+                            flex: 1 1 280px;
+                            min-width: 0;
+                            flex-wrap: wrap;
+                            gap: 8px 12px;
+                            justify-content: flex-end;
 
                             .selected-folder {
-                                width: 50vw;
+                                flex: 1 1 200px;
+                                min-width: 0;
+                                max-width: 100%;
                                 height: 30px;
                                 background-color: rgba(255, 255, 255, 0.35);
                                 font: 13px SourceHanSansCN-Bold;
                                 color: black;
                                 line-height: 30px;
                                 overflow: hidden;
+                                text-overflow: ellipsis;
+                                white-space: nowrap;
+                                padding: 0 8px;
+                                box-sizing: border-box;
                             }
 
                             .select-option {
-                                margin-right: 2px;
-                                margin-left: 15px;
+                                margin-right: 0;
+                                margin-left: 0;
                                 padding: 5px 15px;
                                 font: 13px SourceHanSansCN-Bold;
                                 color: black;
@@ -1088,39 +1144,53 @@ const toggleUnblock = () => {
                         .local-folder {
                             display: flex;
                             flex-direction: row;
-                            align-items: center;
+                            align-items: flex-start;
+                            flex: 1 1 280px;
+                            min-width: 0;
+                            flex-wrap: wrap;
+                            gap: 10px 12px;
+                            justify-content: flex-end;
 
                             .selected-local-folder-item {
                                 display: flex;
                                 flex-direction: column;
+                                flex: 1 1 220px;
+                                min-width: 0;
 
                                 .selected-folder {
                                     margin-bottom: 10px;
-                                    width: 50vw;
+                                    width: 100%;
+                                    max-width: 100%;
                                     height: 30px;
                                     background-color: rgba(255, 255, 255, 0.35);
                                     font: 13px SourceHanSansCN-Bold;
                                     color: black;
                                     line-height: 30px;
                                     overflow: hidden;
+                                    text-overflow: ellipsis;
+                                    white-space: nowrap;
+                                    padding: 0 8px;
+                                    box-sizing: border-box;
                                 }
 
                                 .tip {
                                     font: 10px SourceHanSansCN-Bold;
                                     color: black;
-                                    text-align: right;
+                                    text-align: left;
+                                    line-height: 1.45;
                                 }
 
                                 .tip-linux {
                                     margin-top: 4px;
                                     opacity: 0.85;
-                                    text-align: right;
+                                    text-align: left;
                                 }
                             }
 
                             .add-option {
-                                margin-right: 2px;
-                                margin-left: 15px;
+                                margin-right: 0;
+                                margin-left: 0;
+                                align-self: center;
                                 padding: 5px 15px;
                                 font: 13px SourceHanSansCN-Bold;
                                 color: black;
@@ -1147,8 +1217,21 @@ const toggleUnblock = () => {
                         }
 
                         .custom-font {
+                            flex: 1 1 280px;
+                            min-width: 0;
+                            align-items: center;
+                            flex-wrap: nowrap;
+
+                            input {
+                                flex: 1 1 auto;
+                                min-width: 0;
+                                width: 100%;
+                                max-width: 100%;
+                            }
+
                             .custom-font-path {
-                                width: 50vw;
+                                width: 100%;
+                                max-width: 100%;
                                 height: 30px;
                                 background-color: rgba(255, 255, 255, 0.35);
                                 font: 13px SourceHanSansCN-Bold;

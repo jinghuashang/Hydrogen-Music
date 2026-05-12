@@ -1,5 +1,5 @@
 // 自定义 /song/url/v1 模块 — 客户端附带元数据 + UNM 全量音源匹配
-const createOption = require('@neteasecloudmusicapienhanced/api/util/option')
+const createOption = require('NeteaseCloudMusicApi/util/option')
 const http = require('http')
 const https = require('https')
 
