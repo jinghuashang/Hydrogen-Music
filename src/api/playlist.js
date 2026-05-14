@@ -485,3 +485,16 @@ export function deletePlaylist(params) {
       params,
     });
 }
+
+/**
+ * 心动模式/智能播放
+ * 必选参数 : id : 歌曲 id, pid : 歌单 id
+ * 可选参数 : sid : 要开始播放的歌曲的 id
+ */
+export function getIntelligenceList(params) {
+    return request({
+      url: '/playmode/intelligence/list',
+      method: 'get',
+      params,
+    });
+}

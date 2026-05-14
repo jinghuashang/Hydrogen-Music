@@ -1,7 +1,7 @@
 {
   "name": "hydrogenmusic",
   "private": true,
-  "version": "0.1.7c",
+  "version": "0.1.8",
   "main": "background.js",
   "author": "Kaidesuyo",
   "contributors": [
@@ -14,7 +14,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "nodemon --exec electron . --watch ./ --ext .html",
+    "start": "nodemon --exec electron . --watch ./ --ext js,html,vue,json",
     "dist": "node build.js",
     "web:build": "vite build --config web/vite.config.mjs",
     "web:dev": "vite --config web/vite.config.mjs",

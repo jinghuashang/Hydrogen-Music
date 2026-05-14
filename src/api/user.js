@@ -77,12 +77,25 @@ import request from '../utils/request'
 
 /**
  * 说明: 登录后调用此接口，可获取当前 VIP 信息。
- * @param {*} id 
- * @returns 
+ * @returns
  */
   export function getVipInfo() {
     return request({
       url: '/vip/info',
+      method: 'get',
+      params: {
+        timestamp: new Date().getTime(),
+      }
+    });
+  }
+
+/**
+ * 说明: 登录后调用此接口，可获取用户等级信息。
+ * @returns
+ */
+  export function getUserLevel() {
+    return request({
+      url: '/user/level',
       method: 'get',
       params: {
         timestamp: new Date().getTime(),

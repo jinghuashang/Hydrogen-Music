@@ -1,10 +1,9 @@
 <script setup>
 import { ref, onActivated, onMounted } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
-import { logout } from '../api/user'
+import { logout, getVipInfo, getUserLevel } from '../api/user'
 import { noticeOpen, dialogOpen } from "../utils/dialog";
 import { initSettings } from '../utils/initApp';
-import { getVipInfo } from '../api/user'
 import { isLogin } from '../utils/authority';
 import { useUserStore } from '../store/userStore';
 import { usePlayerStore } from '../store/playerStore';
@@ -27,6 +26,7 @@ const playerStore = usePlayerStore()
 const otherStore = useOtherStore()
 
 const vipInfo = ref(null)
+const userLevel = ref(null)
 const musicLevel = ref('standard')
 const searchResultLimit = ref(10)
 const musicLevelOptions = ref([
@@ -94,6 +94,9 @@ const isLinuxLikePath =
 if (isLogin()) {
     getVipInfo().then(result => {
         vipInfo.value = result.data
+    })
+    getUserLevel().then(result => {
+        userLevel.value = result.data
     })
 }
 onMounted(async () => {
@@ -451,8 +454,18 @@ const toggleUnblock = () => {
                     </div>
                     <div class="user-info">
                         <div class="user-name">{{ userStore.user.nickname }}</div>
+                        <div class="user-level" v-if="userLevel">
+                            <span class="level-badge">Lv.{{ userLevel.level }}</span>
+                            <div class="level-progress">
+                                <div class="level-progress-bar" :style="{ width: (userLevel.progress * 100) + '%' }"></div>
+                            </div>
+                        </div>
                         <div class="user-vip" v-if="vipInfo && userStore.user.vipType != 0">
                             <img :src="vipInfo.redVipDynamicIconUrl" alt="">
+                            <div class="vip-text">
+                                <span class="vip-label">{{ vipInfo.redplus ? '黑胶 VIP+' : '黑胶 VIP' }}</span>
+                                <span class="vip-expire" v-if="vipInfo.expireTime">到期: {{ new Date(vipInfo.expireTime).toLocaleDateString() }}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -715,6 +728,18 @@ const toggleUnblock = () => {
                             </div>
                         </div>
                         <div class="option">
+                            <div class="option-name">开启心动模式</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="userStore.heartbeatPage = !userStore.heartbeatPage">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': userStore.heartbeatPage }">
+                                        {{ userStore.heartbeatPage ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="userStore.heartbeatPage"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option">
                             <div class="option-name">自定义字体</div>
                             <div class="custom-font local-folder">
                                 <!-- <div class="custom-font-path">{{customFont ? customFont : '未设置'}}</div> -->
@@ -840,7 +865,7 @@ const toggleUnblock = () => {
         .settings-user-info {
             padding: 10px 40px;
             width: 100%;
-            height: 100px;
+            min-height: 100px;
             background-color: rgba(255, 255, 255, 0.35);
             display: flex;
             flex-direction: row;
@@ -872,11 +897,67 @@ const toggleUnblock = () => {
                         color: black;
                     }
 
+                    .user-level {
+                        margin-top: 4px;
+                        display: flex;
+                        flex-direction: row;
+                        align-items: center;
+                        gap: 8px;
+
+                        .level-badge {
+                            font: 12px SourceHanSansCN-Bold;
+                            color: #1a1a1a;
+                            background: #d4d4d4;
+                            padding: 2px 10px;
+                            clip-path: polygon(8px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+                            white-space: nowrap;
+                        }
+
+                        .level-progress {
+                            width: 80px;
+                            height: 5px;
+                            background-color: rgba(0, 0, 0, 0.08);
+                            overflow: hidden;
+
+                            .level-progress-bar {
+                                height: 100%;
+                                background: #1a1a1a;
+                                transition: width 0.5s;
+                            }
+                        }
+                    }
+
                     .user-vip {
-                        width: 40px;
+                        margin-top: 6px;
+                        display: flex;
+                        flex-direction: row;
+                        align-items: center;
+                        gap: 6px;
 
                         img {
-                            width: 100%;
+                            height: 18Px;
+                            flex-shrink: 0;
+                        }
+
+                        .vip-text {
+                            display: flex;
+                            flex-direction: row;
+                            align-items: baseline;
+                            gap: 8px;
+                        }
+
+                        .vip-label {
+                            font: 11px SourceHanSansCN-Bold;
+                            color: #1a1a1a;
+                            white-space: nowrap;
+                            border: 1px solid #1a1a1a;
+                            padding: 1px 6px;
+                        }
+
+                        .vip-expire {
+                            font: 11px SourceHanSansCN-Bold;
+                            color: #888;
+                            white-space: nowrap;
                         }
                     }
                 }

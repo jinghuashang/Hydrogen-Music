@@ -12,6 +12,7 @@ import LocalMusicDetail from '../components/LocalMusicDetail.vue'
 import SearchResult from '../views/SearchResult.vue'
 import Settings from '../views/Settings.vue'
 import AudioMatch from '../views/AudioMatch.vue'
+import Heartbeat from '../views/Heartbeat.vue'
 
 import { useUserStore } from '../store/userStore'
 import { useLibraryStore } from '../store/libraryStore'
@@ -167,6 +168,16 @@ const routes = [
         component: AudioMatch,
         beforeEnter: (to, from, next) => {
             if(!userStore.audioMatchPage) next({name: 'mymusic'})
+            else next()
+        }
+    },
+    {
+        path: '/heartbeat',
+        name: 'heartbeat',
+        component: Heartbeat,
+        beforeEnter: (to, from, next) => {
+            if(!userStore.heartbeatPage) next({name: 'mymusic'})
+            else if(!isLogin()) { next({name: 'login'}); noticeOpen("请先登录", 2) }
             else next()
         }
     },

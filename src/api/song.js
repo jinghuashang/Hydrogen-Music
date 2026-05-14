@@ -70,8 +70,8 @@ export function getMusicUrl(id,level) {
 /**
  * 说明 : 调用此接口 , 传入音乐 id 可获得对应音乐的歌词 ( 不需要登录 )
  * 必选参数 : id: 音乐 id
- * @param {*} id 
- * @returns 
+ * @param {*} id
+ * @returns
  */
  export function getLyric(id) {
     return request({
@@ -79,6 +79,36 @@ export function getMusicUrl(id,level) {
         method: 'get',
         params: {
             id: id,
+        }
+    })
+}
+
+/**
+ * 私人FM - 获取推荐歌曲
+ * @returns
+ */
+export function getPersonalFM() {
+    return request({
+        url: '/personal_fm',
+        method: 'get',
+        params: {
+            timestamp: new Date().getTime(),
+        }
+    })
+}
+
+/**
+ * 私人FM垃圾桶 - 跳过不喜欢
+ * @param {number} id - 歌曲id
+ * @returns
+ */
+export function fmTrash(id) {
+    return request({
+        url: '/fm_trash',
+        method: 'get',
+        params: {
+            id: id,
+            timestamp: new Date().getTime(),
         }
     })
 }
