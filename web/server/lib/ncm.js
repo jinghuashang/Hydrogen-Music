@@ -5,7 +5,6 @@ let started = false
 
 async function startNcm(port = 36530) {
   if (started) return
-  process.env.ENABLE_GENERAL_UNBLOCK = 'true'
 
   const apiModulesDir = path.resolve(__dirname, '../../../node_modules/@neteasecloudmusicapienhanced/api/module')
   const defaultModules = await getModulesDefinitions(apiModulesDir,

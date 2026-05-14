@@ -10,9 +10,8 @@ try {
   console.error('[services] Failed to preload UNM module:', e.message)
 }
 
-//启动网易云音乐API（注入自定义 /song/url/v1 模块，支持客户端元数据直连 UNM 解灰）
+//启动网易云音乐API（注入自定义 /song/url/v1 模块，独立 UNM 解灰，禁用 API 内置 unblock）
 module.exports = async function startNeteaseMusicApi() {
-  process.env.ENABLE_GENERAL_UNBLOCK = 'true'
 
   // 加载默认模块并替换 /song/url/v1
   const apiModulesDir = path.resolve(__dirname, '../../node_modules/@neteasecloudmusicapienhanced/api/module')

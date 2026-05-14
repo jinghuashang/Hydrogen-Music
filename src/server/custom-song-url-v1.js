@@ -126,7 +126,7 @@ module.exports = async (query, request) => {
           url: unblockUrl,
           type: 'flac',
           level: query.level,
-          freeTrialInfo: unblockIsTrial ? { freeTrialFlag: true, start: 0, end: 30 } : 'null',
+          freeTrialInfo: unblockIsTrial ? { freeTrialFlag: true, start: 0, end: 30 } : null,
           fee: 0,
           proxyUrl: proxyUrl || '',
         }],
