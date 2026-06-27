@@ -12,6 +12,75 @@ const path = require('path')
 const Store = require('electron-store');
 const settingsStore = new Store({name: 'settings'});
 
+// GitHub 镜像站列表
+const GITHUB_MIRRORS = [
+    { name: 'ghfast.top', url: 'https://ghfast.top/' },
+    { name: 'gh.llkk.cc', url: 'https://gh.llkk.cc/' },
+    { name: 'github.moeyy.xyz', url: 'https://github.moeyy.xyz/' },
+    { name: 'gh-proxy.com', url: 'https://gh-proxy.com/' },
+    { name: 'ghproxy.cc', url: 'https://ghproxy.cc/' },
+]
+
+// 测试镜像站延迟
+async function testMirrorLatency(mirrorUrl) {
+    const https = require('https')
+    const { URL } = require('url')
+    const testUrl = mirrorUrl + 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
+    const parsed = new URL(testUrl)
+    
+    return new Promise((resolve) => {
+        const startTime = Date.now()
+        const options = {
+            hostname: parsed.hostname,
+            port: parsed.port || 443,
+            path: parsed.pathname + parsed.search,
+            method: 'HEAD',
+            timeout: 3000,
+            headers: {
+                'User-Agent': 'Hydrogen-Music',
+            }
+        }
+        const req = https.request(options, (res) => {
+            res.resume()
+            resolve({
+                url: mirrorUrl,
+                latency: Date.now() - startTime,
+                success: res.statusCode >= 200 && res.statusCode < 400
+            })
+        })
+        req.on('error', () => resolve({ url: mirrorUrl, latency: Infinity, success: false }))
+        req.on('timeout', () => {
+            req.destroy()
+            resolve({ url: mirrorUrl, latency: Infinity, success: false })
+        })
+        req.end()
+    })
+}
+
+// 获取最快的镜像站
+async function getFastestMirror() {
+    const settings = settingsStore.get('settings')
+    const autoMirror = settings?.other?.autoMirror !== false
+    const customMirror = settings?.other?.githubMirror || ''
+    
+    // 如果用户禁用自动镜像选择，使用自定义镜像或官方源
+    if (!autoMirror) {
+        return customMirror || ''
+    }
+    
+    // 并发测试所有镜像站
+    const results = await Promise.all(GITHUB_MIRRORS.map(m => testMirrorLatency(m.url)))
+    const successful = results.filter(r => r.success).sort((a, b) => a.latency - b.latency)
+    
+    if (successful.length > 0) {
+        console.log(`[mirror] Fastest mirror: ${successful[0].url} (${successful[0].latency}ms)`)
+        return successful[0].url
+    }
+    
+    console.log('[mirror] No mirror available, using official source')
+    return ''
+}
+
 let myWindow = null
 //electron单例
 const gotTheLock = app.requestSingleInstanceLock()
@@ -127,14 +196,30 @@ const createWindow = () => {
         }
 
         const apiUrl = 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
+        
+        // 获取最快的镜像站
+        const mirror = await getFastestMirror()
+        
         let release
-        try {
-            release = await fetchRelease(apiUrl)
-        } catch (_) {
-            if (proxy) {
-                try { release = await fetchRelease(proxy + apiUrl) } catch (_) {}
-            }
+        // 优先使用镜像站
+        if (mirror) {
+            try {
+                release = await fetchRelease(mirror + apiUrl)
+            } catch (_) {}
         }
+        
+        // 镜像站失败，尝试官方源
+        if (!release) {
+            try {
+                release = await fetchRelease(apiUrl)
+            } catch (_) {}
+        }
+        
+        // 官方源失败，尝试代理
+        if (!release && proxy) {
+            try { release = await fetchRelease(proxy + apiUrl) } catch (_) {}
+        }
+        
         if (!release) {
             return { hasUpdate: false, error: '网络连接失败，请手动查看更新' }
         }
@@ -143,7 +228,10 @@ const createWindow = () => {
             if (isNewerVersion(latestVersion, currentVersion)) {
                 const exeAsset = release.assets.find(a => a.name.includes('Setup') && a.name.endsWith('.exe')) || release.assets.find(a => a.name.endsWith('.exe'))
                 let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
-                if (downloadUrl && proxy) {
+                // 使用镜像站加速下载链接
+                if (downloadUrl && mirror) {
+                    downloadUrl = mirror + downloadUrl
+                } else if (downloadUrl && proxy) {
                     downloadUrl = proxy + downloadUrl
                 }
                 return {
@@ -189,11 +277,19 @@ const createWindow = () => {
     registerShortcuts(win)
 }
 
-function checkForGithubUpdate(win) {
+async function checkForGithubUpdate(win) {
     const https = require('https')
     const { URL } = require('url')
     const currentVersion = require('./package.json').version
     const settings = settingsStore.get('settings')
+    const autoUpdate = settings?.other?.autoUpdate !== false
+    
+    // 如果禁用自动更新，直接返回
+    if (!autoUpdate) {
+        console.log('[update] Auto update disabled')
+        return
+    }
+    
     const proxy = settings?.other?.updateProxy || ''
 
     function fetchRelease(urlStr) {
@@ -221,22 +317,41 @@ function checkForGithubUpdate(win) {
     }
 
     const apiUrl = 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
+    
+    // 获取最快的镜像站
+    const mirror = await getFastestMirror()
+    
     ;(async () => {
         let release
         try {
-            release = await fetchRelease(apiUrl)
-        } catch (_) {
-            if (proxy) {
-                try { release = await fetchRelease(proxy + apiUrl) } catch (_) {}
+            // 优先使用镜像站
+            if (mirror) {
+                release = await fetchRelease(mirror + apiUrl)
             }
+        } catch (_) {}
+        
+        // 镜像站失败，尝试官方源
+        if (!release) {
+            try {
+                release = await fetchRelease(apiUrl)
+            } catch (_) {}
         }
+        
+        // 官方源失败，尝试代理
+        if (!release && proxy) {
+            try { release = await fetchRelease(proxy + apiUrl) } catch (_) {}
+        }
+        
         if (!release) return
         try {
             const latestVersion = release.tag_name.replace(/^v/, '')
             if (isNewerVersion(latestVersion, currentVersion)) {
                 const exeAsset = release.assets.find(a => a.name.includes('Setup') && a.name.endsWith('.exe')) || release.assets.find(a => a.name.endsWith('.exe'))
                 let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
-                if (downloadUrl && proxy) {
+                // 使用镜像站加速下载链接
+                if (downloadUrl && mirror) {
+                    downloadUrl = mirror + downloadUrl
+                } else if (downloadUrl && proxy) {
                     downloadUrl = proxy + downloadUrl
                 }
                 win.webContents.send('check-update', {

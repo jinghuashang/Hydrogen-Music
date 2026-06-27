@@ -89,6 +89,9 @@ module.exports = IpcMainEvent = (win, app) => {
             if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadCover')) settings.local.downloadCover = false
             if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadInfo')) settings.local.downloadInfo = false
             if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadLyric')) settings.local.downloadLyric = false
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'autoUpdate')) settings.other.autoUpdate = true
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'autoMirror')) settings.other.autoMirror = true
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'githubMirror')) settings.other.githubMirror = ''
             return settings
         }
         else {
@@ -161,7 +164,10 @@ module.exports = IpcMainEvent = (win, app) => {
                     globalShortcuts: true,
                     quitApp:'minimize',
                     updateProxy: '',
-                    externalUnblockUrl: ''
+                    externalUnblockUrl: '',
+                    autoUpdate: true,
+                    autoMirror: true,
+                    githubMirror: '',
                 },
                 unblock: {
                     enabled: true
@@ -516,5 +522,54 @@ module.exports = IpcMainEvent = (win, app) => {
             console.error('[unblock] IPC match error:', e.message)
         }
         return null
+    })
+
+    // GitHub 镜像站列表
+    const GITHUB_MIRRORS = [
+        { name: 'ghfast.top', url: 'https://ghfast.top/' },
+        { name: 'gh.llkk.cc', url: 'https://gh.llkk.cc/' },
+        { name: 'github.moeyy.xyz', url: 'https://github.moeyy.xyz/' },
+        { name: 'gh-proxy.com', url: 'https://gh-proxy.com/' },
+        { name: 'ghproxy.cc', url: 'https://ghproxy.cc/' },
+    ]
+
+    // 获取镜像站列表
+    ipcMain.handle('get-github-mirrors', async () => {
+        return GITHUB_MIRRORS
+    })
+
+    // 测试镜像站延迟
+    ipcMain.handle('test-mirror-latency', async (_e, mirrorUrl) => {
+        const https = require('https')
+        const { URL } = require('url')
+        const testUrl = mirrorUrl + 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
+        const parsed = new URL(testUrl)
+        
+        return new Promise((resolve) => {
+            const startTime = Date.now()
+            const options = {
+                hostname: parsed.hostname,
+                port: parsed.port || 443,
+                path: parsed.pathname + parsed.search,
+                method: 'HEAD',
+                timeout: 3000,
+                headers: {
+                    'User-Agent': 'Hydrogen-Music',
+                }
+            }
+            const req = https.request(options, (res) => {
+                res.resume()
+                resolve({
+                    latency: Date.now() - startTime,
+                    success: res.statusCode >= 200 && res.statusCode < 400
+                })
+            })
+            req.on('error', () => resolve({ latency: Infinity, success: false }))
+            req.on('timeout', () => {
+                req.destroy()
+                resolve({ latency: Infinity, success: false })
+            })
+            req.end()
+        })
     })
 }

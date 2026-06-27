@@ -79,6 +79,11 @@ const updateProxy = ref('')
 const appVersion = ref('')
 const isCheckingUpdate = ref(false)
 const unblockEnabled = ref(false)
+const autoUpdate = ref(true)
+const autoMirror = ref(true)
+const githubMirror = ref('')
+const isTestingMirror = ref(false)
+const mirrorResults = ref([])
 const syncProfileToNas = ref(false)
 const downloadCover = ref(false)
 const downloadInfo = ref(false)
@@ -123,6 +128,9 @@ onActivated(() => {
         quitApp.value = settings.other.quitApp
         customFont.value = settings.other.customFont
         updateProxy.value = settings.other.updateProxy || ''
+        autoUpdate.value = settings.other.autoUpdate !== false
+        autoMirror.value = settings.other.autoMirror !== false
+        githubMirror.value = settings.other.githubMirror || ''
         if(settings.unblock) {
             unblockEnabled.value = settings.unblock.enabled
         }
@@ -165,6 +173,9 @@ const setAppSettings = async () => {
             quitApp: quitApp.value,
             customFont: customFont.value,
             updateProxy: updateProxy.value,
+            autoUpdate: autoUpdate.value,
+            autoMirror: autoMirror.value,
+            githubMirror: githubMirror.value,
         },
         unblock: {
             enabled: unblockEnabled.value,
@@ -429,6 +440,37 @@ const toggleUnblock = () => {
     unblockEnabled.value = !unblockEnabled.value
     setAppSettings()
     noticeOpen(unblockEnabled.value ? '解锁灰色歌曲已开启' : '解锁灰色歌曲已关闭', 1)
+}
+
+const testMirrors = async () => {
+    if (isTestingMirror.value) return
+    isTestingMirror.value = true
+    mirrorResults.value = []
+    
+    try {
+        const mirrors = await windowApi.getGithubMirrors()
+        const results = await Promise.all(
+            mirrors.map(async (mirror) => {
+                const result = await windowApi.testMirrorLatency(mirror.url)
+                return {
+                    ...mirror,
+                    latency: result.latency,
+                    success: result.success
+                }
+            })
+        )
+        mirrorResults.value = results.filter(r => r.success).sort((a, b) => a.latency - b.latency)
+        
+        if (mirrorResults.value.length > 0) {
+            noticeOpen(`最快镜像站: ${mirrorResults.value[0].name} (${mirrorResults.value[0].latency}ms)`, 3)
+        } else {
+            noticeOpen('所有镜像站测试失败', 3)
+        }
+    } catch (e) {
+        noticeOpen('测试镜像站失败', 3)
+    } finally {
+        isTestingMirror.value = false
+    }
 }
 </script>
 
@@ -751,6 +793,51 @@ const toggleUnblock = () => {
                             <div class="option-name">退出应用时</div>
                             <div class="option-operation">
                                 <Selector v-model="quitApp" :options="quitAppOptions" @update:modelValue="persistWebSettingsFromForm"></Selector>
+                            </div>
+                        </div>
+                        <div class="option" v-if="!isWebClient">
+                            <div class="option-name">自动更新</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="autoUpdate = !autoUpdate; setAppSettings()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': autoUpdate }">
+                                        {{ autoUpdate ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="autoUpdate"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="!isWebClient">
+                            <div class="option-name">自动选择最快镜像站</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="autoMirror = !autoMirror; setAppSettings()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': autoMirror }">
+                                        {{ autoMirror ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="autoMirror"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="!isWebClient && !autoMirror">
+                            <div class="option-name">自定义 GitHub 镜像站</div>
+                            <div class="option-operation">
+                                <input type="text" v-model="githubMirror" placeholder="留空使用官方源，如 https://gh.llkk.cc/" @change="persistWebSettingsFromForm()">
+                            </div>
+                        </div>
+                        <div class="option" v-if="!isWebClient">
+                            <div class="option-name">测试镜像站速度</div>
+                            <div class="option-operation">
+                                <div class="button" @click="testMirrors()" :class="{ 'testing': isTestingMirror }">
+                                    {{ isTestingMirror ? '测试中...' : '开始测试' }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mirror-results" v-if="mirrorResults.length > 0">
+                            <div class="mirror-result-item" v-for="(result, index) in mirrorResults" :key="result.name">
+                                <span class="mirror-rank">{{ index + 1 }}.</span>
+                                <span class="mirror-name">{{ result.name }}</span>
+                                <span class="mirror-latency">{{ result.latency }}ms</span>
                             </div>
                         </div>
                         <div class="option" v-if="!isWebClient">
@@ -1239,6 +1326,48 @@ const toggleUnblock = () => {
                             }
                         }
                     }
+
+                    .mirror-results {
+                        margin-top: 15px;
+                        padding: 10px;
+                        background-color: rgba(255, 255, 255, 0.35);
+                        font: 13px SourceHanSansCN-Bold;
+                        color: black;
+
+                        .mirror-result-item {
+                            display: flex;
+                            flex-direction: row;
+                            align-items: center;
+                            margin-bottom: 8px;
+
+                            &:last-child {
+                                margin-bottom: 0;
+                            }
+
+                            .mirror-rank {
+                                width: 25px;
+                                font-weight: bold;
+                            }
+
+                            .mirror-name {
+                                flex: 1;
+                            }
+
+                            .mirror-latency {
+                                width: 80px;
+                                text-align: right;
+                                color: #666;
+                            }
+                        }
+                    }
+
+                    .button {
+                        &.testing {
+                            opacity: 0.6;
+                            cursor: not-allowed;
+                        }
+                    }
+                    
 
                     .forbid-shortcuts {
                         opacity: 0.5;

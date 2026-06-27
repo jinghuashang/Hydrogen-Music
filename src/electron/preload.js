@@ -173,6 +173,8 @@ contextBridge.exposeInMainWorld('windowApi', {
     getDesktopSources: () => ipcRenderer.invoke('get-desktop-sources'),
     manualCheckUpdate: () => ipcRenderer.invoke('manual-check-update'),
     autoDownloadUpdate: (url) => ipcRenderer.invoke('auto-download-update', url),
+    getGithubMirrors: () => ipcRenderer.invoke('get-github-mirrors'),
+    testMirrorLatency: (mirrorUrl) => ipcRenderer.invoke('test-mirror-latency', mirrorUrl),
     onAutoUpdateStatus: (callback) => ipcRenderer.on('auto-update-status', callback),
     biliFetch: async (url, options = {}) => {
         const headers = {
