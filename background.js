@@ -73,10 +73,6 @@ const createWindow = () => {
         }
     })
     myWindow = win
-    if(process.resourcesPath.indexOf('\\node_modules\\') != -1)
-        win.loadURL('http://localhost:5173/')
-    else
-        win.loadFile(indexHtml)
     win.once('ready-to-show', () => {
         win.show()
         if(process.resourcesPath.indexOf('\\node_modules\\') == -1) {
@@ -170,8 +166,21 @@ const createWindow = () => {
         return sources.map(s => ({ id: s.id, name: s.name }))
     })
 
-    //api初始化
-    startNeteaseMusicApi()
+    //api初始化 - 等待服务器就绪后再加载前端
+    startNeteaseMusicApi().then(() => {
+        console.log('[background] NCM API server ready')
+        if(process.resourcesPath.indexOf('\\node_modules\\') != -1)
+            win.loadURL('http://localhost:5173/')
+        else
+            win.loadFile(indexHtml)
+    }).catch(err => {
+        console.error('[background] NCM API server failed to start:', err)
+        // 即使失败也加载前端，让用户看到界面
+        if(process.resourcesPath.indexOf('\\node_modules\\') != -1)
+            win.loadURL('http://localhost:5173/')
+        else
+            win.loadFile(indexHtml)
+    })
     //ipcMain初始化
     IpcMainEvent(win, app)
     MusicDownload(win)

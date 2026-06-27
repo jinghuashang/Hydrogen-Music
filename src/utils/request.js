@@ -20,10 +20,17 @@ const request = axios.create({
     timeout: 10000,
 });
 
+// 重试配置
+const MAX_RETRIES = 3
+const RETRY_DELAY = 1000
+
 export function clearProxyCache() {}
 
 // 请求拦截器
 request.interceptors.request.use(async function (config) {
+  // 初始化重试计数器
+  config._retryCount = config._retryCount || 0
+
   // 解锁灰色歌曲：对 /song/url/v1 请求附加 unblock=true 和歌曲元数据
   if (config.url === '/song/url/v1') {
     let unblockOn = true
@@ -69,10 +76,25 @@ request.interceptors.request.use(async function (config) {
     return Promise.reject(error);
 });
 
-// 响应拦截器
+// 响应拦截器（带重试逻辑）
 request.interceptors.response.use(function (response) {
     return response.data
-  }, function (error) {
+  }, async function (error) {
+    const config = error.config
+    if (!config) {
+      noticeOpen("请求错误", 2)
+      return Promise.reject(error)
+    }
+
+    // 判断是否需要重试（网络错误或服务器错误）
+    const shouldRetry = !error.response || error.response.status >= 500
+    if (shouldRetry && config._retryCount < MAX_RETRIES) {
+      config._retryCount++
+      console.log(`[request] Retrying ${config.url} (${config._retryCount}/${MAX_RETRIES})`)
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
+      return request(config)
+    }
+
     noticeOpen("请求错误", 2)
     return Promise.reject(error);
 });
