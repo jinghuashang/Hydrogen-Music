@@ -17,7 +17,7 @@
   const showMusicTime = ref(false)
 
   watch(() => volume.value, () => {
-    currentMusic.value.volume(volume.value)
+    if(currentMusic.value) currentMusic.value.volume(volume.value)
   })
 
   const checkIsLike = computed(() => (id) => {
@@ -58,7 +58,7 @@
         <div class="music-img" @click="showPlayer()">
             <img v-if="songList[currentIndex].type != 'local'" :src="songList[currentIndex].al.picUrl + '?param=128y128'" alt="">
             <img v-else v-show="localBase64Img" :src="localBase64Img" alt="">
-            <img v-if="songList[currentIndex].type == 'local' && !localBase64Img" src="http://p3.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg?param=128y128" alt="">
+            <img v-if="songList[currentIndex].type == 'local' && !localBase64Img" src="https://p3.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg?param=128y128" alt="">
             <div class="open-player">
                 <svg t="1670207990373" class="open-player-icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5640" width="200" height="200"><path d="M960.1 699.7l-72.8 72.8L512 397.1 136.7 772.5l-72.8-72.8L512 251.5z" fill="#ffffff" p-id="5641"></path></svg>
             </div>
@@ -66,7 +66,7 @@
         <div class="music-info-other">
             <span class="music-name" :class="{'music-time-in': showMusicTime}">{{songList[currentIndex].name || songList[currentIndex].localName}}</span>
             <div class="music-author">
-                <span @click="checkArtist(singer.id)" class="author" v-for="(singer, index) in songList[currentIndex].ar">{{singer.name || ''}}{{index == songList[currentIndex].ar.length -1 ? '' : ' / '}}</span>
+                <span @click="checkArtist(singer.id)" class="author" v-for="(singer, index) in songList[currentIndex].ar" :key="index">{{singer.name || ''}}{{index == songList[currentIndex].ar.length -1 ? '' : ' / '}}</span>
             </div>
         </div>
     </div>

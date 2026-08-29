@@ -1,5 +1,5 @@
 <script setup>
-  import { computed } from 'vue'
+  import { computed, watch } from 'vue'
   import { useRouter } from 'vue-router';
   import { songTime2 } from '../utils/player';
   import VueSlider from 'vue-slider-component'
@@ -21,10 +21,15 @@
     },
   })
 
-  const { playing, progress, volume, playMode, currentIndex, songList, songId, widgetState, lyricShow, lyricType, playlistWidgetShow, time, playerChangeSong, localBase64Img, musicVideo, addMusicVideo, videoIsPlaying, playerShow, coverBlur } = storeToRefs(playerStore)
+  const { currentMusic, playing, progress, volume, playMode, currentIndex, songList, songId, widgetState, lyricShow, lyricType, playlistWidgetShow, time, playerChangeSong, localBase64Img, musicVideo, addMusicVideo, videoIsPlaying, playerShow, coverBlur } = storeToRefs(playerStore)
 
   const checkIsLike = computed(() => (id) => {
     return userStore.likelist.includes(id)
+  })
+
+  // 全屏播放器的音量滑条也需要实际作用于 Howl 实例（迷你条卸载后无人监听 volume）
+  watch(() => volume.value, () => {
+    if(currentMusic.value) currentMusic.value.volume(volume.value)
   })
 
   const toAlbum = () => {
@@ -92,7 +97,7 @@
             >
                 <img v-if="songList[currentIndex].type != 'local'" :src="songList[currentIndex].al.picUrl + '?param=600y600'" alt="">
                 <img v-else v-show="localBase64Img" :src="localBase64Img" alt="">
-                <img v-if="songList[currentIndex].type == 'local' && !localBase64Img" src="http://p3.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg?param=140y140" alt="">
+                <img v-if="songList[currentIndex].type == 'local' && !localBase64Img" src="https://p3.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg?param=140y140" alt="">
                 <div v-if="webHomeLeftEmbed && !videoIsPlaying" class="open-player">
                   <svg t="1670207990373" class="open-player-icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5640" width="200" height="200"><path d="M960.1 699.7l-72.8 72.8L512 397.1 136.7 772.5l-72.8-72.8L512 251.5z" fill="#ffffff" p-id="5641"></path></svg>
                 </div>
@@ -110,7 +115,7 @@
             <div class="info-music">
                 <div class="music-author-lable" :class="{'music-author-lable-video': (videoIsPlaying || coverBlur) && !webHomeLeftEmbed}"></div>
                 <div class="music-author">
-                    <span @click="checkArtist(singer.id)" class="author" :style="{color: (videoIsPlaying || coverBlur) && !webHomeLeftEmbed ? 'black' : 'rgb(105, 105, 105)'}" v-for="(singer, index) in songList[currentIndex].ar">{{singer.name || ''}}{{index == songList[currentIndex].ar.length -1 ? '' : ' / '}}</span>
+                    <span @click="checkArtist(singer.id)" class="author" :style="{color: (videoIsPlaying || coverBlur) && !webHomeLeftEmbed ? 'black' : 'rgb(105, 105, 105)'}" v-for="(singer, index) in songList[currentIndex].ar" :key="index">{{singer.name || ''}}{{index == songList[currentIndex].ar.length -1 ? '' : ' / '}}</span>
                 </div>
             </div>
         </div>

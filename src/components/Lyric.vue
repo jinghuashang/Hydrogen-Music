@@ -270,6 +270,7 @@
     clearInterval(lyricInterval.value)
     const length = lyricsObjArr.value.length - 1
     lyricInterval.value = setInterval(() => {
+      if(!currentMusic.value) return
       const lastIndex = lycCurrentIndex.value
       const currentSeek = currentMusic.value.seek()
       musicVideoCheck(currentSeek)
@@ -303,7 +304,7 @@
         }
         syncLyricScroll({ behavior: 'smooth' })
         let interTime = null
-        if(lycCurrentIndex.value != length)
+        if(lycCurrentIndex.value != null && lycCurrentIndex.value != -1 && lycCurrentIndex.value != length)
           interTime = lyricsObjArr.value[lycCurrentIndex.value + 1].time - currentSeek
         if( interTime >= lyricInterludeTime.value) {
           interludeIndex.value = lycCurrentIndex.value
@@ -322,15 +323,17 @@
           }, 900);
         }
       }
-      if(interludeAnimation.value && (lyricsObjArr.value[lycCurrentIndex.value + 1].time - currentSeek < 1)) {
+      // 歌曲结尾处 lycCurrentIndex+1 会越界，先取到下一行再判断
+      const nextLine = (lycCurrentIndex.value != null && lycCurrentIndex.value >= 0) ? lyricsObjArr.value[lycCurrentIndex.value + 1] : null
+      if(interludeAnimation.value && nextLine && (nextLine.time - currentSeek < 1)) {
         interludeAnimation.value = false
         clearTimeout(interludeOutTimer)
         interludeOutTimer = setTimeout(() => {
           interludeIndex.value = null
           clearTimeout(interludeOutTimer)
         }, 900);
-      } else if(interludeAnimation.value) {
-        interludeRemainingTime.value = Math.trunc((lyricsObjArr.value[lycCurrentIndex.value + 1].time - currentSeek) - 1)
+      } else if(interludeAnimation.value && nextLine) {
+        interludeRemainingTime.value = Math.trunc((nextLine.time - currentSeek) - 1)
       }
     }, 200);
   }
@@ -393,6 +396,9 @@
   })
   onBeforeUnmount(() => {
     clearInterval(lyricInterval.value)
+    clearTimeout(interludeInTimer)
+    clearTimeout(interludeOutTimer)
+    if(pauseActiveTimer.value) clearTimeout(pauseActiveTimer.value)
     cancelScrollAnimation()
     if(lyricScroll.value) lyricScroll.value.removeEventListener('wheel', handleWheel)
   })
@@ -404,7 +410,7 @@
       <div v-show="lyricsObjArr && lyricShow && lyricType.indexOf('original') != -1" class="lyric-area" ref="lyricScroll">
         <div class="lyric-content" ref="lyricContent">
           <div class="lyric-spacer" :style="{ height: FOLLOW_TOP_OFFSET + 'px' }"></div>
-          <div class="lyric-line" v-for="(item, index) in getLyric" v-show="item.lyric">
+          <div class="lyric-line" v-for="(item, index) in getLyric" :key="index" v-show="item.lyric">
             <div class="line" @click="changeProgressLyc(item.time, index)" :class="{'line-highlight': index == lycCurrentIndex, 'lyric-inactive': !isLyricActive || item.active}">
               <span class="roma" :style="{'font-size': rlyricSize + 'px'}" v-if="item.rlyric && lyricType.indexOf('roma') != -1">{{item.rlyric}}</span>
               <span class="original" :style="{'font-size': lyricSize + 'px'}" v-if="lyricType.indexOf('original') != -1">{{item.lyric}}</span>

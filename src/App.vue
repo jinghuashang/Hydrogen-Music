@@ -1,5 +1,6 @@
 <script setup>
   import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+  import { useRoute } from 'vue-router'
   import Home from './views/Home.vue'
   import Title from './components/Title.vue'
   import SearchInput from './components/SearchInput.vue'
@@ -17,6 +18,7 @@
 
   const playerStore = usePlayerStore()
   const otherStore = useOtherStore()
+  const route = useRoute()
 
   const isWebClient =
     import.meta.env.VITE_WEB === 'true' || import.meta.env.VITE_WEB === '1'
@@ -106,13 +108,14 @@
     otherStore.toUpdate = true
     otherStore.newVersion = version.version
     otherStore.updateDownloadUrl = version.downloadUrl
+    otherStore.updateDigest = version.digest || ''
     otherStore.updateIsWindows = version.isWindows
     otherStore.releaseBody = version.releaseBody || ''
-    // 自动开始下载更新
+    // 自动开始下载更新（可在更新弹窗点"忽略"取消）
     if (version.isWindows && version.downloadUrl) {
       otherStore.autoUpdateStatus = 'downloading'
       otherStore.autoUpdateProgress = 0
-      windowApi.autoDownloadUpdate(version.downloadUrl)
+      windowApi.autoDownloadUpdate(version.downloadUrl, version.digest || '')
     }
   })
 
@@ -160,7 +163,7 @@
     <div
       class="musicWidget"
       v-if="playerStore.songList && playerStore.songList[playerStore.currentIndex]"
-      v-show="playerStore.widgetState && !webHomeSplit"
+      v-show="playerStore.widgetState && !webHomeSplit && route.name !== 'heartbeat'"
     >
       <MusicWidget></MusicWidget>
     </div>

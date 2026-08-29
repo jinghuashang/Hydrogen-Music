@@ -16,7 +16,8 @@
         >
           <div
             class="selector-option-item"
-            v-for="item in options"
+            v-for="(item, index) in options"
+            :key="item?.value ?? index"
             @click="changeOption(item)"
             :class="{
               'selector-option-item-selected': modelValue === item.value,

@@ -35,12 +35,13 @@ export const useLocalStore = defineStore('localStore', {
             if (arr.length == 0) {
               return [];
             }
-            let obj = {};
-            let uniqueArr = arr.reduce(function (total, item) {
-              obj[item[batch]] ? '' : (obj[item[batch]] = true && total.push(item));
-              return total;
-            }, []);
-            return uniqueArr;
+            let seen = {};
+            return arr.filter(item => {
+                const key = item[batch]
+                if(seen[key]) return false
+                seen[key] = true
+                return true
+            });
         },
         updateDownloadList(list) {
             if(!this.downloadedFolderSettings) {noticeOpen("请先在设置中设置下载目录", 2);return}
@@ -53,6 +54,7 @@ export const useLocalStore = defineStore('localStore', {
             noticeOpen('已添加到下载列表', 2)
         },
         getSongs(arr) {
+            if(!this.currentSelectedSongs) this.currentSelectedSongs = []
             arr.forEach(song => {
               if(song.children) this.getSongs(song.children)
               else {
@@ -86,28 +88,34 @@ export const useLocalStore = defineStore('localStore', {
                     this.getFolderSongs(this.localMusicList, query.name)
             }
             if(type == 'localAlbum') {
-                const index = (this.localMusicClassify.albums || []).findIndex((item) => item.id == id)
+                const albums = this.localMusicClassify?.albums || []
+                const index = albums.findIndex((item) => item.id == id)
+                if(index == -1) return
                 this.currentSelectedInfo = {
-                    id: this.localMusicClassify.albums[index].id,
-                    name: this.localMusicClassify.albums[index].name
+                    id: albums[index].id,
+                    name: albums[index].name
                 }
-                this.currentSelectedSongs = this.localMusicClassify.albums[index].songs
-                if(this.currentSelectedSongs)
-                    this.getImgBase64(this.currentSelectedSongs[0].common.fileUrl).then(res => {
+                this.currentSelectedSongs = albums[index].songs
+                const firstSong = this.currentSelectedSongs?.[0]
+                if(firstSong?.common?.fileUrl)
+                    this.getImgBase64(firstSong.common.fileUrl).then(res => {
                         this.currentSelectedFilePicUrl = res
-                    })
+                    }).catch(() => {})
             }
             if(type == 'localArtist') {
-                const index = (this.localMusicClassify.artists || []).findIndex((item) => item.id == id)
+                const artists = this.localMusicClassify?.artists || []
+                const index = artists.findIndex((item) => item.id == id)
+                if(index == -1) return
                 this.currentSelectedInfo = {
-                    id: this.localMusicClassify.artists[index].id,
-                    name: this.localMusicClassify.artists[index].name
+                    id: artists[index].id,
+                    name: artists[index].name
                 }
-                this.currentSelectedSongs = this.localMusicClassify.artists[index].songs
-                if(this.currentSelectedSongs)
-                    this.getImgBase64(this.currentSelectedSongs[0].common.fileUrl).then(res => {
+                this.currentSelectedSongs = artists[index].songs
+                const firstSong = this.currentSelectedSongs?.[0]
+                if(firstSong?.common?.fileUrl)
+                    this.getImgBase64(firstSong.common.fileUrl).then(res => {
                         this.currentSelectedFilePicUrl = res
-                    })
+                    }).catch(() => {})
             }
         }
     },

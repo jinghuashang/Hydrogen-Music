@@ -221,9 +221,9 @@
           <div class="info-other">
             <div class="introduce-author">
               <span class="author" v-if="libraryInfo.creator">{{libraryInfo.creator.nickname}}</span>
-              <span class="author" @click="checkArtist(artist.id)" v-for="(artist, index) in libraryInfo.artists">{{artist.name}}{{index == libraryInfo.artists.length -1 ? '' : '/'}}</span>
+              <span class="author" @click="checkArtist(artist.id)" v-for="(artist, index) in libraryInfo.artists" :key="index">{{artist.name}}{{index == libraryInfo.artists.length -1 ? '' : '/'}}</span>
               <span class="author" v-if="libraryInfo.trans">{{libraryInfo.trans}}&nbsp;&nbsp;</span>
-              <span class="author" v-for="(alia, index) in libraryInfo.alias">{{alia}}{{index == libraryInfo.alias.length -1 ? '' : ' · '}}</span>
+              <span class="author" v-for="(alia, index) in libraryInfo.alias" :key="index">{{alia}}{{index == libraryInfo.alias.length -1 ? '' : ' · '}}</span>
             </div>
             <span class="introduce-num" v-if="!isSinger">共{{(libraryInfo.trackCount || libraryInfo.size)}}首 - {{totalTime}}分钟</span>
             <span class="introduce-num" v-if="isSinger">{{libraryInfo.musicSize}}首歌 · {{libraryInfo.albumSize}}张专辑 · {{libraryInfo.mvSize}}个MV</span>

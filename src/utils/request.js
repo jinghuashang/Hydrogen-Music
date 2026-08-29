@@ -63,6 +63,7 @@ request.interceptors.request.use(async function (config) {
       } catch (_) {}
     }
   }
+  config.params = config.params || {}
   if (config.url != '/login/qr/check' && isLogin()) {
     const cookieStr = getNeteaseCookieStringForApi()
     if (cookieStr) config.params.cookie = cookieStr
@@ -86,12 +87,15 @@ request.interceptors.response.use(function (response) {
       return Promise.reject(error)
     }
 
-    // 判断是否需要重试（网络错误或服务器错误）
-    const shouldRetry = !error.response || error.response.status >= 500
+    // 判断是否需要重试：仅幂等的 GET/HEAD 重试，避免 POST（验证码发送、登录等）重复执行
+    const method = (config.method || 'get').toLowerCase()
+    const shouldRetry = (!error.response || error.response.status >= 500) && (method === 'get' || method === 'head')
     if (shouldRetry && config._retryCount < MAX_RETRIES) {
       config._retryCount++
-      console.log(`[request] Retrying ${config.url} (${config._retryCount}/${MAX_RETRIES})`)
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY))
+      // 指数退避，避免固定间隔重试放大服务端压力
+      const delay = RETRY_DELAY * Math.pow(2, config._retryCount - 1)
+      console.log(`[request] Retrying ${config.url} (${config._retryCount}/${MAX_RETRIES}) in ${delay}ms`)
+      await new Promise(resolve => setTimeout(resolve, delay))
       return request(config)
     }
 

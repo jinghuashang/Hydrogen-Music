@@ -1,5 +1,5 @@
 <script setup>
-  import { ref, watch } from 'vue'
+  import { ref, watch, onUnmounted, onDeactivated } from 'vue'
   import QRCode from 'qrcode'
 
   import { songTime2, loadMusicVideo, unloadMusicVideo } from '../utils/player';
@@ -119,6 +119,9 @@
         })
     }, 1000);
   }
+  // 二维码登录轮询：组件卸载/失活时兜底清理，避免轮询泄漏
+  onUnmounted(() => { clearInterval(checkQRTimer.value) })
+  onDeactivated(() => { clearInterval(checkQRTimer.value) })
   const loginHandle = async (data) => {
     closeLogin()
     if(selectedInfo.value.bvid) {search()}

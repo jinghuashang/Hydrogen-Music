@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onActivated, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { noticeOpen } from '../utils/dialog'
 import { audioMatch } from '../api/audioMatch'
@@ -55,17 +55,22 @@ function initAudio() {
   return new Promise((resolve) => {
     audioCtx = new AudioContext({ sampleRate: 8000 })
 
-    function tryInit() {
+    function tryInit(attempts = 0) {
+      // 页面离开会 close AudioContext，重试需有上限并在上下文关闭后停止
+      if (!audioCtx || audioCtx.state === 'closed' || attempts > 50) {
+        resolve(false)
+        return
+      }
       if (audioCtx.state === 'suspended') {
         audioCtx.resume().then(() => {
           if (audioCtx.state === 'suspended') {
             log('AudioContext 仍为 suspended, 100ms 后重试...')
-            setTimeout(tryInit, 100)
+            setTimeout(() => tryInit(attempts + 1), 100)
             return
           }
           setupWorklet()
         }).catch(() => {
-          setTimeout(tryInit, 100)
+          setTimeout(() => tryInit(attempts + 1), 100)
         })
         return
       }
@@ -306,9 +311,9 @@ onMounted(async () => {
   await ensureScripts()
 })
 
-onActivated(() => {})
-
-onBeforeUnmount(() => {
+// 页面均在 keep-alive 中，onBeforeUnmount 不会因路由切换触发；
+// 释放麦克风/AudioContext 必须同时挂在 onDeactivated
+function teardownAudio() {
   stopCanvas()
   clearInterval(countdownTimer)
   if (micSourceNode) {
@@ -320,6 +325,14 @@ onBeforeUnmount(() => {
   if (audioCtx && audioCtx.state !== 'closed') {
     audioCtx.close().catch(() => {})
   }
+}
+
+onDeactivated(() => {
+  teardownAudio()
+})
+
+onBeforeUnmount(() => {
+  teardownAudio()
 })
 </script>
 

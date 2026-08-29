@@ -105,7 +105,7 @@
         </div>
         <div class="item-other">
             <div class="item-author" v-if="item.ar">
-              <span class="item-singer" @click="checkArtist(singer.id)" v-for="(singer, index) in item.ar">{{singer.name}}{{index == item.ar.length -1 ? '' : '/'}}</span>
+              <span class="item-singer" @click="checkArtist(singer.id)" v-for="(singer, index) in item.ar" :key="index">{{singer.name}}{{index == item.ar.length -1 ? '' : '/'}}</span>
             </div>
             <span class="item-time">{{songTime(item.dt || item.duration)}}</span>
         </div>

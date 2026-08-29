@@ -1,4 +1,3 @@
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 const startNeteaseMusicApi = require('./src/electron/services')
 const IpcMainEvent = require('./src/electron/ipcMain')
 const MusicDownload = require('./src/electron/download')
@@ -11,6 +10,9 @@ const Winstate = require('electron-win-state').default
 const path = require('path')
 const Store = require('electron-store');
 const settingsStore = new Store({name: 'settings'});
+
+// 仅开发环境放宽 TLS 校验便于调试，打包后保持证书校验
+if (!app.isPackaged) process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
 // GitHub 镜像站列表
 const GITHUB_MIRRORS = [
@@ -79,6 +81,73 @@ async function getFastestMirror() {
     
     console.log('[mirror] No mirror available, using official source')
     return ''
+}
+
+// 带重定向上限的 HTTPS GET（避免被无限重定向挂死）
+function httpsGetText(urlStr, maxRedirects = 5) {
+    const https = require('https')
+    const { URL } = require('url')
+    return new Promise((resolve, reject) => {
+        const request = (target, redirects) => {
+            if (redirects <= 0) {
+                reject(new Error('重定向次数超限'))
+                return
+            }
+            const parsed = new URL(target)
+            const options = {
+                hostname: parsed.hostname,
+                port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+                path: parsed.pathname + parsed.search,
+                headers: {
+                    'User-Agent': 'Hydrogen-Music',
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            }
+            const req = https.get(options, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    res.resume()
+                    request(res.headers.location, redirects - 1)
+                    return
+                }
+                let data = ''
+                res.on('data', chunk => data += chunk)
+                res.on('end', () => resolve({ status: res.statusCode, body: data }))
+                res.on('error', reject)
+            })
+            req.on('error', reject)
+            req.setTimeout(15000, () => req.destroy(new Error('请求超时')))
+        }
+        request(urlStr, maxRedirects)
+    })
+}
+
+// 依次尝试镜像站 / 官方源 / 代理获取最新 release
+async function fetchLatestRelease() {
+    const apiUrl = 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
+    const settings = settingsStore.get('settings')
+    const proxy = settings?.other?.updateProxy || ''
+    const mirror = await getFastestMirror()
+
+    const candidates = []
+    if (mirror) candidates.push(mirror + apiUrl)
+    candidates.push(apiUrl)
+    if (proxy) candidates.push(proxy + apiUrl)
+
+    for (const url of candidates) {
+        try {
+            const { status, body } = await httpsGetText(url)
+            if (status !== 200) continue
+            const release = JSON.parse(body)
+            if (release && release.tag_name) return { release, mirror }
+        } catch (_) {}
+    }
+    return null
+}
+
+function pickExeAsset(release) {
+    return release.assets.find(a => a.name.includes('Setup') && a.name.endsWith('.exe'))
+        || release.assets.find(a => a.name.endsWith('.exe'))
+        || null
 }
 
 let myWindow = null
@@ -151,98 +220,57 @@ const createWindow = () => {
     winstate.manage(win)
     win.on('close', async (event) => {
         event.preventDefault()
-        const settings = await settingsStore.get('settings')
-        if(settings.other.quitApp == 'minimize') {
+        const settings = settingsStore.get('settings')
+        if(settings?.other?.quitApp == 'minimize') {
             win.hide()
-        } else if(settings.other.quitApp == 'quit') {
+        } else if(settings?.other?.quitApp == 'quit') {
             win.webContents.send('player-save')
+            // 渲染进程无响应时兜底退出，避免窗口永远关不掉
+            setTimeout(() => { if (!win.isDestroyed()) win.destroy() }, 3000)
+        } else {
+            // 配置缺失或未知值时直接退出
+            win.destroy()
         }
     })
     // 手动检测更新
     const { ipcMain } = require('electron')
-    ipcMain.handle('auto-download-update', async (e, url) => {
-        autoDownloadAndInstall(win, url)
+    ipcMain.handle('auto-download-update', async (e, url, digest) => {
+        autoDownloadAndInstall(win, url, digest)
         return 'started'
     })
+    ipcMain.on('cancel-auto-download-update', () => {
+        if (autoUpdateCancelFn) autoUpdateCancelFn()
+    })
     ipcMain.handle('manual-check-update', async () => {
-        const https = require('https')
         const currentVersion = require('./package.json').version
-        const settings = settingsStore.get('settings')
-        const proxy = settings?.other?.updateProxy || ''
-
-        function fetchRelease(urlStr) {
-            return new Promise((resolve, reject) => {
-                const { URL } = require('url')
-                const parsed = new URL(urlStr)
-                const options = {
-                    hostname: parsed.hostname,
-                    port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
-                    path: parsed.pathname + parsed.search,
-                    headers: {
-                        'User-Agent': 'Hydrogen-Music',
-                        'Accept': 'application/vnd.github.v3+json'
-                    }
-                }
-                const req = https.get(options, (res) => {
-                    let data = ''
-                    res.on('data', chunk => data += chunk)
-                    res.on('end', () => {
-                        try { resolve(JSON.parse(data)) } catch (e) { reject(e) }
-                    })
-                })
-                req.on('error', reject)
-                req.end()
-            })
-        }
-
-        const apiUrl = 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
-        
-        // 获取最快的镜像站
-        const mirror = await getFastestMirror()
-        
-        let release
-        // 优先使用镜像站
-        if (mirror) {
-            try {
-                release = await fetchRelease(mirror + apiUrl)
-            } catch (_) {}
-        }
-        
-        // 镜像站失败，尝试官方源
-        if (!release) {
-            try {
-                release = await fetchRelease(apiUrl)
-            } catch (_) {}
-        }
-        
-        // 官方源失败，尝试代理
-        if (!release && proxy) {
-            try { release = await fetchRelease(proxy + apiUrl) } catch (_) {}
-        }
-        
-        if (!release) {
+        const fetched = await fetchLatestRelease()
+        if (!fetched) {
             return { hasUpdate: false, error: '网络连接失败，请手动查看更新' }
         }
         try {
+            const { release, mirror } = fetched
+            const settings = settingsStore.get('settings')
+            const proxy = settings?.other?.updateProxy || ''
             const latestVersion = release.tag_name.replace(/^v/, '')
-            if (isNewerVersion(latestVersion, currentVersion)) {
-                const exeAsset = release.assets.find(a => a.name.includes('Setup') && a.name.endsWith('.exe')) || release.assets.find(a => a.name.endsWith('.exe'))
-                let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
-                // 使用镜像站加速下载链接
-                if (downloadUrl && mirror) {
-                    downloadUrl = mirror + downloadUrl
-                } else if (downloadUrl && proxy) {
-                    downloadUrl = proxy + downloadUrl
-                }
-                return {
-                    hasUpdate: true,
-                    version: latestVersion,
-                    downloadUrl,
-                    isWindows: process.platform === 'win32',
-                    releaseBody: release.body || ''
-                }
+            if (!isNewerVersion(latestVersion, currentVersion)) {
+                return { hasUpdate: false }
             }
-            return { hasUpdate: false }
+            const exeAsset = pickExeAsset(release)
+            let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
+            // 使用镜像站加速下载链接
+            if (downloadUrl && mirror) {
+                downloadUrl = mirror + downloadUrl
+            } else if (downloadUrl && proxy) {
+                downloadUrl = proxy + downloadUrl
+            }
+            return {
+                hasUpdate: true,
+                version: latestVersion,
+                downloadUrl,
+                digest: exeAsset?.digest || '',
+                isWindows: process.platform === 'win32',
+                releaseBody: release.body || ''
+            }
         } catch (e) {
             return { hasUpdate: false, error: '检查更新失败' }
         }
@@ -278,127 +306,102 @@ const createWindow = () => {
 }
 
 async function checkForGithubUpdate(win) {
-    const https = require('https')
-    const { URL } = require('url')
     const currentVersion = require('./package.json').version
     const settings = settingsStore.get('settings')
     const autoUpdate = settings?.other?.autoUpdate !== false
-    
+
     // 如果禁用自动更新，直接返回
     if (!autoUpdate) {
         console.log('[update] Auto update disabled')
         return
     }
-    
-    const proxy = settings?.other?.updateProxy || ''
 
-    function fetchRelease(urlStr) {
-        return new Promise((resolve, reject) => {
-            const parsed = new URL(urlStr)
-            const options = {
-                hostname: parsed.hostname,
-                port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
-                path: parsed.pathname + parsed.search,
-                headers: {
-                    'User-Agent': 'Hydrogen-Music',
-                    'Accept': 'application/vnd.github.v3+json'
-                }
-            }
-            const req = https.get(options, (res) => {
-                let data = ''
-                res.on('data', chunk => data += chunk)
-                res.on('end', () => {
-                    try { resolve(JSON.parse(data)) } catch (e) { reject(e) }
-                })
-            })
-            req.on('error', reject)
-            req.end()
+    const fetched = await fetchLatestRelease()
+    if (!fetched) return
+    try {
+        const { release, mirror } = fetched
+        const proxy = settings?.other?.updateProxy || ''
+        const latestVersion = release.tag_name.replace(/^v/, '')
+        if (!isNewerVersion(latestVersion, currentVersion)) return
+
+        const exeAsset = pickExeAsset(release)
+        let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
+        // 使用镜像站加速下载链接
+        if (downloadUrl && mirror) {
+            downloadUrl = mirror + downloadUrl
+        } else if (downloadUrl && proxy) {
+            downloadUrl = proxy + downloadUrl
+        }
+        win.webContents.send('check-update', {
+            version: latestVersion,
+            downloadUrl,
+            digest: exeAsset?.digest || '',
+            isWindows: process.platform === 'win32',
+            releaseBody: release.body || ''
         })
-    }
-
-    const apiUrl = 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
-    
-    // 获取最快的镜像站
-    const mirror = await getFastestMirror()
-    
-    ;(async () => {
-        let release
-        try {
-            // 优先使用镜像站
-            if (mirror) {
-                release = await fetchRelease(mirror + apiUrl)
-            }
-        } catch (_) {}
-        
-        // 镜像站失败，尝试官方源
-        if (!release) {
-            try {
-                release = await fetchRelease(apiUrl)
-            } catch (_) {}
-        }
-        
-        // 官方源失败，尝试代理
-        if (!release && proxy) {
-            try { release = await fetchRelease(proxy + apiUrl) } catch (_) {}
-        }
-        
-        if (!release) return
-        try {
-            const latestVersion = release.tag_name.replace(/^v/, '')
-            if (isNewerVersion(latestVersion, currentVersion)) {
-                const exeAsset = release.assets.find(a => a.name.includes('Setup') && a.name.endsWith('.exe')) || release.assets.find(a => a.name.endsWith('.exe'))
-                let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
-                // 使用镜像站加速下载链接
-                if (downloadUrl && mirror) {
-                    downloadUrl = mirror + downloadUrl
-                } else if (downloadUrl && proxy) {
-                    downloadUrl = proxy + downloadUrl
-                }
-                win.webContents.send('check-update', {
-                    version: latestVersion,
-                    downloadUrl,
-                    isWindows: process.platform === 'win32',
-                    releaseBody: release.body || ''
-                })
-            }
-        } catch (e) {}
-    })()
+    } catch (e) {}
 }
 
-// 自动下载更新并安装
-function autoDownloadAndInstall(win, url) {
+// 自动下载更新并安装（带重定向上限与 SHA-256 校验，校验通过才启动安装包；支持中途取消）
+let autoUpdateCancelFn = null
+function autoDownloadAndInstall(win, url, expectedDigest = '') {
     const https = require('https')
     const fs = require('fs')
     const os = require('os')
+    const crypto = require('crypto')
 
     const tempDir = os.tmpdir()
-    const fileName = url.split('/').pop() || 'Hydrogen.Music.Setup.exe'
+    const fileName = (url.split('/').pop() || '').split('?')[0] || 'Hydrogen.Music.Setup.exe'
     const savePath = path.join(tempDir, fileName)
+
+    let currentReq = null
+    let cancelled = false
 
     const formatSize = (bytes) => {
         if (bytes < 1024) return bytes + ' B'
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
         return (bytes / 1024 / 1024).toFixed(1) + ' MB'
     }
+    const fail = (error) => {
+        if (cancelled) return
+        autoUpdateCancelFn = null
+        win.setProgressBar(-1)
+        win.webContents.send('auto-update-status', { status: 'failed', error })
+    }
 
     win.webContents.send('auto-update-status', { status: 'downloading', progress: 0, totalSize: 0, downloadedSize: 0 })
 
-    const followRedirect = (redirectUrl) => {
-        https.get(redirectUrl, (res) => {
+    autoUpdateCancelFn = () => {
+        cancelled = true
+        autoUpdateCancelFn = null
+        try { if (currentReq) currentReq.destroy(new Error('cancelled')) } catch (e) {}
+        try { fs.unlinkSync(savePath) } catch (e) {}
+        win.setProgressBar(-1)
+        win.webContents.send('auto-update-status', { status: 'failed', error: '已取消下载' })
+    }
+
+    const download = (target, redirects) => {
+        if (redirects <= 0) {
+            fail('重定向次数超限')
+            return
+        }
+        const req = https.get(target, (res) => {
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                followRedirect(res.headers.location)
+                res.resume()
+                download(res.headers.location, redirects - 1)
                 return
             }
             if (res.statusCode !== 200) {
-                win.webContents.send('auto-update-status', { status: 'failed', error: '下载失败' })
+                fail('下载失败')
                 return
             }
             const total = parseInt(res.headers['content-length'], 10) || 0
             let downloaded = 0
+            const hash = crypto.createHash('sha256')
             const file = fs.createWriteStream(savePath)
             res.on('data', (chunk) => {
                 downloaded += chunk.length
-                file.write(chunk)
+                hash.update(chunk)
                 if (total > 0) {
                     const progress = Math.round(downloaded / total * 100)
                     win.webContents.send('auto-update-status', {
@@ -410,26 +413,39 @@ function autoDownloadAndInstall(win, url) {
                     win.setProgressBar(progress / 100)
                 }
             })
-            res.on('end', () => {
-                file.end()
-                win.setProgressBar(-1)
-                win.webContents.send('auto-update-status', { status: 'installing' })
-                // 启动安装程序并退出应用
-                const { shell } = require('electron')
-                shell.openPath(savePath)
-                setTimeout(() => { app.exit(0) }, 500)
-            })
+            res.pipe(file)
             res.on('error', () => {
                 file.close()
                 try { fs.unlinkSync(savePath) } catch (e) {}
-                win.setProgressBar(-1)
-                win.webContents.send('auto-update-status', { status: 'failed', error: '下载失败' })
+                fail('下载失败')
             })
-        }).on('error', () => {
-            win.webContents.send('auto-update-status', { status: 'failed', error: '网络连接失败' })
+            // 等待文件完全落盘后再校验/启动，避免执行不完整文件
+            file.on('finish', () => {
+                file.close(() => {
+                    if (cancelled) return
+                    autoUpdateCancelFn = null
+                    win.setProgressBar(-1)
+                    // GitHub 提供摘要时校验，不符立即删除且绝不执行
+                    if (expectedDigest && expectedDigest.startsWith('sha256:')) {
+                        const actual = hash.digest('hex')
+                        if (actual !== expectedDigest.slice('sha256:'.length)) {
+                            try { fs.unlinkSync(savePath) } catch (e) {}
+                            fail('安装包校验失败，已取消安装')
+                            return
+                        }
+                    }
+                    win.webContents.send('auto-update-status', { status: 'installing' })
+                    const { shell } = require('electron')
+                    shell.openPath(savePath)
+                    setTimeout(() => { app.exit(0) }, 500)
+                })
+            })
         })
+        currentReq = req
+        req.on('error', () => fail('网络连接失败'))
+        req.setTimeout(60000, () => req.destroy(new Error('下载超时')))
     }
-    followRedirect(url)
+    download(url, 5)
 }
 
 function isNewerVersion(latest, current) {
@@ -443,7 +459,12 @@ function isNewerVersion(latest, current) {
         const [aNum, aSuffix] = l[i] || [0, '']
         const [bNum, bSuffix] = c[i] || [0, '']
         if (aNum !== bNum) return aNum > bNum
-        if (aSuffix !== bSuffix) return aSuffix > bSuffix
+        if ((aSuffix || '') !== (bSuffix || '')) {
+            // 正式版优先于预发布后缀：1.2.0 > 1.2.0-beta，而不是字典序误判
+            if (!aSuffix) return true
+            if (!bSuffix) return false
+            return aSuffix > bSuffix
+        }
     }
     return false
 }

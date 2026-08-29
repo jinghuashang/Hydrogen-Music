@@ -30,3 +30,8 @@ dist/*
 
 # Vercel (contains user-specific API URLs)
 vercel.json.bak
+
+# Local AI/assistant files (project memory & reports — never upload)
+.zcode/
+CLAUDE.md
+DEBUG_REPORT.md

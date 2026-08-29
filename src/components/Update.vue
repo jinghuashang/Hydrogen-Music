@@ -1,6 +1,7 @@
 <script setup>
   import { ref, computed, onMounted } from 'vue'
   import { marked } from 'marked'
+  import DOMPurify from 'dompurify'
   import { useOtherStore } from '../store/otherStore';
 
   const otherStore = useOtherStore()
@@ -19,7 +20,8 @@
       .split('\n')
       .filter(line => !/full\s*changelog/i.test(line.trim()))
       .join('\n')
-    return marked.parse(filtered)
+    // releaseBody 来自可能被镜像篡改的远端 JSON，渲染前必须消毒
+    return DOMPurify.sanitize(marked.parse(filtered), { USE_PROFILES: { html: true } })
   })
 
   onMounted(() => {
@@ -28,11 +30,16 @@
     }, 150)
   })
   const close = () => {
-    if (isAutoDownloading.value || isInstalling.value) return
+    if (isInstalling.value) return
+    // 下载中允许"忽略"：取消后台下载，避免用户没有任何取消途径
+    if (isAutoDownloading.value) {
+      if (typeof windowApi.cancelAutoDownloadUpdate === 'function') windowApi.cancelAutoDownloadUpdate()
+    }
     isActive.value = false
     setTimeout(() => {
       otherStore.toUpdate = false
       otherStore.updateDownloadUrl = null
+      otherStore.updateDigest = ''
       otherStore.updateIsWindows = false
       otherStore.releaseBody = ''
       otherStore.autoUpdateStatus = null
@@ -44,7 +51,7 @@
     if (otherStore.updateIsWindows && otherStore.updateDownloadUrl) {
       otherStore.autoUpdateStatus = 'downloading'
       otherStore.autoUpdateProgress = 0
-      windowApi.autoDownloadUpdate(otherStore.updateDownloadUrl)
+      windowApi.autoDownloadUpdate(otherStore.updateDownloadUrl, otherStore.updateDigest || '')
     } else {
       windowApi.toRegister("https://github.com/jinghuashang/Hydrogen-Music/releases")
       close()
@@ -91,7 +98,7 @@
         </div>
       </div>
       <div class="update-actions">
-        <div class="btn btn-ignore" :class="{'btn-disabled': isAutoDownloading || isInstalling}" @click="close()">
+        <div class="btn btn-ignore" :class="{'btn-disabled': isInstalling}" @click="close()">
           {{ isFailed ? '关闭' : '忽略' }}
         </div>
         <div class="btn btn-update" :class="{'btn-downloading': isAutoDownloading || isInstalling}" @click="!isAutoDownloading && !isInstalling && toUpdate()">

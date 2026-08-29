@@ -627,7 +627,7 @@ const testMirrors = async () => {
                             <div class="local-folder">
                                 <div class="selected-local-folder-item">
                                     <div class="selected-folder" :title="item" @contextmenu="deleteLocalFolder(index)"
-                                        v-for="(item, index) in localFolder">{{ item ? item : '请添加' }}</div>
+                                        v-for="(item, index) in localFolder" :key="index">{{ item ? item : '请添加' }}</div>
                                     <div class="tip">可同时添加多个目录；右键移除不需要的目录。路径需为绝对路径（Linux/macOS 多为「/home/…」开头；Windows 为盘符路径）。数据量过大时扫描会较慢。</div>
                                     <div class="tip tip-linux" v-if="isLinuxLikePath">Linux：若系统文件选择器异常（如部分 Wayland 环境），请用「手动输入」填写目录路径。</div>
                                 </div>
@@ -716,7 +716,7 @@ const testMirrors = async () => {
                             <div class="title-shortcuts">快捷键</div>
                             <div class="title-globalShortcuts" :class="{ 'forbid-shortcuts': !globalShortcuts }">全局快捷键</div>
                         </div>
-                        <div class="shortcuts" v-for="(item, index) in shortcutsList">
+                        <div class="shortcuts" v-for="(item, index) in shortcutsList" :key="index">
                             <div class="shortcut-name">{{ item.name }}</div>
                             <div class="shortcut"
                                 :class="{ 'shortcut-selected': (selectedShortcut && selectedShortcut.id == item.id && !selectedShortcut.type) }"

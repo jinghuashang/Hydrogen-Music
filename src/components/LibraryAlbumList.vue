@@ -22,7 +22,7 @@
 <template>
   <div class="library-content">
     <div class="library-album-list">
-        <div class="list-item" @click="checkAlbum(item.id)" v-for="(item, index) in props.albumlist">
+        <div class="list-item" @click="checkAlbum(item.id)" v-for="(item, index) in props.albumlist" :key="index">
             <div class="item-title" :class="{'item-title-full': props.type == 'search'}">
                 <div class="item-img">
                     <div class="album-back"></div>

@@ -1,4 +1,4 @@
-const { ipcMain } = require("electron");
+const { ipcMain, app } = require("electron");
 const path = require("path");
 const https = require("https");
 const http = require("http");
@@ -10,10 +10,11 @@ const { File, Picture, PictureType, ByteVector } = require('node-taglib-sharp')
 function fetchBuffer(url) {
     return new Promise((resolve, reject) => {
         const client = url.startsWith('https') ? https : http
-        const get = (u) => {
+        const get = (u, redirects = 5) => {
+            if (redirects <= 0) { reject(new Error('重定向次数超限')); return }
             client.get(u, (res) => {
                 if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                    get(res.headers.location)
+                    get(res.headers.location, redirects - 1)
                     return
                 }
                 if (res.statusCode !== 200) { reject(new Error('HTTP ' + res.statusCode)); return }
@@ -122,11 +123,34 @@ module.exports = MusicDownload = (win) => {
         downloadObj.meta = args.meta || null;
         downloadObj.options = args.options || { cover: false, info: false, lyric: false };
         const savePath = await settingsStore.get("settings");
-        downloadObj.savePath = savePath.local.downloadFolder;
+        downloadObj.savePath = savePath?.local?.downloadFolder;
+        if (!downloadObj.savePath) {
+            // 未配置下载目录时回退到系统下载目录，避免 path.join(null) 崩溃
+            console.warn('[download] 未配置下载目录，回退到系统下载目录')
+            downloadObj.savePath = app.getPath("downloads");
+        }
         win.webContents.downloadURL(downloadObj.downloadUrl);
     });
 
+    // 下载控制：只注册一次，通过引用操作当前活动下载项
+    let activeItem = null;
+    ipcMain.on("download-resume", () => {
+        if (activeItem) activeItem.resume();
+    });
+    ipcMain.on("download-pause", (event, close) => {
+        if (close == "shutdown") {
+            isClose = true;
+            if (activeItem) activeItem.cancel();
+        } else if (activeItem) {
+            activeItem.pause();
+        }
+    });
+    ipcMain.on("download-cancel", () => {
+        if (activeItem) activeItem.cancel();
+    });
+
     win.webContents.session.on("will-download", (event, item, webContents) => {
+        activeItem = item;
         const filePath = path.join(downloadObj.savePath, downloadObj.fileName + "." + downloadObj.type);
         item.setSavePath(filePath);
 
@@ -166,6 +190,7 @@ module.exports = MusicDownload = (win) => {
             win.webContents.send("download-progress", progress);
         });
         item.once("done", async (event, state) => {
+            if (activeItem === item) activeItem = null;
             if (!win.isDestroyed()) {
                 win.setProgressBar(-1);
             }
@@ -178,18 +203,6 @@ module.exports = MusicDownload = (win) => {
                 }
             }
             if (!isClose) win.webContents.send("download-next");
-        });
-        ipcMain.on("download-resume", () => {
-            item.resume();
-        });
-        ipcMain.on("download-pause", (close) => {
-            if (close == "shutdown") {
-                isClose = true;
-                item.cancel();
-            } else item.pause();
-        });
-        ipcMain.on("download-cancel", () => {
-            item.cancel();
         });
     });
 };

@@ -18,18 +18,18 @@ const { updateUser } = userStore
 
 function applySettingsPayload(settings) {
     if (!settings) return
-    quality.value = settings.music.level
-    lyricSize.value = settings.music.lyricSize
-    tlyricSize.value = settings.music.tlyricSize
-    rlyricSize.value = settings.music.rlyricSize
-    lyricInterludeTime.value = settings.music.lyricInterlude
     const m = settings.music || {}
+    quality.value = m.level
+    lyricSize.value = m.lyricSize
+    tlyricSize.value = m.tlyricSize
+    rlyricSize.value = m.rlyricSize
+    lyricInterludeTime.value = m.lyricInterlude
     if (Object.prototype.hasOwnProperty.call(m, 'coverBlur')) playerStore.coverBlur = !!m.coverBlur
     if (Object.prototype.hasOwnProperty.call(m, 'lyricBlur')) playerStore.lyricBlur = !!m.lyricBlur
     if (Object.prototype.hasOwnProperty.call(m, 'musicVideo')) playerStore.musicVideo = !!m.musicVideo
-    localSotre.downloadedFolderSettings = settings.local.downloadFolder
-    localSotre.localFolderSettings = settings.local.localFolder
-    localSotre.quitApp = settings.other.quitApp
+    localSotre.downloadedFolderSettings = settings.local?.downloadFolder
+    localSotre.localFolderSettings = settings.local?.localFolder || []
+    localSotre.quitApp = settings.other?.quitApp
     if (localSotre.downloadedFolderSettings && !localSotre.downloadedMusicFolder) {
         scanMusic({ type: 'downloaded', refresh: false })
     }
@@ -47,7 +47,7 @@ function applySettingsPayload(settings) {
         localSotre.localMusicClassify = null
         windowApi.clearLocalMusicData('local')
     }
-    insertCustomFontStyle(settings.other.customFont)
+    insertCustomFontStyle(settings.other?.customFont)
 }
 
 export const initSettings = async () => {
@@ -91,6 +91,8 @@ export const getUserLikelist = () => {
     if (userStore.user?.userId)
         getLikelist(userStore.user.userId).then(result => {
             userStore.likelist = result.ids
+        }).catch(() => {
+            console.warn('[init] 获取喜欢列表失败')
         })
     else {
         userStore.likelist = []
@@ -111,6 +113,8 @@ export const init = async () => {
         getUserProfile().then((result) => {
             updateUser(result.profile)
             getUserLikelist()
+        }).catch((e) => {
+            console.warn('[init] 获取用户信息失败', e)
         })
     }
     installWebVisibilitySync()

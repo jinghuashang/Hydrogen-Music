@@ -44,6 +44,8 @@
         size.value = (result.size / 1024 / 1024 / 1024).toFixed(1)
         maxSize.value = result.maxSize / 1024 / 1024 / 1024
         cloudSongs.value = result.data
+      }).catch(() => {
+        noticeOpen("云盘数据获取失败", 2)
       })
     }
   }
@@ -57,10 +59,11 @@
     uploadCloudSong(formData).then(res => {
       if(res.code == 200) {
         noticeOpen(`${file.name} 上传成功`, 2)
-        if (currentIndx >= fileLength) { 
+        if (currentIndx >= fileLength) {
           noticeOpen('上传完毕', 2)
           formData = null
-          this.files = null
+          // 重置文件选择框，否则同名文件无法再次上传（原代码误用 this.files）
+          if(uploadCloudDiskFile.value) uploadCloudDiskFile.value.value = ''
         }
       } else {
         fileUpdateTime[file.name] ? fileUpdateTime[file.name] += 1 : fileUpdateTime[file.name] = 1
@@ -69,9 +72,13 @@
           return
         } else {
           noticeOpen(`${file.name} 失败 ${fileUpdateTime[file.name]} 次`, 3)
+          // 延迟重试，避免立即递归重试打满请求
+          setTimeout(() => { upload(file, currentIndx) }, 2000)
+          return
         }
-        upload(file, currentIndx)
       }
+    }).catch(() => {
+      noticeOpen(`上传失败：${file.name}`, 3)
     }).finally(() => {
       isUploading.value = false
     })

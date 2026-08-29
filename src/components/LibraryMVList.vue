@@ -17,7 +17,7 @@
 <template>
   <div class="library-content">
     <div class="library-mv-list">
-        <div class="list-item" :class="{'list-item-selected': otherStore.currentVideoId == item.id}"  @dblclick="playMV(item)" v-for="(item, index) in props.mvlist">
+        <div class="list-item" :class="{'list-item-selected': otherStore.currentVideoId == item.id}"  @dblclick="playMV(item)" v-for="(item, index) in props.mvlist" :key="index">
             <div class="item-title">
                 <div class="item-img">
                     <img v-lazy :src="item.imgurl + '?param=176y99'" alt="">

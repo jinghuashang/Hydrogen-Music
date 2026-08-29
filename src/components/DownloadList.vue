@@ -122,7 +122,7 @@
       </div>
     </Transition>
     <div class="list-item">
-      <div class="item" @contextmenu.prevent="deleteItem(index)" v-for="(item, index) in downloadList">
+      <div class="item" @contextmenu.prevent="deleteItem(index)" v-for="(item, index) in downloadList" :key="index">
         <span class="download-index">{{index + 1}}</span>
         <div class="download">
           <div class="item-name">{{item.name}}</div>

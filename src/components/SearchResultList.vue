@@ -18,7 +18,7 @@
 <template>
   <div class="result-list">
     <div class="item-list">
-        <div class="item" v-for="(item,index) in listdata">
+        <div class="item" v-for="(item,index) in listdata" :key="index">
             <div class="item-img" :class="type == 'artist' ? 'item-img-circle' : 'item-img-sqaure'" @click="checkDetail(item.id)">
                 <img v-lazy :src="(item.coverImgUrl || item.img1v1Url || item.picUrl || item.cover) + '?param=300y300'" alt="">
             </div>

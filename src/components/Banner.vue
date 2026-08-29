@@ -14,16 +14,15 @@
   const bannerList = ref([{}])
     //获取轮播图，0为pc端轮播图,此处选择的是ipad端
 
-    loadData(3)
+    onActivated(() => {
+        loadData(3)
+        bannerStart()
+    })
 
     async function loadData(type) {
         const bannerData = await getBanner(type)
         bannerList.value = bannerData.banners
     }
-
-    onActivated(() => {
-        bannerStart()
-    })
 
     onBeforeRouteLeave(() => {
         clearInterval(timer1.value)
@@ -119,7 +118,7 @@
             </div>
         </div>
         <div class="selector-box">
-            <div @click="imgSlect(index)" class="selector" v-for="(item, index) in bannerList.length">
+            <div @click="imgSlect(index)" class="selector" v-for="(item, index) in bannerList.length" :key="index">
                 <div :class="{'selector-style': true,'selector-style-active': currentIndex == index}"></div>
             </div>
         </div>

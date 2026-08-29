@@ -78,7 +78,7 @@
 
 <template>
   <div id="libraryListScroll" class="library-list">
-    <div class="list-item" :class="{'list-item-selected': (item.id == router.currentRoute.value.fullPath.split('/')[3] && listType2 != 2) || (otherStore.currentVideoId == item.vid && listType2 == 2)}" v-for="(item, index) in libraryList" @click="showDetail(index, item)" @contextmenu="openMenu($event,item)">
+    <div class="list-item" :class="{'list-item-selected': (item.id == router.currentRoute.value.fullPath.split('/')[3] && listType2 != 2) || (otherStore.currentVideoId == item.vid && listType2 == 2)}" v-for="(item, index) in libraryList" :key="index" @click="showDetail(index, item)" @contextmenu="openMenu($event,item)">
         <div class="item-img">
             <img :src="(item.coverImgUrl || item.img1v1Url || item.picUrl || item.coverUrl) + '?param=128y128'" alt="">
         </div>
@@ -86,10 +86,10 @@
             <span class="item-name">{{(item.name ?? item.title)}}</span>
             <div class="item-info">
               <div class="item-artist" v-show="(listType1 == 1 && listType2 == 0)">
-                <span class="artist"  v-for="(artists, index) in item.artists">{{artists.name}}{{index == item.artists.length -1 ? '' : '/'}}</span>
+                <span class="artist"  v-for="(artists, index) in item.artists" :key="index">{{artists.name}}{{index == item.artists.length -1 ? '' : '/'}}</span>
               </div>
               <div class="item-artist" v-if="listType1 == 1 && listType2 == 2">
-                <span class="artist"  v-for="(creator, index) in item.creator">{{creator.userName}}{{index == item.creator.length -1 ? '' : '/'}}</span>
+                <span class="artist"  v-for="(creator, index) in item.creator" :key="index">{{creator.userName}}{{index == item.creator.length -1 ? '' : '/'}}</span>
               </div>
               <span class="item-size" v-if="!(listType1 == 1 && listType2 == 1) && !(listType1 == 1 && listType2 == 2)">{{(item.trackCount ?? item.size)}}首</span>
             </div>

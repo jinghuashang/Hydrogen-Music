@@ -17,6 +17,9 @@ try {
     console.error('[unblock] Failed to preload UNM module:', e.message)
 }
 
+// UNM 匹配统一使用最高码率选择；该值恒定，进程启动时设置一次，避免并发请求互相覆盖环境变量
+process.env.SELECT_MAX_BR = 'true'
+
 // 验证 URL 是否为完整歌曲（非试听），通过 Content-Length 判断
 function verifyFullSong(url, minSize = 500 * 1024) {
     return new Promise((resolve) => {
@@ -57,11 +60,12 @@ module.exports = IpcMainEvent = (win, app) => {
         }
     })
     ipcMain.on('window-close', async () => {
-        const settings = await settingsStore.get('settings')
-        if(settings.other.quitApp == 'minimize') {
-            win.hide()
-        } else if(settings.other.quitApp == 'quit') {
+        const settings = settingsStore.get('settings')
+        if(settings?.other?.quitApp == 'quit') {
             win.close()
+        } else {
+            // minimize 或配置缺失时隐藏窗口（与默认配置一致）
+            win.hide()
         }
     })
     ipcMain.on('to-register', (e, url) => {
@@ -78,13 +82,18 @@ module.exports = IpcMainEvent = (win, app) => {
             return null
     })
     ipcMain.on('set-settings', (e, settings) => {
-        settingsStore.set('settings', JSON.parse(settings))
-        registerShortcuts(win)
+        try {
+            settingsStore.set('settings', JSON.parse(settings))
+            registerShortcuts(win)
+        } catch (err) {
+            console.error('[settings] 保存设置失败:', err)
+        }
     })
     ipcMain.handle('get-settings', async () => {
         const settings =  await settingsStore.get('settings')
         if(settings) {
             if (!settings.local) settings.local = {}
+            if (!settings.other) settings.other = {}
             if (!Object.prototype.hasOwnProperty.call(settings.local, 'syncProfileToNas')) settings.local.syncProfileToNas = false
             if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadCover')) settings.local.downloadCover = false
             if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadInfo')) settings.local.downloadInfo = false
@@ -194,10 +203,18 @@ module.exports = IpcMainEvent = (win, app) => {
         globalShortcut.unregisterAll()
     })
     ipcMain.on('save-last-playlist', (e, playlist) => {
-        lastPlaylistStore.set('playlist', JSON.parse(playlist))
+        try {
+            lastPlaylistStore.set('playlist', JSON.parse(playlist))
+        } catch (err) {
+            console.error('[playlist] 保存播放列表失败:', err)
+        }
     })
     ipcMain.on('exit-app', (e, playlist) => {
-        lastPlaylistStore.set('playlist', JSON.parse(playlist))
+        try {
+            lastPlaylistStore.set('playlist', JSON.parse(playlist))
+        } catch (err) {
+            console.error('[playlist] 保存播放列表失败:', err)
+        }
         app.exit()
     })
     ipcMain.handle('get-last-playlist', async () => {
@@ -255,6 +272,8 @@ module.exports = IpcMainEvent = (win, app) => {
                 if(result) musicVideo.splice(result.index, 1)
                 musicVideo.push(data)
                 musicVideoStore.set('musicVideo', musicVideo)
+            }).catch(err => {
+                console.error('[video] saveMusicVideo error:', err)
             })
         } else {
             musicVideoStore.set('musicVideo', [data])
@@ -268,9 +287,22 @@ module.exports = IpcMainEvent = (win, app) => {
             })
         })
     }
+    let activeVideoDownload = null
+    // 取消视频下载：监听器只注册一次，避免每次下载累积监听器并引用旧 writer
+    ipcMain.on('cancel-download-music-video', () => {
+        if (!activeVideoDownload) return
+        activeVideoDownload.cancelled = true
+        const { writer, cancel, savePath } = activeVideoDownload
+        writer.close()
+        writer.once('close', () => {
+            cancel()
+            win.setProgressBar(-1)
+            try { fs.unlinkSync(savePath) } catch (e) {}
+        })
+    })
     ipcMain.handle('get-bili-video', async (e, request) => {
         const settings = await settingsStore.get('settings')
-        if(!settings.local.videoFolder) return 'noSavePath'
+        if(!settings?.local?.videoFolder) return 'noSavePath'
         const videoAbsPath = path.join(
             settings.local.videoFolder,
             `${request.option.params.cid}_${request.option.params.quality.substring(3)}.mp4`,
@@ -291,7 +323,7 @@ module.exports = IpcMainEvent = (win, app) => {
                 onDownloadProgress:(progressEvent)=>{
                     let progress = Math.round( progressEvent.loaded / progressEvent.total*100)
                     win.webContents.send('download-video-progress', progress)
-                    if(returnCode == 'cancel') win.setProgressBar(-1)
+                    if(activeVideoDownload?.cancelled) win.setProgressBar(-1)
                     else win.setProgressBar(progress / 100)
                 },
                 cancelToken: new CancelToken(function executor(c) {
@@ -299,22 +331,15 @@ module.exports = IpcMainEvent = (win, app) => {
                 })
             })
             const writer = fs.createWriteStream(videoAbsPath)
-            await result.data.pipe(writer)
-            ipcMain.on('cancel-download-music-video', () => {
-                returnCode = 'cancel'
-                writer.close()
-                writer.once('close', () => {
-                    cancel()
-                    win.setProgressBar(-1)
-                    fs.unlinkSync(videoAbsPath)
-                })
-            })
+            const downloadState = { cancelled: false, writer, cancel, savePath: videoAbsPath }
+            activeVideoDownload = downloadState
+            result.data.pipe(writer)
             return new Promise((resolve, reject) => {
                 writer.on("finish", () => {
                     win.setProgressBar(-1)
-                    if(returnCode == 'cancel') {
-                        resolve(returnCode)
-                        return returnCode
+                    if(downloadState.cancelled) {
+                        resolve('cancel')
+                        return
                     }
                     request.option.params.timing = JSON.parse(request.option.params.timing)
                     request.option.params.path = videoAbsPath
@@ -324,6 +349,10 @@ module.exports = IpcMainEvent = (win, app) => {
                 writer.on("error", () => {
                     win.setProgressBar(-1)
                     reject('failed')
+                })
+                writer.on("close", () => {
+                    // 取消下载走 close 而非 finish，这里兜底 resolve，避免渲染进程永远等待
+                    if(downloadState.cancelled) resolve('cancel')
                 })
             })
         }
@@ -341,17 +370,23 @@ module.exports = IpcMainEvent = (win, app) => {
     })
     ipcMain.handle('clear-unused-video', async (e) => {
         const settings = await settingsStore.get('settings')
-        const folderPath = settings.local.videoFolder
+        const folderPath = settings?.local?.videoFolder
         if(!folderPath) return 'noSavePath'
-        const musicVideo = await musicVideoStore.get('musicVideo')
-        const files = fs.readdirSync(folderPath)
-        files.forEach(filename => {
-            const filePath = path.join(folderPath, filename)
-            if(!musicVideo.some(video => video.path && path.normalize(video.path) === path.normalize(filePath))) {
-              console.log(filePath)
-                fs.unlinkSync(filePath)
-            }
-        })
+        const musicVideo = (await musicVideoStore.get('musicVideo')) || []
+        try {
+            const files = fs.readdirSync(folderPath)
+            files.forEach(filename => {
+                const filePath = path.join(folderPath, filename)
+                if(!musicVideo.some(video => video.path && path.normalize(video.path) === path.normalize(filePath))) {
+                    // 单个文件清理失败不中断整个流程
+                    try { fs.unlinkSync(filePath) } catch (err) {
+                        console.warn('[video] 清理失败:', filePath, err.message)
+                    }
+                }
+            })
+        } catch (err) {
+            console.error('[video] clear-unused-video error:', err)
+        }
         return true
     })
     ipcMain.handle('delete-music-video', async (e, id) => {
@@ -396,7 +431,12 @@ module.exports = IpcMainEvent = (win, app) => {
             const res = await readLyric(txtPath)
             if(res) return lyricHandle(res)
         }
-        const metedata = await parseFile(abs)
+        let metedata
+        try {
+            metedata = await parseFile(abs)
+        } catch {
+            return false
+        }
         if(metedata.common.lyrics) return metedata.common.lyrics[0]
         
         return false
@@ -424,56 +464,74 @@ module.exports = IpcMainEvent = (win, app) => {
     ipcMain.handle('download-update', async (e, url) => {
         const { dialog: electronDialog } = require('electron')
         const result = await electronDialog.showSaveDialog(win, {
-            defaultPath: url.split('/').pop(),
+            defaultPath: (url.split('/').pop() || '').split('?')[0],
             filters: [{ name: 'Installers', extensions: ['exe'] }]
         })
         if (result.canceled) return 'cancelled'
         const savePath = result.filePath
         updateDownloadCancelled = false
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const https = require('https')
-            const followRedirect = (redirectUrl) => {
-                https.get(redirectUrl, (res) => {
+            let file = null
+            let settled = false
+            const cleanup = (code) => {
+                if (settled) return
+                settled = true
+                if (file) {
+                    try { file.close() } catch (err) {}
+                    try { fs.unlinkSync(savePath) } catch (err) {}
+                }
+                resolve(code)
+            }
+            const download = (target, redirects) => {
+                if (redirects <= 0) {
+                    cleanup('failed')
+                    return
+                }
+                const req = https.get(target, (res) => {
                     if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                        followRedirect(res.headers.location)
+                        res.resume()
+                        download(res.headers.location, redirects - 1)
                         return
                     }
                     if (res.statusCode !== 200) {
-                        resolve('failed')
+                        cleanup('failed')
                         return
                     }
                     const total = parseInt(res.headers['content-length'], 10) || 0
                     let downloaded = 0
-                    const file = fs.createWriteStream(savePath)
+                    file = fs.createWriteStream(savePath)
                     res.on('data', (chunk) => {
                         if (updateDownloadCancelled) {
                             res.destroy()
-                            file.close()
-                            fs.unlinkSync(savePath)
-                            resolve('cancelled')
+                            cleanup('cancelled')
                             return
                         }
                         downloaded += chunk.length
-                        file.write(chunk)
                         if (total > 0) {
                             win.webContents.send('update-download-progress', Math.round(downloaded / total * 100))
                         }
                     })
-                    res.on('end', () => {
-                        if (!updateDownloadCancelled) {
-                            file.end()
+                    res.pipe(file)
+                    // 等待文件完全落盘再返回成功
+                    file.on('finish', () => {
+                        if (settled) return
+                        if (updateDownloadCancelled) {
+                            cleanup('cancelled')
+                            return
+                        }
+                        settled = true
+                        file.close(() => {
                             win.webContents.send('update-download-progress', 100)
                             resolve('success')
-                        }
+                        })
                     })
-                    res.on('error', () => {
-                        file.close()
-                        try { fs.unlinkSync(savePath) } catch (e) {}
-                        resolve('failed')
-                    })
-                }).on('error', () => resolve('failed'))
+                    res.on('error', () => cleanup('failed'))
+                })
+                req.on('error', () => cleanup('failed'))
+                req.setTimeout(60000, () => req.destroy(new Error('下载超时')))
             }
-            followRedirect(url)
+            download(url, 5)
         })
     })
 
@@ -499,15 +557,7 @@ module.exports = IpcMainEvent = (win, app) => {
             }
             const sources = ['bodian', 'kuwo', 'kugou', 'qq', 'migu', 'bilibili']
             console.log(`[unblock] IPC matching: ${name} (id=${id})`)
-
-            const prevMaxBr = process.env.SELECT_MAX_BR
-            process.env.SELECT_MAX_BR = 'true'
-            let resp
-            try {
-                resp = await match(Number(id), sources, songData)
-            } finally {
-                process.env.SELECT_MAX_BR = prevMaxBr
-            }
+            const resp = await match(Number(id), sources, songData)
 
             if (resp && resp.url) {
                 const isFull = await verifyFullSong(resp.url)

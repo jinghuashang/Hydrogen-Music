@@ -5,18 +5,22 @@ export function setCookies(data, type) {
     const cookies = data.cookie.split(';;')
     cookies.map(cookie => {
       document.cookie = cookie;
-      const temCookie = cookie.split(';')[0].split('=');
-      localStorage.setItem('cookie:' + temCookie[0], temCookie[1])
+      // 值本身可能包含 '='（base64 等），只按第一个 '=' 分割
+      const [kv] = cookie.split(';');
+      const eq = kv.indexOf('=');
+      if (eq != -1) {
+        localStorage.setItem('cookie:' + kv.slice(0, eq), kv.slice(eq + 1))
+      }
     });
   }
   if(type == 'qr') {
     const cookies = data.cookie.split(';')
     const qrCookieNames = ['MUSIC_U', 'MUSIC_A_T', 'MUSIC_R_T', '__csrf', 'ntes_kaola_ad', 'MUSIC_R_T_AG', 'MUSIC_A_T_AG']
     cookies.map(cookie => {
-      const temCookie = cookie.split('=');
-      if(qrCookieNames.includes(temCookie[0].trim())) {
+      const [name, ...vals] = cookie.trim().split('=');
+      if(qrCookieNames.includes(name.trim())) {
         document.cookie = cookie.trim();
-        localStorage.setItem('cookie:' + temCookie[0].trim(), temCookie[1])
+        localStorage.setItem('cookie:' + name.trim(), vals.join('='))
       }
     });
   }

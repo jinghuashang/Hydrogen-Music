@@ -28,7 +28,7 @@
       tracks: otherStore.selectedItem.id
     }
     updatePlaylist(params).then(result => {
-      if(result.status == 200) {
+      if(result.code == 200) {
         librarySongs.value.splice((librarySongs.value || []).findIndex((song) => song.id == otherStore.selectedItem.id), 1)
         updatePlaylistCache()
         noticeOpen('删除成功', 2)
@@ -43,14 +43,11 @@
     createActive.value = false
     needTimestamp.value.push('/playlist/detail')
     needTimestamp.value.push('/playlist/track/all')
-    let noCacheTimer = null
-    if(noCacheTimer) clearTimeout(noCacheTimer)
-      noCacheTimer = setTimeout(() => {
-        needTimestamp.value = needTimestamp.value.filter(t => t !== '/playlist/detail' && t !== '/playlist/track/all')
-        clearTimeout(noCacheTimer)
-      }, 130000);
+    setTimeout(() => {
+      needTimestamp.value = needTimestamp.value.filter(t => t !== '/playlist/detail' && t !== '/playlist/track/all')
+    }, 130000)
     if(listType1.value == 0 && listType2.value == 0) {
-      document.getElementById('myPlaylist').click()
+      document.getElementById('myPlaylist')?.click()
     }
   }
 
@@ -128,7 +125,7 @@
         tracks: otherStore.selectedItem.id
       }
       updatePlaylist(params).then(result => {
-        if(result.status == 200) {
+        if(result.code == 200) {
           updatePlaylistCache()
         }else {
           noticeOpen('添加至歌单错误', 2)
@@ -141,7 +138,7 @@
   <div id="menu" class="context-menu">
     <div class="menu-container" v-show="otherStore.contextMenuShow">
       <div class="menu-item">
-        <div class="item" @click="menuOpt(item.id)" v-for="(item, index) in otherStore.menuTree">{{item.name}}</div>
+        <div class="item" @click="menuOpt(item.id)" v-for="(item, index) in otherStore.menuTree" :key="item.id">{{item.name}}</div>
       </div>
       <div class="menu-style menu-style1">+</div>
       <div class="menu-style menu-style2">+</div>
@@ -171,7 +168,7 @@
               <div class="create-confirm" @click="createAndAdd()">完成</div>
               <div class="create-cancel" @click="createCancel()">取消</div>
             </div>
-            <div class="list" @click="addToMyPlaylist(item.id)" v-show="!justNewPlaylist" v-for="(item, index) in libraryStore.playlistUserCreated">
+            <div class="list" @click="addToMyPlaylist(item.id)" v-show="!justNewPlaylist" v-for="(item, index) in libraryStore.playlistUserCreated" :key="item.id">
               <div class="list-img">
                 <img :src="(item.coverImgUrl || item.img1v1Url || item.picUrl || item.coverUrl) + '?param=150y150'" alt="">
               </div>

@@ -81,8 +81,8 @@
                 <span class="login-phone" @click="changeMode(1)">手机登录</span>
             </div>
             <div class="login-method" v-show="loginMode == 1">
-                <span class="login-mail" @click="changeMode(0)" v-show="!currentMode == 0">邮箱登录</span>
-                <span class="login-phone" @click="changeMode(1)" v-show="!currentMode == 1">手机登录</span>
+                <span class="login-mail" @click="changeMode(0)" v-show="currentMode != 0">邮箱登录</span>
+                <span class="login-phone" @click="changeMode(1)" v-show="currentMode != 1">手机登录</span>
                 <span class="separation" v-show="accountMode == 0">|</span>
                 <span class="login-qr" @click="changeMode(2)" v-show="accountMode == 0">二维码登录</span>
             </div>

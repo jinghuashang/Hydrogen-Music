@@ -1,5 +1,5 @@
 <script setup>
-  import { onActivated, onUnmounted, ref } from 'vue'
+  import { onActivated, onDeactivated, onUnmounted, ref } from 'vue'
   import { useRouter } from 'vue-router';
   import { getNewAlbum } from '../api/album';
   import { getRecommendedArtists } from '../api/artist';
@@ -42,6 +42,14 @@
     refreshTimer = setInterval(() => {
       loadData(1, 10, 'all', recType.value)
     }, 30 * 60 * 1000)
+  })
+
+  onDeactivated(() => {
+    // keep-alive 下 onUnmounted 不会触发，页面切走时停止半小时轮询
+    if (refreshTimer) {
+      clearInterval(refreshTimer)
+      refreshTimer = null
+    }
   })
 
   onUnmounted(() => {
@@ -201,7 +209,7 @@
         <div class="header-title-cn">{{recTitle}}</div>
     </div>
     <div class="item-list">
-        <div class="item" v-for="(item,index) in recommendationList">
+        <div class="item" v-for="(item,index) in recommendationList" :key="index">
             <div class="item-img" :class="recType == 1 ? 'item-img-circle' : 'item-img-sqaure'" @click="checkDetail(item.id)">
                 <img v-if="item && (item.coverImgUrl || item.img1v1Url || item.picUrl)" :src="(item.coverImgUrl || item.img1v1Url || item.picUrl) + '?param=450y450'" alt="">
             </div>

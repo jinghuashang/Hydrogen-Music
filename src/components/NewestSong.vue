@@ -39,7 +39,7 @@
   <div class="newest-song">
     <div class="newest-song-title">最新歌曲</div>
     <div class="song-list">
-        <div class="list-item" @dblclick="play(item)" v-for="(item, index) in newestSongList">
+        <div class="list-item" @dblclick="play(item)" v-for="(item, index) in newestSongList" :key="index">
             <div class="item-info">
                 <div class="song-img">
                     <img v-lazy :src="getImgUrl(item)" alt="">
@@ -47,7 +47,7 @@
                 <div class="song-other">
                     <div class="song-name">{{item.name}}</div>
                     <div class="song-author">
-                        <span @click="checkArtist(singer.id)" v-for="(singer, index) in item.song.artists">{{singer.name}}{{index == item.song.artists.length -1 ? '' : '/'}}</span>
+                        <span @click="checkArtist(singer.id)" v-for="(singer, index) in item.song.artists" :key="index">{{singer.name}}{{index == item.song.artists.length -1 ? '' : '/'}}</span>
                     </div>
                 </div>
             </div>

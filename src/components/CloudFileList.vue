@@ -76,7 +76,7 @@
 <template>
   <div class="file-container">
     <div class="file-list" :class="{'file-list-selected': selectedSongs.length != 0}">
-        <div class="list-item" @dblclick="play(item.simpleSong.id, index)" v-for="(item, index) in cloudSongs">
+        <div class="list-item" @dblclick="play(item.simpleSong.id, index)" v-for="(item, index) in cloudSongs" :key="index">
             <div class="item-info">
                 <div class="item-img" @click="fileEdit(item.simpleSong)">
                     <img v-lazy :src="item.simpleSong.al.picUrl + '?param=90y90'" alt="">

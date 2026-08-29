@@ -1,15 +1,73 @@
 <script setup>
-  import { ref } from 'vue';
-  import { useRouter } from 'vue-router';
+  import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
+  import { useRouter, useRoute } from 'vue-router';
   import { logout } from '../api/user'
   import { noticeOpen } from "../utils/dialog";
   import { isLogin } from '../utils/authority'
   import { useUserStore } from '../store/userStore';
   import { isHydrogenWeb, clearWebProfileOnNas } from '../utils/webProfileNas'
 
-  const router  =useRouter()
+  const router = useRouter()
+  const route = useRoute()
   const userStore = useUserStore()
   const isActive = ref(false)
+  const trackerLeft = ref(0)
+  const trackerWidth = ref(14)
+
+  function updateTracker() {
+    nextTick(() => {
+      const headerRouter = document.querySelector('.header-router')
+      // 导航整体尽量按窗口居中；窗口较窄时向右偏移刚好避开左侧悬浮层
+      // （logo+搜索框，聚焦展开后约 365Px，预留 380），且不进入右侧窗口控制按钮区（约 110Px）
+      if (headerRouter) {
+        const winWidth = window.innerWidth
+        const routerWidth = headerRouter.getBoundingClientRect().width
+        if (routerWidth > 0) {
+          const desiredLeft = (winWidth - routerWidth) / 2
+          const minLeft = 380
+          // 头像相对导航盒右侧外挂约 60Px（right:-35px + 25px 宽），需一并避开窗口控制按钮
+          const maxRight = winWidth - 190
+          let offset = 0
+          if (desiredLeft < minLeft) offset = minLeft - desiredLeft
+          if (desiredLeft + offset + routerWidth > maxRight) offset = maxRight - routerWidth - desiredLeft
+          headerRouter.style.transform = offset > 0 ? `translateX(${offset}px)` : ''
+        }
+      }
+
+      const routeName = route.name
+      let targetClass = ''
+      if (routeName === 'homepage') targetClass = 'button-home'
+      else if (routeName === 'clouddisk') targetClass = 'button-cloud'
+      else if (routeName === 'heartbeat') targetClass = 'button-heartbeat'
+      else if (routeName === 'audiomatch') targetClass = 'button-match'
+      else if (route.fullPath.split('/')[1] === 'mymusic' || route.fullPath.split('/')[1] === 'login') targetClass = 'button-music'
+
+      if (targetClass) {
+        const targetBtn = document.querySelector('.' + targetClass)
+        if (headerRouter && targetBtn) {
+          const routerRect = headerRouter.getBoundingClientRect()
+          const btnRect = targetBtn.getBoundingClientRect()
+          trackerLeft.value = btnRect.left - routerRect.left + btnRect.width * 3 / 8
+          trackerWidth.value = btnRect.width / 4
+        }
+      }
+    })
+  }
+
+  watch(() => route.fullPath, updateTracker)
+  // 导航按钮由页签开关 v-if 控制，开关后按钮挂载/移除，指示器需重新定位
+  watch(
+    () => [userStore.homePage, userStore.cloudDiskPage, userStore.heartbeatPage, userStore.audioMatchPage],
+    updateTracker
+  )
+  onMounted(() => {
+    updateTracker()
+    window.addEventListener('resize', updateTracker)
+  })
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateTracker)
+  })
+
   const toSettings = () => {
       router.push('/settings')
   }
@@ -30,6 +88,8 @@
             noticeOpen("已退出账号", 2)
         }
         else noticeOpen("退出登录失败", 2)
+      }).catch(() => {
+        // 网络失败已由请求拦截器统一提示，这里兜底避免未处理 rejection
       })
     } else noticeOpen("您已退出账号", 2)
   }
@@ -68,7 +128,7 @@
               </transition>
             </div>
           </div>
-          <div v-show="router.currentRoute.value.name != 'search' && router.currentRoute.value.name != 'settings'" :class="{'router-tracker': true, 'router-tracker0': router.currentRoute.value.name == 'homepage', 'router-tracker1': router.currentRoute.value.name == 'clouddisk', 'router-tracker2': router.currentRoute.value.name == 'heartbeat', 'router-tracker3': router.currentRoute.value.name == 'audiomatch', 'router-tracker4': router.currentRoute.value.fullPath.split('/')[1] == 'mymusic' || router.currentRoute.value.fullPath.split('/')[1] == 'login'}">
+          <div v-show="route.name != 'search' && route.name != 'settings'" class="router-tracker" :style="{left: trackerLeft + 'px', width: trackerWidth + 'px'}">
           </div>
         </div>
       </div>
@@ -89,6 +149,14 @@
     height: 100%;
   }
   
+  /* 窄窗口时收紧导航间距，给左右悬浮层留出空间 */
+  @media (max-width: 1180px){
+    .header-router .button-home, .header-router .button-cloud,
+    .header-router .button-match, .header-router .button-heartbeat{
+      margin-right: 26px;
+    }
+  }
+
   .home-header{
     margin: 30px 0 20px 0;
     display: flex;
@@ -115,27 +183,12 @@
 	        margin-right: 40px;
 	      }
 	      .router-tracker{
-        width: 14px;
         height: 2px;
         background-color: black;
         position: absolute;
         transition: 0.3s;
+        bottom: 0;
       }
-      .router-tracker0{
-        transform: translateX(12px);
-      }
-      .router-tracker1{
-        transform: translateX(88px);
-      }
-      .router-tracker2{
-	        transform: translateX(164px);
-	      }
-	      .router-tracker3{
-	        transform: translateX(256px);
-	      }
-	      .router-tracker4{
-	        transform: translateX(368px);
-	      }
       .user{
         position: absolute;
         top: 50%;
