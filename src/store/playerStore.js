@@ -47,12 +47,27 @@ export const usePlayerStore = defineStore('playerStore', {
             fullPlayerOpenSource: null,
             /** Web 主页分栏右侧嵌入：为 true 时不启用音乐视频层与封面模糊（不写入 persist） */
             webHomeSplitEmbed: false,
+            desktopLyric: {
+                enabled: false,
+                locked: false,
+                fontSize: 28,
+                tfontSize: 16,
+                opacity: 0.95,
+                chineseFont: 'SourceHanSansCN-Bold',
+                westernFont: 'Gilroy-ExtraBold',
+                fontColor: '#ffffff',
+                highlightColor: '#EC4141',
+                strokeWidth: 1.5,
+                strokeColor: 'rgba(0, 0, 0, 0.85)',
+                showTranslation: true,
+                showRoma: true,
+            },
         }
     },
     actions: {
     },
     persist: {
         storage: localStorage,
-        paths: ['progress','volume','playMode','shuffleIndex','listInfo','songId','currentIndex','time','quality','lyricType','musicVideo','coverBlur','lyricBlur','lyricCompletion']
+        paths: ['progress','volume','playMode','shuffleIndex','listInfo','songId','currentIndex','time','quality','lyricType','musicVideo','coverBlur','lyricBlur','lyricCompletion','desktopLyric']
     },
 })

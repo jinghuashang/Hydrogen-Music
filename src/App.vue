@@ -23,10 +23,13 @@
   const isWebClient =
     import.meta.env.VITE_WEB === 'true' || import.meta.env.VITE_WEB === '1'
 
+  const isDesktopLyric = computed(
+    () => route.name === 'desktopLyric' || route.path === '/desktop-lyric',
+  )
+
   const hasCurrentSong = computed(
     () => !!(playerStore.songList && playerStore.songList[playerStore.currentIndex]),
   )
-
   /** Web：宽屏或系统全屏时，主页在左约 74%，播放器列在右约 26% */
   const webHomeSplit = ref(false)
 
@@ -134,71 +137,76 @@
 </script>
 
 <template>
-  <div class="mainWindow" :class="{ 'mainWindow--web-split': webHomeSplit }">
-    <div class="mainWindow__content" :class="{ 'web-split-pane-home': webHomeSplit }">
-      <Transition name="home">
-        <Home class="home" v-show="playerStore.widgetState"></Home>
-      </Transition>
+  <div v-if="isDesktopLyric" class="desktopLyricApp">
+    <router-view></router-view>
+  </div>
+  <template v-else>
+    <div class="mainWindow" :class="{ 'mainWindow--web-split': webHomeSplit }">
+      <div class="mainWindow__content" :class="{ 'web-split-pane-home': webHomeSplit }">
+        <Transition name="home">
+          <Home class="home" v-show="playerStore.widgetState"></Home>
+        </Transition>
+      </div>
+      <div v-if="webHomeSplit" class="web-split-pane-player">
+        <Transition name="web-split-player">
+          <div
+            v-if="hasCurrentSong"
+            class="musicPlayer musicPlayer--web-split-pane"
+            key="web-home-embed-player"
+          >
+            <MusicPlayer embed-mode="webHomeLeft" />
+          </div>
+        </Transition>
+      </div>
     </div>
-    <div v-if="webHomeSplit" class="web-split-pane-player">
-      <Transition name="web-split-player">
-        <div
-          v-if="hasCurrentSong"
-          class="musicPlayer musicPlayer--web-split-pane"
-          key="web-home-embed-player"
-        >
-          <MusicPlayer embed-mode="webHomeLeft" />
-        </div>
-      </Transition>
+    <div class="globalWidget">
+      <Title class="widget-title"></Title>
+      <SearchInput class="widget-search"></SearchInput>
     </div>
-  </div>
-  <div class="globalWidget">
-    <Title class="widget-title"></Title>
-    <SearchInput class="widget-search"></SearchInput>
-  </div>
-  <div class="dragBar">
-    <WindowControl v-if="!isWebClient" class="window-control"></WindowControl>
-  </div>
-  <Transition name="widget">
-    <div
-      class="musicWidget"
-      v-if="playerStore.songList && playerStore.songList[playerStore.currentIndex]"
-      v-show="playerStore.widgetState && !webHomeSplit && route.name !== 'heartbeat'"
+    <div class="dragBar">
+      <WindowControl v-if="!isWebClient" class="window-control"></WindowControl>
+    </div>
+    <Transition name="widget">
+      <div
+        class="musicWidget"
+        v-if="playerStore.songList && playerStore.songList[playerStore.currentIndex]"
+        v-show="playerStore.widgetState && !webHomeSplit && route.name !== 'heartbeat'"
+      >
+        <MusicWidget></MusicWidget>
+      </div>
+    </Transition>
+    <Transition
+      :name="fullPlayerTransitionName"
+      @after-leave="onFullPlayerAfterLeave"
     >
-      <MusicWidget></MusicWidget>
+      <div
+        class="musicPlayer"
+        v-if="hasCurrentSong"
+        v-show="!playerStore.widgetState"
+      >
+        <MusicPlayer embed-mode="full" />
+      </div>
+    </Transition>
+    <Transition name="video">
+      <div class="videoPlayer" v-if="otherStore.videoPlayerShow">
+        <VideoPlayer></VideoPlayer>
+      </div>
+    </Transition>
+    <div class="contextMune">
+      <ContextMenu></ContextMenu>
     </div>
-  </Transition>
-  <Transition
-    :name="fullPlayerTransitionName"
-    @after-leave="onFullPlayerAfterLeave"
-  >
-    <div
-      class="musicPlayer"
-      v-if="hasCurrentSong"
-      v-show="!playerStore.widgetState"
-    >
-      <MusicPlayer embed-mode="full" />
+    <div class="globalDialog">
+      <GlobalDialog></GlobalDialog>
     </div>
-  </Transition>
-  <Transition name="video">
-    <div class="videoPlayer" v-if="otherStore.videoPlayerShow">
-      <VideoPlayer></VideoPlayer>
+    <div class="globalNotice">
+      <GlobalNotice></GlobalNotice>
     </div>
-  </Transition>
-  <div class="contextMune">
-    <ContextMenu></ContextMenu>
-  </div>
-  <div class="globalDialog">
-    <GlobalDialog></GlobalDialog>
-  </div>
-  <div class="globalNotice">
-    <GlobalNotice></GlobalNotice>
-  </div>
-  <Transition name="fade">
-    <div class="update" v-if="otherStore.toUpdate">
-      <Update></Update>
-    </div>
-  </Transition>
+    <Transition name="fade">
+      <div class="update" v-if="otherStore.toUpdate">
+        <Update></Update>
+      </div>
+    </Transition>
+  </template>
 </template>
 
 <style lang="scss">
@@ -216,6 +224,14 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
+  }
+  .desktopLyricApp {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
   }
   .mainWindow{
     width: 100%;

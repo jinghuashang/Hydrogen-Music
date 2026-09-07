@@ -252,6 +252,19 @@ export function installWebWindowApi() {
     // Web 端无 desktopCapturer，返回 undefined 以便组件判断环境
     unblockSongUrl: () => Promise.resolve(null), // Web 端由 API 服务器的 moduleDefs 处理解灰
     getDesktopSources: undefined,
+    toggleDesktopLyric: () => {},
+    setDesktopLyricLock: () => {},
+    setDesktopLyricIgnoreMouse: () => {},
+    closeDesktopLyric: () => {},
+    sendDesktopLyricData: () => {},
+    onDesktopLyricData: () => {},
+    updateDesktopLyricConfig: () => {},
+    onDesktopLyricConfig: () => {},
+    sendDesktopLyricAction: () => {},
+    onDesktopLyricAction: () => {},
+    onDesktopLyricLockStatus: () => {},
+    onDesktopLyricStateChange: () => {},
+    onDesktopLyricRequestSync: () => {},
   }
 
   document.documentElement.classList.add('hydrogen-web')

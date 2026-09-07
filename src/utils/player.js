@@ -1,4 +1,6 @@
+import { watch } from 'vue'
 import pinia from '../store/pinia'
+import router from '../router/router'
 import { Howl } from 'howler'
 import dayjs from 'dayjs';
 import { noticeOpen } from './dialog'
@@ -29,6 +31,149 @@ let playModeOne = false //为true代表顺序播放已全部结束
 let currentTiming = null
 let videoCheckInterval = null
 let playFailCount = 0 //连续播放失败计数，用于停止不可用列表的自动跳歌死循环
+
+const regNewLine = /\n/
+const regTime = /\[\d{2}:\d{2}\.\d{2,3}\]?/
+
+function extractLyricLineText(line, match) {
+    const bracketIdx = line.indexOf(']', match.index)
+    const start = bracketIdx !== -1 ? bracketIdx + 1 : match.index + match[0].length
+    return line.substring(start).replace(/\[\d{2}:\d{2}\.\d{2,3}\]?/g, '').trim()
+}
+
+function formatLyricTimeSeconds(timeStr) {
+    const regMin = /.*:/
+    const regSec = /:.*\./
+    const regMs = /\./
+
+    if (timeStr.indexOf('.') === -1) timeStr = timeStr.replace(/(.*):/, '$1.')
+    const min = parseInt(timeStr.match(regMin)[0].slice(0, 2))
+    let sec = parseInt(timeStr.match(regSec)[0].slice(1, 3))
+    const ms = timeStr.slice(timeStr.match(regMs).index + 1, timeStr.match(regMs).index + 3)
+    if (min !== 0) sec += min * 60
+    return Number(sec + '.' + ms)
+}
+
+export function ensureLyricParsed() {
+    if (!lyric.value?.lrc?.lyric) return
+    const lrcText = lyric.value.lrc.lyric
+    const cur = (songList.value || [])[currentIndex.value]
+    const curDt = cur?.dt ? Math.trunc(cur.dt / 1000) : (time.value || 0)
+
+    if (lrcText.indexOf('[') === -1) {
+        const lineArr = lrcText.split(regNewLine)
+        const parsed = []
+        lineArr.forEach(item => {
+            if (item.trim()) parsed.push({ lyric: item.trim(), time: 0 })
+        })
+        parsed.push({ lyric: '', time: curDt })
+        lyricsObjArr.value = parsed
+        return
+    }
+
+    const arr = lrcText.split(regNewLine)
+    const tarr = (lyric.value.tlyric && lyric.value.tlyric.lyric) ? lyric.value.tlyric.lyric.split(regNewLine) : null
+    const rarr = (lyric.value.romalrc && lyric.value.romalrc.lyric) ? lyric.value.romalrc.lyric.split(regNewLine) : null
+
+    const lyricArr = []
+    for (let i = 0; i < arr.length; i++) {
+        if (!arr[i]) continue
+        const lyctime = arr[i].match(regTime)
+        if (!lyctime) continue
+        const obj = {}
+        obj.lyric = extractLyricLineText(arr[i], lyctime)
+        if (!obj.lyric) continue
+        if (obj.lyric.indexOf('纯音乐') !== -1) {
+            lyricsObjArr.value = [
+                { lyric: '纯音乐，请欣赏', time: 0 },
+                { lyric: '', time: curDt }
+            ]
+            return
+        }
+        if (tarr && obj.lyric.indexOf('作词') === -1 && obj.lyric.indexOf('作曲') === -1) {
+            for (let j = 0; j < tarr.length; j++) {
+                if (!tarr[j]) continue
+                const tTimeCore = lyctime[0].replace(/\]$/, '')
+                if (tarr[j].indexOf(tTimeCore) !== -1) {
+                    const tMatch = tarr[j].match(regTime)
+                    obj.tlyric = tMatch ? extractLyricLineText(tarr[j], tMatch) : ''
+                    if (!obj.tlyric) { tarr.splice(j, 1); j--; continue }
+                    tarr.splice(j, 1)
+                    break
+                }
+            }
+        }
+        if (rarr && obj.lyric.indexOf('作词') === -1 && obj.lyric.indexOf('作曲') === -1) {
+            for (let k = 0; k < rarr.length; k++) {
+                if (!rarr[k]) continue
+                const rTimeCore = lyctime[0].replace(/\]$/, '')
+                if (rarr[k].indexOf(rTimeCore) !== -1) {
+                    const rMatch = rarr[k].match(regTime)
+                    obj.rlyric = rMatch ? extractLyricLineText(rarr[k], rMatch) : ''
+                    if (!obj.rlyric) { rarr.splice(k, 1); k--; continue }
+                    rarr.splice(k, 1)
+                    break
+                }
+            }
+        }
+        obj.time = lyctime ? formatLyricTimeSeconds(lyctime[0].replace(/[\[\]]/g, '')) : 0
+        if (obj.lyric !== '') lyricArr.push(obj)
+    }
+    lyricArr.sort((x, y) => x.time - y.time)
+    lyricsObjArr.value = lyricArr
+}
+
+export function syncDesktopLyric() {
+    if (!windowApi?.sendDesktopLyricData) return
+    const cur = (songList.value || [])[currentIndex.value]
+    if (!cur) {
+        windowApi.sendDesktopLyricData({
+            title: '',
+            artist: '',
+            currentLrc: '',
+            transLrc: '',
+            romaLrc: '',
+            playing: false,
+            progress: 0,
+            duration: 0,
+        })
+        return
+    }
+
+    const seekTime = (currentMusic.value ? currentMusic.value.seek() : progress.value) || 0
+    let curText = ''
+    let curTrans = ''
+    let curRoma = ''
+
+    if (!lyricsObjArr.value && lyric.value?.lrc?.lyric) {
+        ensureLyricParsed()
+    }
+
+    if (Array.isArray(lyricsObjArr.value) && lyricsObjArr.value.length) {
+        const arr = lyricsObjArr.value
+        let idx = -1
+        for (let i = 0; i < arr.length; i++) {
+            if (seekTime >= arr[i].time) idx = i
+            else break
+        }
+        if (idx >= 0 && idx < arr.length) {
+            curText = arr[idx].lyric || ''
+            curTrans = arr[idx].tlyric || ''
+            curRoma = arr[idx].rlyric || arr[idx].romalrc || ''
+        }
+    }
+
+    windowApi.sendDesktopLyricData({
+        title: cur.name || cur.songName || cur.fileName || '',
+        artist: (cur.ar || []).map(a => a?.name).filter(Boolean).join('/') || cur.artist || '',
+        currentLrc: curText || (cur.name || cur.songName || cur.fileName || 'Hydrogen Music'),
+        transLrc: curTrans,
+        romaLrc: curRoma,
+        playing: playing.value,
+        progress: seekTime,
+        duration: time.value || 0,
+    })
+}
 
 // --- 网易云听歌记录同步 (Scrobble) ---
 let scrobbleState = {
@@ -1087,3 +1232,54 @@ if ('mediaSession' in navigator) {
       pauseMusic()
     });
 }
+
+// --- 桌面歌词 (Desktop Lyric) 联动与事件监听 ---
+watch([() => progress.value, () => playing.value, () => songId.value], () => {
+    syncDesktopLyric()
+})
+
+watch(() => lyric.value, () => {
+    ensureLyricParsed()
+    syncDesktopLyric()
+})
+
+windowApi?.onDesktopLyricAction?.((action, payload) => {
+    if (action === 'togglePlay') {
+        if (playing.value) pauseMusic()
+        else startMusic()
+    } else if (action === 'prev') {
+        playLast()
+    } else if (action === 'next') {
+        playNext()
+    } else if (action === 'openSettings') {
+        router.push('/settings')
+    } else if (action === 'saveConfig') {
+        if (payload) {
+            playerStore.desktopLyric = { ...playerStore.desktopLyric, ...payload }
+            windowApi?.updateDesktopLyricConfig?.(JSON.parse(JSON.stringify(playerStore.desktopLyric)))
+        }
+    }
+})
+
+windowApi?.onDesktopLyricRequestSync?.(() => {
+    if (playerStore.desktopLyric) {
+        windowApi?.updateDesktopLyricConfig?.(JSON.parse(JSON.stringify(playerStore.desktopLyric)))
+    }
+    syncDesktopLyric()
+})
+windowApi?.onDesktopLyricStateChange?.((enabled) => {
+    if (playerStore.desktopLyric) {
+        playerStore.desktopLyric.enabled = !!enabled
+    }
+})
+
+windowApi?.onDesktopLyricLockStatus?.((locked) => {
+    if (playerStore.desktopLyric) {
+        playerStore.desktopLyric.locked = !!locked
+    }
+})
+
+if (playerStore.desktopLyric) {
+    windowApi?.updateDesktopLyricConfig?.(JSON.parse(JSON.stringify(playerStore.desktopLyric)))
+}
+syncDesktopLyric()

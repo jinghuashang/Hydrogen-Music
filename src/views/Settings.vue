@@ -484,6 +484,49 @@ const testMirrors = async () => {
         isTestingMirror.value = false
     }
 }
+const toggleDesktopLyricSetting = () => {
+    if (!playerStore.desktopLyric) {
+        playerStore.desktopLyric = {
+            enabled: false,
+            locked: false,
+            fontSize: 28,
+            tfontSize: 16,
+            opacity: 0.95,
+            chineseFont: 'SourceHanSansCN-Bold',
+            westernFont: 'Gilroy-ExtraBold',
+            fontColor: '#ffffff',
+            highlightColor: '#EC4141',
+            strokeWidth: 1.5,
+            strokeColor: 'rgba(0, 0, 0, 0.85)',
+            showTranslation: true,
+            showRoma: true,
+        }
+    }
+    windowApi.toggleDesktopLyric()
+}
+
+const toggleDesktopLyricLockSetting = () => {
+    if (!playerStore.desktopLyric) return
+    const newLock = !playerStore.desktopLyric.locked
+    windowApi.setDesktopLyricLock(newLock)
+}
+
+const saveDesktopLyricConfig = () => {
+    if (!playerStore.desktopLyric) return
+    windowApi.updateDesktopLyricConfig(playerStore.desktopLyric)
+}
+
+const toggleDesktopLyricTrans = () => {
+    if (!playerStore.desktopLyric) return
+    playerStore.desktopLyric.showTranslation = !playerStore.desktopLyric.showTranslation
+    saveDesktopLyricConfig()
+}
+
+const toggleDesktopLyricRoma = () => {
+    if (!playerStore.desktopLyric) return
+    playerStore.desktopLyric.showRoma = !playerStore.desktopLyric.showRoma
+    saveDesktopLyricConfig()
+}
 </script>
 
 <template>
@@ -751,6 +794,90 @@ const testMirrors = async () => {
                             </div>
                         </div>
                         <div class="default-shortcuts" @click="setDefaultShortcuts()">恢复默认快捷键</div>
+                    </div>
+                </div>
+                <div class="settings-item" v-if="!isWebClient">
+                    <h2 class="item-title">桌面歌词</h2>
+                    <div class="line"></div>
+                    <div class="item-options">
+                        <div class="option">
+                            <div class="option-name">开启桌面歌词</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyricSetting()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': playerStore.desktopLyric?.enabled }">
+                                        {{ playerStore.desktopLyric?.enabled ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="playerStore.desktopLyric?.enabled"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">锁定桌面歌词 (鼠标穿透，快捷键 Ctrl+Alt+L)</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyricLockSetting()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': playerStore.desktopLyric?.locked }">
+                                        {{ playerStore.desktopLyric?.locked ? '已锁定' : '未锁定' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="playerStore.desktopLyric?.locked"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">中文字体设置</div>
+                            <div class="option-operation">
+                                <input v-model="playerStore.desktopLyric.chineseFont" placeholder="如 SourceHanSansCN-Bold / 微软雅黑" @change="saveDesktopLyricConfig">
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">西文字体设置</div>
+                            <div class="option-operation">
+                                <input v-model="playerStore.desktopLyric.westernFont" placeholder="如 Gilroy-ExtraBold / Arial" @change="saveDesktopLyricConfig">
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">主歌词字体大小 (px)</div>
+                            <div class="option-operation">
+                                <input v-model.number="playerStore.desktopLyric.fontSize" type="number" min="16" max="48" @change="saveDesktopLyricConfig">
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">翻译字体大小 (px)</div>
+                            <div class="option-operation">
+                                <input v-model.number="playerStore.desktopLyric.tfontSize" type="number" min="12" max="32" @change="saveDesktopLyricConfig">
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">歌词透明度 (0.1 ~ 1.0)</div>
+                            <div class="option-operation">
+                                <input v-model.number="playerStore.desktopLyric.opacity" type="number" step="0.05" min="0.1" max="1.0" @change="saveDesktopLyricConfig">
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">显示翻译歌词</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyricTrans()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': playerStore.desktopLyric?.showTranslation }">
+                                        {{ playerStore.desktopLyric?.showTranslation ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="playerStore.desktopLyric?.showTranslation"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">显示罗马音歌词</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyricRoma()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': playerStore.desktopLyric?.showRoma }">
+                                        {{ playerStore.desktopLyric?.showRoma ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="playerStore.desktopLyric?.showRoma"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="settings-item">

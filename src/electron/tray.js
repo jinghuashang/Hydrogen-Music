@@ -1,5 +1,6 @@
 const { Menu, Tray, ipcMain, nativeImage } = require('electron')
 const path = require('path')
+const desktopLyricManager = require('../desktopLyric/desktopLyricManager')
 
 module.exports = function InitTray(win, app, iconPath) {
     let tray = null
@@ -101,6 +102,30 @@ module.exports = function InitTray(win, app, iconPath) {
                     },
                 ]
             },
+            {
+                type: 'separator'
+            },
+            {
+                label: '桌面歌词',
+                type: 'checkbox',
+                checked: desktopLyricManager.isEnabled,
+                click: (menuItem) => {
+                    desktopLyricManager.toggle()
+                    menuItem.checked = desktopLyricManager.isEnabled
+                }
+            },
+            {
+                label: '锁定桌面歌词 (Ctrl+Alt+L)',
+                type: 'checkbox',
+                checked: desktopLyricManager.isLocked,
+                click: (menuItem) => {
+                    desktopLyricManager.toggleLock()
+                    menuItem.checked = desktopLyricManager.isLocked
+                }
+            },
+            {
+                type: 'separator'
+            },
             { 
                 label: '退出',
                 click: () => {
@@ -119,6 +144,14 @@ module.exports = function InitTray(win, app, iconPath) {
             contextMenu.items[4].submenu.items[2].checked = false
             contextMenu.items[4].submenu.items[3].checked = false
             contextMenu.items[4].submenu.items[mode].checked = true
+        })
+        ipcMain.on('desktop-lyric-state-change', (e, enabled) => {
+            const item = contextMenu.items.find(i => i.label === '桌面歌词')
+            if (item) item.checked = enabled
+        })
+        ipcMain.on('desktop-lyric-lock-status', (e, locked) => {
+            const item = contextMenu.items.find(i => i.label && i.label.startsWith('锁定桌面歌词'))
+            if (item) item.checked = locked
         })
         ipcMain.on('music-playing-check', (e, playing) => {
             if(playing) {

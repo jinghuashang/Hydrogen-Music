@@ -4,6 +4,7 @@ const MusicDownload = require('./src/electron/download')
 const LocalFiles = require('./src/electron/localmusic')
 const InitTray = require('./src/electron/tray')
 const registerShortcuts = require('./src/electron/shortcuts')
+const DesktopLyric = require('./src/desktopLyric/desktopLyricManager')
 
 const { app, BrowserWindow, globalShortcut, shell, session } = require('electron')
 const Winstate = require('electron-win-state').default
@@ -217,6 +218,14 @@ const createWindow = () => {
             checkForGithubUpdate(win)
         }
     })
+    if (!app.isPackaged) {
+        win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+            console.log(`[Renderer Console ${level}] ${message} (${sourceId}:${line})`)
+        })
+        win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+            console.error(`[Renderer Fail Load] ${errorCode}: ${errorDescription} on ${validatedURL}`)
+        })
+    }
     winstate.manage(win)
     win.on('close', async (event) => {
         event.preventDefault()
@@ -301,6 +310,7 @@ const createWindow = () => {
     IpcMainEvent(win, app)
     MusicDownload(win)
     LocalFiles(win, app)
+    DesktopLyric.init(win)
     InitTray(win, app, path.resolve(__dirname, './src/assets/icon/icon.ico'))
     registerShortcuts(win)
 }
