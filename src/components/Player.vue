@@ -10,6 +10,7 @@
   import { usePlayerStore } from '../store/playerStore'
   import { useLocalStore } from '../store/localStore';
   import { storeToRefs } from 'pinia';
+  import { isHydrogenWeb } from '../utils/webProfileNas'
   const router = useRouter()
   const userStore = useUserStore()
   const localStore = useLocalStore()
@@ -32,6 +33,27 @@
   watch(() => volume.value, () => {
     if(currentMusic.value) currentMusic.value.volume(volume.value)
   })
+  const isWebClient = isHydrogenWeb()
+  const toggleDesktopLyric = () => {
+    if (!playerStore.desktopLyric) {
+        playerStore.desktopLyric = {
+            enabled: false,
+            locked: false,
+            fontSize: 28,
+            tfontSize: 16,
+            opacity: 0.95,
+            chineseFont: 'SourceHanSansCN-Bold',
+            westernFont: 'Gilroy-ExtraBold',
+            fontColor: '#ffffff',
+            highlightColor: '#EC4141',
+            strokeWidth: 1.5,
+            strokeColor: 'rgba(0, 0, 0, 0.85)',
+            showTranslation: true,
+            showRoma: true,
+        }
+    }
+    windowApi.toggleDesktopLyric()
+  }
 
   const toAlbum = () => {
     if(songList.value[currentIndex.value].type != 'local') {
@@ -158,6 +180,7 @@
             <svg t="1673182198291" v-show="lyricType.indexOf('original') != -1 && lyricType.indexOf('noOriginal') == -1" @click="lyricType.splice(lyricType.indexOf('original'), 1)" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="11459" width="200" height="200"><path d="M934.4 1024h-844.8c-49.152 0-89.6-40.448-89.6-89.6v-844.8c0-49.152 40.448-89.6 89.6-89.6h844.8c49.152 0 89.6 40.448 89.6 89.6v844.8c0 49.152-40.448 89.6-89.6 89.6z m-844.8-957.44c-12.8 0-23.04 10.24-23.04 23.04v844.8c0 12.8 10.24 23.04 23.04 23.04h844.8c12.8 0 23.04-10.24 23.04-23.04v-844.8c0-12.8-10.24-23.04-23.04-23.04h-844.8z" fill="#000000" p-id="11460"></path><path d="M803.84 283.648h-583.68c-18.432 0-33.28-14.848-33.28-33.28s14.848-33.28 33.28-33.28h583.68c18.432 0 33.28 14.848 33.28 33.28s-14.848 33.28-33.28 33.28z" fill="#000000" p-id="11461"></path><path d="M478.72 835.072v-583.68c0-18.432 14.848-33.28 33.28-33.28s33.28 14.848 33.28 33.28v583.68c0 18.432-14.848 33.28-33.28 33.28s-33.28-14.848-33.28-33.28z" fill="#000000" p-id="11462"></path></svg>
             <svg t="1673182198291" v-show="lyricType.indexOf('original') == -1 && lyricType.indexOf('noOriginal') == -1" @click="lyricType.push('original')" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="11459" width="200" height="200"><path d="M934.4 1024h-844.8c-49.152 0-89.6-40.448-89.6-89.6v-844.8c0-49.152 40.448-89.6 89.6-89.6h844.8c49.152 0 89.6 40.448 89.6 89.6v844.8c0 49.152-40.448 89.6-89.6 89.6z m-844.8-957.44c-12.8 0-23.04 10.24-23.04 23.04v844.8c0 12.8 10.24 23.04 23.04 23.04h844.8c12.8 0 23.04-10.24 23.04-23.04v-844.8c0-12.8-10.24-23.04-23.04-23.04h-844.8z" fill="#8a8a8a" p-id="11460"></path><path d="M803.84 283.648h-583.68c-18.432 0-33.28-14.848-33.28-33.28s14.848-33.28 33.28-33.28h583.68c18.432 0 33.28 14.848 33.28 33.28s-14.848 33.28-33.28 33.28z" fill="#8a8a8a" p-id="11461"></path><path d="M478.72 835.072v-583.68c0-18.432 14.848-33.28 33.28-33.28s33.28 14.848 33.28 33.28v583.68c0 18.432-14.848 33.28-33.28 33.28s-33.28-14.848-33.28-33.28z" fill="#8a8a8a" p-id="11462"></path></svg>
             
+            <div v-if="!isWebClient" class="desktop-lyric-btn" :class="{'desktop-lyric-active': playerStore.desktopLyric?.enabled}" @click="toggleDesktopLyric()" title="桌面歌词">词</div>
             <svg t="1668786418014" v-if="userStore.likelist" @click="likeSong(true)" v-show="!checkIsLike(songId)" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1417" width="200" height="200"><path d="M736.603 35.674c-87.909 0-169.647 44.1-223.447 116.819C459.387 79.756 377.665 35.674 289.708 35.674c-158.47 0-287.397 140.958-287.397 314.233 0 103.371 46.177 175.887 83.296 234.151 107.88 169.236 379.126 379.846 390.616 388.725 11.068 8.557 24.007 12.837 36.917 12.837 12.939 0 25.861-4.28 36.917-12.837 11.503-8.879 282.765-219.488 390.614-388.725C977.808 525.793 1024 453.277 1024 349.907 1023.999 176.632 895.071 35.674 736.603 35.674zM888.196 544.065C785.507 705.207 513.139 915.679 513.139 915.679S240.802 705.206 138.081 544.065c-37.884-59.491-71.805-116.034-71.805-194.158 0-134.904 100.025-244.309 223.433-244.309 91.199 0 169.491 59.833 204.225 145.493l0-0.427 0.094 0c2.588 8.933 10.132 15.445 19.113 15.445 9.013 0 16.558-6.512 19.128-15.445l0.265 0c34.813-85.404 112.996-145.066 204.07-145.066 123.378 0 223.433 109.405 223.433 244.309C960.035 428.031 926.111 484.574 888.196 544.065z" p-id="1418"></path></svg>
             <svg t="1668786896650" v-if="userStore.likelist" @click="likeSong(false)" v-show="checkIsLike(songId)" class="icon" viewBox="0 0 1025 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="9975" width="200" height="200"><path d="M1024.549 360.609c0-170.492-133.815-309.265-298.055-309.265-81.129 0-157.91 34.998-213.344 94.701-55.509-59.702-132.367-94.701-213.344-94.701C135.49 51.344 1.751 190.041 1.751 360.609c0 5.719 0.534 10.827 0.991 15.021-0.076 1.373-0.152 2.745-0.152 4.194 0 30.193 7.319 63.361 21.73 98.59 0.458 1.295 0.915 2.516 1.449 3.657 90.812 217.844 440.412 468.474 455.279 479.985 9.227 7.092 20.205 10.6 31.263 10.6 11.209 0 22.266-3.659 31.566-10.903 12.733-9.911 310.941-224.551 429.279-427.603 4.498-6.861 7.854-13.494 10.828-19.215 0.914-1.829 1.753-3.658 2.744-5.413l0.382-0.839c0.382-0.686 0.839-1.449 1.296-2.059 7.091-13.802 12.732-26.611 17.232-39.116 12.274-32.177 18.3-60.847 18.3-87.61 0-2.058-0.077-3.888-0.229-5.414C1024.093 370.979 1024.549 366.251 1024.549 360.609z" p-id="9976" fill="#E5404F"></path></svg>
             <svg t="1669445939818" @click="download()" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5311" width="200" height="200"><path d="M545.472 32v837.504L947.2 467.712l44.544 46.144-478.08 478.144L32.128 510.4l44.48-44.544 405.248 403.712V32h63.616z" p-id="5312"></path></svg>
@@ -224,6 +247,37 @@
             &:active{
               transform: scale(0.90);
             }
+          }
+        }
+        .desktop-lyric-btn {
+          margin-bottom: 25Px;
+          font: 13Px SourceHanSansCN-Bold;
+          font-weight: bold;
+          color: #000;
+          opacity: 0.65;
+          cursor: pointer;
+          user-select: none;
+          transition: 0.2s;
+          border: 1.5Px solid #000;
+          border-radius: 4Px;
+          width: 22Px;
+          height: 22Px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
+          line-height: 1;
+          &:hover {
+            opacity: 1;
+            transform: scale(1.08);
+          }
+          &:active {
+            transform: scale(0.92);
+          }
+          &.desktop-lyric-active {
+            opacity: 1;
+            color: #fff;
+            background-color: #000;
           }
         }
       }
