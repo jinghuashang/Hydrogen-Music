@@ -1278,6 +1278,12 @@ windowApi?.onDesktopLyricLockStatus?.((locked) => {
         playerStore.desktopLyric.locked = !!locked
     }
 })
+windowApi?.getDesktopLyricState?.().then((res) => {
+    if (res && playerStore.desktopLyric) {
+        playerStore.desktopLyric.enabled = !!res.enabled
+        playerStore.desktopLyric.locked = !!res.locked
+    }
+})
 
 if (playerStore.desktopLyric) {
     windowApi?.updateDesktopLyricConfig?.(JSON.parse(JSON.stringify(playerStore.desktopLyric)))

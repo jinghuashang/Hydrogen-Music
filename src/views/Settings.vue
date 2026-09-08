@@ -107,8 +107,30 @@ if (isLogin()) {
 }
 onMounted(async () => {
     appVersion.value = await windowApi.getAppVersion()
+    windowApi?.onDesktopLyricStateChange?.((enabled) => {
+        if (playerStore.desktopLyric) {
+            playerStore.desktopLyric.enabled = !!enabled
+        }
+    })
+    windowApi?.onDesktopLyricLockStatus?.((locked) => {
+        if (playerStore.desktopLyric) {
+            playerStore.desktopLyric.locked = !!locked
+        }
+    })
+    windowApi?.getDesktopLyricState?.().then(res => {
+        if (res && playerStore.desktopLyric) {
+            playerStore.desktopLyric.enabled = !!res.enabled
+            playerStore.desktopLyric.locked = !!res.locked
+        }
+    })
 })
 onActivated(() => {
+    windowApi?.getDesktopLyricState?.().then(res => {
+        if (res && playerStore.desktopLyric) {
+            playerStore.desktopLyric.enabled = !!res.enabled
+            playerStore.desktopLyric.locked = !!res.locked
+        }
+    })
     windowApi.getSettings().then(settings => {
         if (!settings) return
         musicLevel.value = settings.music.level

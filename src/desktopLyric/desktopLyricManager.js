@@ -18,12 +18,29 @@ class DesktopLyricManager {
         if (this.isEnabled) {
             this.createWindow()
         }
+        this.mainWin.webContents.on('did-finish-load', () => {
+            this.broadcastState()
+        })
+    }
+
+    broadcastState() {
+        const isWinAlive = !!(this.win && !this.win.isDestroyed())
+        if (this.mainWin && !this.mainWin.isDestroyed()) {
+            this.mainWin.webContents.send('desktop-lyric-state-change', isWinAlive)
+            this.mainWin.webContents.send('desktop-lyric-lock-status', this.isLocked)
+        }
+        if (isWinAlive) {
+            this.win.webContents.send('desktop-lyric-lock-status', this.isLocked)
+        }
     }
 
     createWindow() {
         if (this.win && !this.win.isDestroyed()) {
             this.win.show()
             this.win.focus()
+            this.isEnabled = true
+            this.store.set('isEnabled', true)
+            this.broadcastState()
             return
         }
 
@@ -97,16 +114,12 @@ class DesktopLyricManager {
             this.win = null
             this.isEnabled = false
             this.store.set('isEnabled', false)
-            if (this.mainWin && !this.mainWin.isDestroyed()) {
-                this.mainWin.webContents.send('desktop-lyric-state-change', false)
-            }
+            this.broadcastState()
         })
 
         this.isEnabled = true
         this.store.set('isEnabled', true)
-        if (this.mainWin && !this.mainWin.isDestroyed()) {
-            this.mainWin.webContents.send('desktop-lyric-state-change', true)
-        }
+        this.broadcastState()
     }
 
     applyLockState() {
@@ -124,6 +137,7 @@ class DesktopLyricManager {
         this.isLocked = !!locked
         this.store.set('isLocked', this.isLocked)
         this.applyLockState()
+        this.broadcastState()
     }
 
     toggleLock() {
@@ -154,6 +168,12 @@ class DesktopLyricManager {
     }
 
     registerIpc() {
+        ipcMain.handle('desktop-lyric-get-state', () => {
+            return {
+                enabled: !!(this.win && !this.win.isDestroyed()),
+                locked: this.isLocked,
+            }
+        })
         ipcMain.on('desktop-lyric-toggle', () => this.toggle())
         ipcMain.on('desktop-lyric-set-lock', (e, locked) => this.setLock(locked))
         ipcMain.on('desktop-lyric-set-ignore-mouse', (e, ignore, options) => {
