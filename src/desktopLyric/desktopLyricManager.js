@@ -1,6 +1,7 @@
 const { BrowserWindow, ipcMain, screen, globalShortcut } = require('electron')
 const path = require('path')
 const Store = require('electron-store')
+const { getSystemFonts } = require('../electron/systemFonts')
 
 class DesktopLyricManager {
     constructor() {
@@ -173,6 +174,9 @@ class DesktopLyricManager {
                 enabled: !!(this.win && !this.win.isDestroyed()),
                 locked: this.isLocked,
             }
+        })
+        ipcMain.handle('get-system-fonts', async () => {
+            return await getSystemFonts()
         })
         ipcMain.on('desktop-lyric-toggle', () => this.toggle())
         ipcMain.on('desktop-lyric-set-lock', (e, locked) => this.setLock(locked))

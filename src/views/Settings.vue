@@ -123,6 +123,7 @@ onMounted(async () => {
             playerStore.desktopLyric.locked = !!res.locked
         }
     })
+    loadSystemFonts()
 })
 onActivated(() => {
     windowApi?.getDesktopLyricState?.().then(res => {
@@ -131,6 +132,7 @@ onActivated(() => {
             playerStore.desktopLyric.locked = !!res.locked
         }
     })
+    loadSystemFonts()
     windowApi.getSettings().then(settings => {
         if (!settings) return
         musicLevel.value = settings.music.level
@@ -533,9 +535,197 @@ const toggleDesktopLyricLockSetting = () => {
     windowApi.setDesktopLyricLock(newLock)
 }
 
+const lyricPresetOptions = ref([
+    { label: '现代柔和（推荐）', value: 'modern' },
+    { label: '通透纯净（无描边弥散光）', value: 'apple' },
+    { label: '经典抗眩（清晰轮廓描边）', value: 'classic' },
+    { label: '极简无暇（无描边无阴影）', value: 'clean' },
+])
+const systemFontList = ref([])
+const chineseFontOptions = ref([])
+const japaneseFontOptions = ref([])
+const westernFontOptions = ref([])
+
+function buildFontOptions(allFonts = []) {
+    // 严格过滤掉任何可能包含 \uFFFD 或损坏编码的字符串
+    const validFonts = allFonts.filter(f => f && typeof f === 'string' && !f.includes('\uFFFD') && !f.startsWith('__'))
+
+    // 中文字体推荐
+    const topChinese = [
+        { label: '思源黑体 (Bold) [内置推荐]', value: 'SourceHanSansCN-Bold' },
+        { label: '思源黑体 (Heavy) [内置推荐]', value: 'SourceHanSansCN-Heavy' },
+        { label: '微软雅黑 (Microsoft YaHei)', value: 'Microsoft YaHei' },
+        { label: '苹方 (PingFang SC)', value: 'PingFang SC' },
+        { label: '黑体 (SimHei)', value: 'SimHei' },
+        { label: '楷体 (KaiTi)', value: 'KaiTi' },
+        { label: '幼圆 (YouYuan)', value: 'YouYuan' },
+        { label: '仿宋 (FangSong)', value: 'FangSong' },
+        { label: '系统默认 (system-ui)', value: 'system-ui' },
+    ]
+    const topChineseVals = new Set(topChinese.map(x => x.value))
+    const sysChinese = validFonts
+        .filter(f => !topChineseVals.has(f) && (/[\u4e00-\u9fa5]|yahei|simsun|simhei|kaiti|fangsong|song|source|pingfang|han|fz|hw|hua/i.test(f)))
+        .map(f => ({ label: f, value: f }))
+    const restAll = validFonts
+        .filter(f => !topChineseVals.has(f) && !sysChinese.some(c => c.value === f))
+        .map(f => ({ label: f, value: f }))
+    chineseFontOptions.value = [...topChinese, ...sysChinese, ...restAll]
+
+    // 日文字体推荐
+    const topJapanese = [
+        { label: '游黑体 (Yu Gothic) [J-Pop首选]', value: 'Yu Gothic' },
+        { label: '明撩体 (Meiryo) [经典雅致]', value: 'Meiryo' },
+        { label: '冬青黑体 (Hiragino Sans)', value: 'Hiragino Sans' },
+        { label: 'MS Gothic / MS PGothic', value: 'MS PGothic' },
+        { label: '思源黑体日文 (Noto Sans JP)', value: 'Noto Sans JP' },
+        { label: 'BIZ UDPGothic (高易读)', value: 'BIZ UDPGothic' },
+        { label: '游明朝体 (Yu Mincho)', value: 'Yu Mincho' },
+        { label: '跟随系统默认 (system-ui)', value: 'system-ui' },
+    ]
+    const topJapVals = new Set(topJapanese.map(x => x.value))
+    const sysJap = validFonts
+        .filter(f => !topJapVals.has(f) && (/gothic|mincho|meiryo|yu |hiragino|ms |noto|biz/i.test(f)))
+        .map(f => ({ label: f, value: f }))
+    japaneseFontOptions.value = [...topJapanese, ...sysJap, ...restAll]
+
+    // 西文字体推荐
+    const topWestern = [
+        { label: 'Gilroy-ExtraBold [内置几何]', value: 'Gilroy-ExtraBold' },
+        { label: 'Bender-Bold [内置机能工业]', value: 'Bender-Bold' },
+        { label: 'Geometos [内置工业大写]', value: 'Geometos' },
+        { label: 'Arial (经典无衬线)', value: 'Arial' },
+        { label: 'Helvetica Neue (现代极简)', value: 'Helvetica Neue' },
+        { label: 'Segoe UI (Windows标准)', value: 'Segoe UI' },
+        { label: 'SF Pro / -apple-system', value: '-apple-system' },
+        { label: 'Inter (数字界面天花板)', value: 'Inter' },
+        { label: 'Montserrat (流行音乐感)', value: 'Montserrat' },
+        { label: 'DIN Alternate (工业经典)', value: 'DIN Alternate' },
+        { label: 'Futura (未来几何风格)', value: 'Futura' },
+        { label: 'Impact (硬核粗体)', value: 'Impact' },
+    ]
+    const topWestVals = new Set(topWestern.map(x => x.value))
+    const sysWest = validFonts
+        .filter(f => !topWestVals.has(f))
+        .map(f => ({ label: f, value: f }))
+    westernFontOptions.value = [...topWestern, ...sysWest]
+}
+
+buildFontOptions([])
+
+const loadSystemFonts = async () => {
+    try {
+        const fonts = await windowApi?.getSystemFonts?.()
+        if (Array.isArray(fonts) && fonts.length) {
+            systemFontList.value = fonts
+            buildFontOptions(fonts)
+        }
+    } catch (e) {
+        console.warn('[Settings] Failed to fetch system fonts:', e)
+    }
+}
+
+const gradientPresets = [
+    { name: '极光粉白', start: '#ffffff', end: '#ff9a9e' },
+    { name: '冰川海蓝', start: '#ffffff', end: '#66a6ff' },
+    { name: '幻彩耀金', start: '#ffe066', end: '#f2994a' },
+    { name: '赛博霓虹', start: '#00f2fe', end: '#4facfe' },
+    { name: '暮紫流光', start: '#fbc2eb', end: '#a6c1ee' },
+]
+
+const applyGradientPreset = (preset) => {
+    if (!playerStore.desktopLyric) return
+    playerStore.desktopLyric.gradientEnabled = true
+    playerStore.desktopLyric.gradientStart = preset.start
+    playerStore.desktopLyric.gradientEnd = preset.end
+    saveDesktopLyricConfig()
+}
+
+const toggleDesktopLyricGradient = () => {
+    if (!playerStore.desktopLyric) return
+    playerStore.desktopLyric.gradientEnabled = !playerStore.desktopLyric.gradientEnabled
+    saveDesktopLyricConfig()
+}
+const toHexColor = (col) => {
+    if (!col || typeof col !== 'string') return '#ffffff'
+    if (col.startsWith('#')) {
+        if (col.length === 7) return col
+        if (col.length === 4) return `#${col[1]}${col[1]}${col[2]}${col[2]}${col[3]}${col[3]}`
+        if (col.length > 7) return col.slice(0, 7)
+    }
+    const match = col.match(/\d+/g)
+    if (match && match.length >= 3) {
+        const r = Number(match[0]).toString(16).padStart(2, '0')
+        const g = Number(match[1]).toString(16).padStart(2, '0')
+        const b = Number(match[2]).toString(16).padStart(2, '0')
+        return `#${r}${g}${b}`
+    }
+    return '#ffffff'
+}
+
+const pickColorWithEyeDropper = async (field) => {
+    if (typeof window !== 'undefined' && window.EyeDropper) {
+        try {
+            const eyeDropper = new window.EyeDropper()
+            const result = await eyeDropper.open()
+            if (result && result.sRGBHex && playerStore.desktopLyric) {
+                playerStore.desktopLyric[field] = result.sRGBHex
+                saveDesktopLyricConfig()
+            }
+        } catch (_) {}
+    }
+}
+const toggleDesktopLyricKaraoke = () => {
+    if (!playerStore.desktopLyric) return
+    playerStore.desktopLyric.karaokeMode = playerStore.desktopLyric.karaokeMode === false ? true : false
+    saveDesktopLyricConfig()
+}
+
+const applyLyricPreset = (preset) => {
+    if (!playerStore.desktopLyric) return
+    playerStore.desktopLyric.stylePreset = preset
+    if (preset === 'modern') {
+        playerStore.desktopLyric.strokeWidth = 0.6
+        playerStore.desktopLyric.strokeColor = 'rgba(0, 0, 0, 0.6)'
+        playerStore.desktopLyric.shadowBlur = 6
+        playerStore.desktopLyric.shadowColor = 'rgba(0, 0, 0, 0.5)'
+        playerStore.desktopLyric.playedColor = '#31C27C'
+        playerStore.desktopLyric.unplayedColor = '#FFFFFF'
+        playerStore.desktopLyric.fontColor = '#ffffff'
+    } else if (preset === 'apple') {
+        playerStore.desktopLyric.strokeWidth = 0
+        playerStore.desktopLyric.strokeColor = 'rgba(0, 0, 0, 0)'
+        playerStore.desktopLyric.shadowBlur = 10
+        playerStore.desktopLyric.shadowColor = 'rgba(0, 0, 0, 0.6)'
+        playerStore.desktopLyric.playedColor = '#FFFFFF'
+        playerStore.desktopLyric.unplayedColor = 'rgba(255, 255, 255, 0.45)'
+        playerStore.desktopLyric.fontColor = '#ffffff'
+    } else if (preset === 'classic') {
+        playerStore.desktopLyric.strokeWidth = 1.0
+        playerStore.desktopLyric.strokeColor = 'rgba(0, 0, 0, 0.75)'
+        playerStore.desktopLyric.shadowBlur = 4
+        playerStore.desktopLyric.shadowColor = 'rgba(0, 0, 0, 0.7)'
+        playerStore.desktopLyric.playedColor = '#31C27C'
+        playerStore.desktopLyric.unplayedColor = '#FFFFFF'
+        playerStore.desktopLyric.fontColor = '#ffffff'
+    } else if (preset === 'clean') {
+        playerStore.desktopLyric.strokeWidth = 0
+        playerStore.desktopLyric.strokeColor = 'rgba(0, 0, 0, 0)'
+        playerStore.desktopLyric.shadowBlur = 0
+        playerStore.desktopLyric.shadowColor = 'rgba(0, 0, 0, 0)'
+        playerStore.desktopLyric.playedColor = '#FFFFFF'
+        playerStore.desktopLyric.unplayedColor = 'rgba(255, 255, 255, 0.55)'
+        playerStore.desktopLyric.fontColor = '#ffffff'
+    }
+}
+
 const saveDesktopLyricConfig = () => {
     if (!playerStore.desktopLyric) return
-    windowApi.updateDesktopLyricConfig(playerStore.desktopLyric)
+    try {
+        const plain = JSON.parse(JSON.stringify(playerStore.desktopLyric))
+        windowApi.updateDesktopLyricConfig(plain)
+    } catch (_) {
+        windowApi.updateDesktopLyricConfig({ ...playerStore.desktopLyric })
+    }
 }
 
 const toggleDesktopLyricTrans = () => {
@@ -847,15 +1037,184 @@ const toggleDesktopLyricRoma = () => {
                             </div>
                         </div>
                         <div class="option" v-if="playerStore.desktopLyric?.enabled">
-                            <div class="option-name">中文字体设置</div>
+                            <div class="option-name">视觉风格预设</div>
                             <div class="option-operation">
-                                <input v-model="playerStore.desktopLyric.chineseFont" placeholder="如 SourceHanSansCN-Bold / 微软雅黑" @change="saveDesktopLyricConfig">
+                                <Selector :modelValue="playerStore.desktopLyric.stylePreset || 'modern'" :options="lyricPresetOptions" @update:modelValue="applyLyricPreset"></Selector>
                             </div>
                         </div>
                         <div class="option" v-if="playerStore.desktopLyric?.enabled">
-                            <div class="option-name">西文字体设置</div>
+                            <div class="option-name">文字描边粗细 (0 ~ 3px，设为 0 可关闭描边)</div>
                             <div class="option-operation">
-                                <input v-model="playerStore.desktopLyric.westernFont" placeholder="如 Gilroy-ExtraBold / Arial" @change="saveDesktopLyricConfig">
+                                <input v-model.number="playerStore.desktopLyric.strokeWidth" type="number" step="0.2" min="0" max="3" @change="saveDesktopLyricConfig">
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">阴影弥散深度 (0 ~ 20px，设为 0 可关闭阴影)</div>
+                            <div class="option-operation">
+                                <input v-model.number="playerStore.desktopLyric.shadowBlur" type="number" min="0" max="20" @change="saveDesktopLyricConfig">
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">西文字体选择 (英文 / 数字)</div>
+                            <div class="option-operation">
+                                <Selector :max-items="8" :modelValue="playerStore.desktopLyric.westernFont || 'Gilroy-ExtraBold'" :options="westernFontOptions" @update:modelValue="(val) => { playerStore.desktopLyric.westernFont = val; saveDesktopLyricConfig(); }"></Selector>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">日文字体选择 (J-Pop / 假名)</div>
+                            <div class="option-operation">
+                                <Selector :max-items="8" :modelValue="playerStore.desktopLyric.japaneseFont || 'Yu Gothic'" :options="japaneseFontOptions" @update:modelValue="(val) => { playerStore.desktopLyric.japaneseFont = val; saveDesktopLyricConfig(); }"></Selector>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">中文字体选择 (汉字通用)</div>
+                            <div class="option-operation">
+                                <Selector :max-items="8" :modelValue="playerStore.desktopLyric.chineseFont || 'SourceHanSansCN-Bold'" :options="chineseFontOptions" @update:modelValue="(val) => { playerStore.desktopLyric.chineseFont = val; saveDesktopLyricConfig(); }"></Selector>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">卡拉OK平滑进度染色</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyricKaraoke()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': playerStore.desktopLyric?.karaokeMode !== false }">
+                                        {{ playerStore.desktopLyric?.karaokeMode !== false ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="playerStore.desktopLyric?.karaokeMode !== false"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">已播放文字颜色</div>
+                            <div class="option-operation">
+                                <div class="color-picker-group">
+                                    <div class="color-swatch-wrapper" :style="{ backgroundColor: playerStore.desktopLyric.playedColor || '#31C27C' }">
+                                        <input type="color" :value="toHexColor(playerStore.desktopLyric.playedColor || '#31C27C')" @input="(e) => { playerStore.desktopLyric.playedColor = e.target.value; saveDesktopLyricConfig(); }" class="color-input">
+                                    </div>
+                                    <input type="text" v-model="playerStore.desktopLyric.playedColor" @change="saveDesktopLyricConfig" class="color-hex-input">
+                                    <div class="eyedropper-btn" @click="pickColorWithEyeDropper('playedColor')" title="点击使用屏幕吸管取色">
+                                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.93-1.91-1.41 1.41 1.42 1.42L3 16.25V21h4.75l8.92-8.92 1.42 1.42 1.41-1.41-1.92-1.92 3.13-3.13a1 1 0 0 0 0-1.41zM6.92 19L5 17.08l8.06-8.06 1.92 1.92L6.92 19z"/></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">未播放文字底色 (默认浅白)</div>
+                            <div class="option-operation">
+                                <div class="color-picker-group">
+                                    <div class="color-swatch-wrapper" :style="{ backgroundColor: playerStore.desktopLyric.unplayedColor || '#FFFFFF' }">
+                                        <input type="color" :value="toHexColor(playerStore.desktopLyric.unplayedColor || '#FFFFFF')" @input="(e) => { playerStore.desktopLyric.unplayedColor = e.target.value; saveDesktopLyricConfig(); }" class="color-input">
+                                    </div>
+                                    <input type="text" v-model="playerStore.desktopLyric.unplayedColor" @change="saveDesktopLyricConfig" class="color-hex-input">
+                                    <div class="eyedropper-btn" @click="pickColorWithEyeDropper('unplayedColor')" title="点击使用屏幕吸管取色">
+                                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.93-1.91-1.41 1.41 1.42 1.42L3 16.25V21h4.75l8.92-8.92 1.42 1.42 1.41-1.41-1.92-1.92 3.13-3.13a1 1 0 0 0 0-1.41zM6.92 19L5 17.08l8.06-8.06 1.92 1.92L6.92 19z"/></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled">
+                            <div class="option-name">开启文字渐变色</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyricGradient()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': playerStore.desktopLyric?.gradientEnabled }">
+                                        {{ playerStore.desktopLyric?.gradientEnabled ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="playerStore.desktopLyric?.gradientEnabled"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 纯色模式下的文字颜色 -->
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled && !playerStore.desktopLyric?.gradientEnabled">
+                            <div class="option-name">文字颜色</div>
+                            <div class="option-operation">
+                                <div class="color-picker-group">
+                                    <div class="color-swatch-wrapper" :style="{ backgroundColor: playerStore.desktopLyric.fontColor || '#ffffff' }">
+                                        <input type="color" :value="toHexColor(playerStore.desktopLyric.fontColor || '#ffffff')" @input="(e) => { playerStore.desktopLyric.fontColor = e.target.value; saveDesktopLyricConfig(); }" class="color-input">
+                                    </div>
+                                    <input type="text" v-model="playerStore.desktopLyric.fontColor" @change="saveDesktopLyricConfig" class="color-hex-input">
+                                    <div class="eyedropper-btn" @click="pickColorWithEyeDropper('fontColor')" title="点击使用屏幕吸管取色">
+                                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.93-1.91-1.41 1.41 1.42 1.42L3 16.25V21h4.75l8.92-8.92 1.42 1.42 1.41-1.41-1.92-1.92 3.13-3.13a1 1 0 0 0 0-1.41zM6.92 19L5 17.08l8.06-8.06 1.92 1.92L6.92 19z"/></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 渐变色模式选项 -->
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled && playerStore.desktopLyric?.gradientEnabled">
+                            <div class="option-name">渐变颜色预设</div>
+                            <div class="option-operation">
+                                <div class="gradient-preset-list">
+                                    <div
+                                        class="gradient-preset-item"
+                                        v-for="(p, i) in gradientPresets"
+                                        :key="i"
+                                        :title="p.name"
+                                        :style="{ background: `linear-gradient(135deg, ${p.start}, ${p.end})` }"
+                                        @click="applyGradientPreset(p)"
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled && playerStore.desktopLyric?.gradientEnabled">
+                            <div class="option-name">渐变起始颜色</div>
+                            <div class="option-operation">
+                                <div class="color-picker-group">
+                                    <div class="color-swatch-wrapper" :style="{ backgroundColor: playerStore.desktopLyric.gradientStart || '#ffffff' }">
+                                        <input type="color" :value="toHexColor(playerStore.desktopLyric.gradientStart || '#ffffff')" @input="(e) => { playerStore.desktopLyric.gradientStart = e.target.value; saveDesktopLyricConfig(); }" class="color-input">
+                                    </div>
+                                    <input type="text" v-model="playerStore.desktopLyric.gradientStart" @change="saveDesktopLyricConfig" class="color-hex-input">
+                                    <div class="eyedropper-btn" @click="pickColorWithEyeDropper('gradientStart')" title="点击使用屏幕吸管取色">
+                                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.93-1.91-1.41 1.41 1.42 1.42L3 16.25V21h4.75l8.92-8.92 1.42 1.42 1.41-1.41-1.92-1.92 3.13-3.13a1 1 0 0 0 0-1.41zM6.92 19L5 17.08l8.06-8.06 1.92 1.92L6.92 19z"/></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled && playerStore.desktopLyric?.gradientEnabled">
+                            <div class="option-name">渐变结束颜色</div>
+                            <div class="option-operation">
+                                <div class="color-picker-group">
+                                    <div class="color-swatch-wrapper" :style="{ backgroundColor: playerStore.desktopLyric.gradientEnd || '#ff758c' }">
+                                        <input type="color" :value="toHexColor(playerStore.desktopLyric.gradientEnd || '#ff758c')" @input="(e) => { playerStore.desktopLyric.gradientEnd = e.target.value; saveDesktopLyricConfig(); }" class="color-input">
+                                    </div>
+                                    <input type="text" v-model="playerStore.desktopLyric.gradientEnd" @change="saveDesktopLyricConfig" class="color-hex-input">
+                                    <div class="eyedropper-btn" @click="pickColorWithEyeDropper('gradientEnd')" title="点击使用屏幕吸管取色">
+                                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.93-1.91-1.41 1.41 1.42 1.42L3 16.25V21h4.75l8.92-8.92 1.42 1.42 1.41-1.41-1.92-1.92 3.13-3.13a1 1 0 0 0 0-1.41zM6.92 19L5 17.08l8.06-8.06 1.92 1.92L6.92 19z"/></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled && playerStore.desktopLyric?.gradientEnabled">
+                            <div class="option-name">渐变角度 (度)</div>
+                            <div class="option-operation">
+                                <input v-model.number="playerStore.desktopLyric.gradientAngle" type="number" min="0" max="360" step="15" placeholder="135" @change="saveDesktopLyricConfig">
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled && (playerStore.desktopLyric.strokeWidth > 0)">
+                            <div class="option-name">文字描边颜色</div>
+                            <div class="option-operation">
+                                <div class="color-picker-group">
+                                    <div class="color-swatch-wrapper" :style="{ backgroundColor: playerStore.desktopLyric.strokeColor || '#000000' }">
+                                        <input type="color" :value="toHexColor(playerStore.desktopLyric.strokeColor || '#000000')" @input="(e) => { playerStore.desktopLyric.strokeColor = e.target.value; saveDesktopLyricConfig(); }" class="color-input">
+                                    </div>
+                                    <input type="text" v-model="playerStore.desktopLyric.strokeColor" @change="saveDesktopLyricConfig" class="color-hex-input">
+                                    <div class="eyedropper-btn" @click="pickColorWithEyeDropper('strokeColor')" title="点击使用屏幕吸管取色">
+                                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.93-1.91-1.41 1.41 1.42 1.42L3 16.25V21h4.75l8.92-8.92 1.42 1.42 1.41-1.41-1.92-1.92 3.13-3.13a1 1 0 0 0 0-1.41zM6.92 19L5 17.08l8.06-8.06 1.92 1.92L6.92 19z"/></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="playerStore.desktopLyric?.enabled && (playerStore.desktopLyric.shadowBlur > 0)">
+                            <div class="option-name">阴影颜色</div>
+                            <div class="option-operation">
+                                <div class="color-picker-group">
+                                    <div class="color-swatch-wrapper" :style="{ backgroundColor: playerStore.desktopLyric.shadowColor || '#000000' }">
+                                        <input type="color" :value="toHexColor(playerStore.desktopLyric.shadowColor || '#000000')" @input="(e) => { playerStore.desktopLyric.shadowColor = e.target.value; saveDesktopLyricConfig(); }" class="color-input">
+                                    </div>
+                                    <input type="text" v-model="playerStore.desktopLyric.shadowColor" @change="saveDesktopLyricConfig" class="color-hex-input">
+                                    <div class="eyedropper-btn" @click="pickColorWithEyeDropper('shadowColor')" title="点击使用屏幕吸管取色">
+                                        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M20.71 5.63l-2.34-2.34a1 1 0 0 0-1.41 0l-3.12 3.12-1.93-1.91-1.41 1.41 1.42 1.42L3 16.25V21h4.75l8.92-8.92 1.42 1.42 1.41-1.41-1.92-1.92 3.13-3.13a1 1 0 0 0 0-1.41zM6.92 19L5 17.08l8.06-8.06 1.92 1.92L6.92 19z"/></svg>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="option" v-if="playerStore.desktopLyric?.enabled">
@@ -1386,6 +1745,89 @@ const toggleDesktopLyricRoma = () => {
                                 cursor: pointer;
                                 opacity: 0.8;
                                 box-shadow: 0 0 0 1px black;
+                            }
+                        }
+                        .color-picker-group {
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            width: 200px;
+                            justify-content: flex-end;
+
+                            .color-swatch-wrapper {
+                                width: 34px;
+                                height: 34px;
+                                border: 1px solid rgba(0, 0, 0, 0.2);
+                                box-sizing: border-box;
+                                position: relative;
+                                overflow: hidden;
+                                cursor: pointer;
+                                transition: 0.2s;
+                                &:hover {
+                                    box-shadow: 0 0 0 1px black;
+                                }
+
+                                .color-input {
+                                    position: absolute;
+                                    top: -10px;
+                                    left: -10px;
+                                    width: 60px !important;
+                                    height: 60px !important;
+                                    opacity: 0;
+                                    cursor: pointer;
+                                }
+                            }
+
+                            .color-hex-input {
+                                width: 110px !important;
+                                height: 34px;
+                                font: 12px Bender-Bold, sans-serif;
+                                text-transform: uppercase;
+                                padding: 0 6px;
+                                text-align: center;
+                            }
+
+                            .eyedropper-btn {
+                                width: 34px;
+                                height: 34px;
+                                background-color: rgba(255, 255, 255, 0.35);
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                cursor: pointer;
+                                transition: 0.2s;
+                                color: #000;
+                                box-sizing: border-box;
+
+                                &:hover {
+                                    background: #000;
+                                    color: #fff;
+                                    box-shadow: 0 0 0 1px black;
+                                }
+                                &:active {
+                                    transform: scale(0.92);
+                                }
+                            }
+                        }
+
+                        .gradient-preset-list {
+                            display: flex;
+                            gap: 8px;
+                            align-items: center;
+                            width: 200px;
+                            justify-content: flex-end;
+
+                            .gradient-preset-item {
+                                width: 28px;
+                                height: 28px;
+                                border-radius: 4px;
+                                border: 1px solid rgba(0, 0, 0, 0.2);
+                                cursor: pointer;
+                                transition: 0.2s;
+                                &:hover {
+                                    transform: scale(1.15);
+                                    box-shadow: 0 0 0 1px black;
+                                }
                             }
                         }
 

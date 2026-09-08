@@ -253,6 +253,7 @@ export function installWebWindowApi() {
     unblockSongUrl: () => Promise.resolve(null), // Web 端由 API 服务器的 moduleDefs 处理解灰
     getDesktopSources: undefined,
     getDesktopLyricState: () => Promise.resolve({ enabled: false, locked: false }),
+    getSystemFonts: () => Promise.resolve([]),
     toggleDesktopLyric: () => {},
     setDesktopLyricLock: () => {},
     setDesktopLyricIgnoreMouse: () => {},

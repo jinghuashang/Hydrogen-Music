@@ -26,6 +26,22 @@ const { currentMusic, playing, progress, volume, quality, playMode, songList, sh
 
 let isProgress = false
 let musicProgress = null
+let desktopLyricProgressTimer = null
+
+export function startDesktopLyricSyncLoop() {
+    clearInterval(desktopLyricProgressTimer)
+    syncDesktopLyric()
+    desktopLyricProgressTimer = setInterval(() => {
+        if (currentMusic.value && playing.value) {
+            syncDesktopLyric()
+        }
+    }, 100)
+}
+
+export function stopDesktopLyricSyncLoop() {
+    clearInterval(desktopLyricProgressTimer)
+    syncDesktopLyric()
+}
 let loadLast = true
 let playModeOne = false //为true代表顺序播放已全部结束
 let currentTiming = null
@@ -133,9 +149,13 @@ export function syncDesktopLyric() {
             currentLrc: '',
             transLrc: '',
             romaLrc: '',
+            nextLrc: '',
+            lineStartTime: 0,
+            lineDuration: 0,
             playing: false,
             progress: 0,
             duration: 0,
+            syncTime: Date.now(),
         })
         return
     }
@@ -144,6 +164,9 @@ export function syncDesktopLyric() {
     let curText = ''
     let curTrans = ''
     let curRoma = ''
+    let nextText = ''
+    let lineStartTime = 0
+    let lineDuration = 4.0
 
     if (!lyricsObjArr.value && lyric.value?.lrc?.lyric) {
         ensureLyricParsed()
@@ -151,15 +174,30 @@ export function syncDesktopLyric() {
 
     if (Array.isArray(lyricsObjArr.value) && lyricsObjArr.value.length) {
         const arr = lyricsObjArr.value
+        // 加入 150ms 的声学起音提前量补偿，使得歌词切行动作与人声发音完全同步！
+        const effectiveSeek = seekTime + 0.15
         let idx = -1
         for (let i = 0; i < arr.length; i++) {
-            if (seekTime >= arr[i].time) idx = i
+            if (effectiveSeek >= arr[i].time) idx = i
             else break
         }
         if (idx >= 0 && idx < arr.length) {
             curText = arr[idx].lyric || ''
             curTrans = arr[idx].tlyric || ''
             curRoma = arr[idx].rlyric || arr[idx].romalrc || ''
+            lineStartTime = arr[idx].time || 0
+
+            const nextLine = arr[idx + 1]
+            if (nextLine && nextLine.time > lineStartTime) {
+                lineDuration = nextLine.time - lineStartTime
+                nextText = nextLine.lyric || ''
+            } else {
+                lineDuration = Math.max(2.0, Math.min(6.0, (time.value || 0) - lineStartTime))
+            }
+        } else if (arr.length > 0) {
+            lineStartTime = 0
+            lineDuration = arr[0].time || 4.0
+            nextText = arr[0].lyric || ''
         }
     }
 
@@ -169,9 +207,13 @@ export function syncDesktopLyric() {
         currentLrc: curText || (cur.name || cur.songName || cur.fileName || 'Hydrogen Music'),
         transLrc: curTrans,
         romaLrc: curRoma,
+        nextLrc: nextText,
+        lineStartTime,
+        lineDuration,
         playing: playing.value,
         progress: seekTime,
         duration: time.value || 0,
+        syncTime: Date.now(),
     })
 }
 
@@ -372,6 +414,7 @@ export function play(url, autoplay) {
         },
         onend: function() {
             clearInterval(musicProgress)
+            stopDesktopLyricSyncLoop()
             flushScrobble(true)
             if(playMode.value == 0 && currentIndex.value < songList.value.length - 1) { playNext();return } //顺序播放
             if(playMode.value == 0 && currentIndex.value == songList.value.length - 1) { playing.value = false;playModeOne = true;windowApi.playOrPauseMusicCheck(playing.value);return } //顺序播放结束暂停状态
@@ -409,6 +452,7 @@ export function play(url, autoplay) {
     })
     currentMusic.value.on('pause', () => {
         clearInterval(musicProgress)
+        stopDesktopLyricSyncLoop()
         markScrobblePause()
         playing.value = false
         windowApi.playOrPauseMusicCheck(playing.value)
@@ -416,6 +460,7 @@ export function play(url, autoplay) {
     })
     currentMusic.value.on('stop', () => {
         clearInterval(musicProgress)
+        stopDesktopLyricSyncLoop()
         markScrobblePause()
         playing.value = false
         windowApi.playOrPauseMusicCheck(playing.value)
@@ -424,6 +469,7 @@ export function play(url, autoplay) {
 
 export function startProgress() {
     clearInterval(musicProgress)
+    startDesktopLyricSyncLoop()
     if(!currentMusic.value) return
     progress.value = currentMusic.value.seek()
     musicProgress = setInterval(() => {
@@ -824,6 +870,7 @@ export function pauseMusic() {
         currentMusic.value.fade(volume.value,0,200)
         currentMusic.value.once('fade', () => {
             currentMusic.value.pause()
+    stopDesktopLyricSyncLoop()
             playing.value = false
         })
     }
@@ -911,6 +958,7 @@ export function changeProgressByDragStart() {
 }
 export function changeProgressByDragEnd(toTime) {
     changeProgress(toTime)
+    syncDesktopLyric()
     if(playing.value) startProgress()
 }
 // ------------

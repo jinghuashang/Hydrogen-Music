@@ -199,6 +199,7 @@ contextBridge.exposeInMainWorld('windowApi', {
         return res.json()
     },
     getDesktopLyricState: () => ipcRenderer.invoke('desktop-lyric-get-state'),
+    getSystemFonts: () => ipcRenderer.invoke('get-system-fonts'),
     toggleDesktopLyric: () => ipcRenderer.send('desktop-lyric-toggle'),
     setDesktopLyricLock: (locked) => ipcRenderer.send('desktop-lyric-set-lock', locked),
     setDesktopLyricIgnoreMouse: (ignore, options) => ipcRenderer.send('desktop-lyric-set-ignore-mouse', ignore, options),

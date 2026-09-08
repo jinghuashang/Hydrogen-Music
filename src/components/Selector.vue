@@ -112,7 +112,7 @@ const changeOptionsVisible = () => (option.value = !option.value);
 .selector-option-item {
   width: 200px;
   height: 34px;
-  font: 13px SourceHanSansCN-Bold;
+  font: 13px SourceHanSansCN-Bold, "Microsoft YaHei", -apple-system, sans-serif;
   background-image: linear-gradient(90deg, black, black);
   background-repeat: repeat-y;
   background-position: -200px 0;
