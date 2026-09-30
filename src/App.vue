@@ -175,23 +175,21 @@
         <MusicWidget></MusicWidget>
       </div>
     </Transition>
-    <Transition
-      :name="fullPlayerTransitionName"
-      @after-leave="onFullPlayerAfterLeave"
+    <div
+      class="musicPlayer"
+      v-if="hasCurrentSong && route.name !== 'mv'"
+      v-show="!playerStore.widgetState"
     >
-      <div
-        class="musicPlayer"
-        v-if="hasCurrentSong"
-        v-show="!playerStore.widgetState"
-      >
-        <MusicPlayer embed-mode="full" />
-      </div>
-    </Transition>
+      <MusicPlayer embed-mode="full" />
+    </div>
     <Transition name="video">
       <div class="videoPlayer" v-if="otherStore.videoPlayerShow">
         <VideoPlayer></VideoPlayer>
       </div>
     </Transition>
+    <router-view v-slot="{ Component }">
+      <component :is="Component" v-if="route.name === 'mv'" />
+    </router-view>
     <div class="contextMune">
       <ContextMenu></ContextMenu>
     </div>
@@ -324,6 +322,15 @@
     .widget-search{
       margin-left: 30Px;
     }
+  }
+  @media (max-width: 600px) {
+    .globalWidget {
+      top: 38Px;
+      left: 12Px;
+      right: 12Px;
+      justify-content: space-between;
+    }
+    .globalWidget .widget-search { margin-left: auto; }
   }
   .dragBar{
     width: 100%;

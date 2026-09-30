@@ -1,0 +1,272 @@
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body {
+  background: transparent;
+  color: #273336;
+  font-family: SourceHanSansCN-Bold, "Microsoft YaHei", sans-serif;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+.bar {
+  display: none !important;
+}
+
+.jizura-note {
+  flex: none;
+  padding: 5px 12px;
+  border-bottom: 1px solid rgba(72, 101, 106, 0.2);
+  background: rgba(255, 255, 255, 0.66);
+  color: #43585d;
+  font: 12Px SourceHanSansCN-Bold, "Microsoft YaHei", sans-serif;
+}
+
+.work {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.col-left,
+.col-right {
+  background: rgba(247, 250, 251, 0.96);
+  color: #273336;
+  border-color: rgba(72, 101, 106, 0.15);
+}
+
+.col-stage {
+  background: rgba(232, 240, 242, 0.78);
+}
+
+.sec,
+.now-row,
+.tgroup,
+.tgroup summary,
+.tabpane,
+.cut-pick,
+.cut-pick-h,
+.tcard,
+.stile {
+  background-color: rgba(247, 250, 251, 0.96);
+}
+
+.viewport {
+  background-color: #182226;
+}
+
+.tabs button[aria-selected="true"] {
+  border-bottom-color: #31a88b;
+  color: #273336;
+}
+
+button.primary,
+button.tap,
+button.omakase {
+  background-color: #49aa92;
+  border-color: #49aa92;
+  color: #fff;
+}
+
+button.primary:hover,
+button.tap:hover,
+button.omakase:hover {
+  background-color: #378f7b;
+}
+
+button.accent {
+  border-color: rgba(51, 138, 119, 0.55);
+  color: #338a77;
+}
+
+button[aria-pressed="true"] {
+  border-color: #49aa92;
+  color: #287c69;
+}
+
+input[type="range"],
+.checks input,
+label.check input {
+  accent-color: #39a78c;
+}
+
+.chip.l {
+  border-color: rgba(73, 170, 146, 0.55);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid #31a88b;
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  html,
+  body,
+  #app {
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+  }
+
+  .work {
+    min-height: 100dvh;
+  }
+}
+html[data-hydrogen-mv="true"] {
+  color-scheme: light;
+  --ink: #e8eff0;
+  --panel: #f7fafb;
+  --raised: #e8eff0;
+  --raised2: #dce7e9;
+  --line: #c3d0d3;
+  --line2: #94a7ab;
+  --text: #263437;
+  --muted: #4b5c60;
+  --faint: #596a6e;
+  --amber: #855500;
+  --cyan: #08715f;
+  --rose: #a63354;
+  --danger: #b52533;
+}
+html[data-hydrogen-mv="true"] body {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+
+button.primary,
+button.tap,
+button.omakase {
+  background-color: #287b67;
+  border-color: #287b67;
+  color: #fff;
+}
+
+button.primary:hover,
+button.tap:hover,
+button.omakase:hover {
+  background-color: #206554;
+}
+
+button:disabled,
+button.disabled,
+.tcard.set-off,
+.stile.set-off,
+.checks label.set-off {
+  opacity: 0.74;
+}
+
+.jizura-note { font-size: 12px; }
+.col-left,
+.col-right,
+.sec,
+.now-row,
+.tgroup,
+.tgroup summary,
+.tabpane,
+.cut-pick,
+.cut-pick-h,
+.tcard,
+.stile { color: #273336; }
+
+.muted,
+.hint,
+.field,
+.field label,
+.checks label small,
+.ln .no,
+.ln .cuts span,
+.ln .cuts select.cut-lay,
+.ln .is-inter .txt,
+.rng-lab,
+.rngInfo,
+.chip b,
+.tgroup .tg-cnt,
+.color-row label,
+.note,
+.audio-name,
+.syntax,
+.lang-row,
+.tl-hint { color: #4b5b5f; }
+
+h2,
+h3,
+.group-h,
+.cut-pick-h strong,
+.tgroup .tg-name { color: #273336; }
+
+button,
+input,
+select,
+textarea { color: #243033; }
+input::placeholder,
+textarea::placeholder { color: #657477; opacity: 1; }
+ .ln .no,
+ .ln .cuts span,
+ .ln .tools select,
+ .ln .cuts select.cut-lay,
+ .stile span,
+ .tcard .tcard-name,
+ .tgroup .tg-cnt,
+ .color-row label,
+ .field,
+ .checks label,
+ .checks label small,
+ label.check small,
+ .note,
+ .hint,
+ .rngInfo,
+ .syntax,
+ .audio-name { font-size: max(12px, 0.78em); line-height: 1.45; }
+
+h2,
+h3,
+.cut-pick-h strong,
+.tgroup summary { font-size: max(13px, 0.85em); }
+
+/* Keep dense technical identifiers compact while making prose and controls readable. */
+.ln .tools select,
+.ln .cuts select.cut-lay,
+.set-badge,
+.tgroup .tg-cnt,
+.group-h .muted,
+.slider output,
+.kbd,
+.tagl,
+.now-row .k { font-size: 12px; }
+
+.stile span,
+.tcard .tcard-name,
+.color-row label,
+.field,
+.checks label,
+.note,
+.hint,
+.rngInfo,
+.syntax,
+.audio-name,
+.ln .tools select,
+.ln .cuts select.cut-lay { line-height: 1.45; }
+
+.ln .cuts span,
+.chip { color: #344448; }
+.ln .cuts span:hover,
+.chip:hover { color: #1f302f; }
+button.accent { color: #236b5d; }
+button[aria-pressed="false"] { color: #354548; }
+.set-badge.set-horror { border-color: #9b372e; color: #7d2720; }
+.set-badge.set-typo { border-color: #59636e; color: #45505a; }
+.set-badge.set-kinetic { border-color: #487a37; color: #3a632e; }

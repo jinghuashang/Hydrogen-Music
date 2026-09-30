@@ -1,5 +1,8 @@
 <script setup>
-  import { ref, watch, onUnmounted, onDeactivated } from 'vue'
+    import { ref, watch, onUnmounted, onDeactivated } from 'vue'
+  import { useRouter } from 'vue-router'
+  import { createMvHandoff, getAvailableMvLyrics } from '../utils/mvHandoff.mjs'
+  import { stageMvHandoff } from '../utils/mvHandoffSession.mjs'
   import QRCode from 'qrcode'
 
   import { songTime2, loadMusicVideo, unloadMusicVideo } from '../utils/player';
@@ -15,11 +18,23 @@
   import { dialogOpen, noticeOpen } from '../utils/dialog';
   import { useUserStore } from '../store/userStore';
   import { usePlayerStore } from '../store/playerStore';
+  import { useOtherStore } from '../store/otherStore'
+  import { preparePlayerForMv } from '../utils/mvNavigation.mjs'
   import { storeToRefs } from 'pinia';
   
   const userStore = useUserStore()
   const playerStore = usePlayerStore()
+  const router = useRouter()
   const { addMusicVideo, songId } = storeToRefs(playerStore)
+  const toMv = async () => {
+    const currentSong = playerStore.songList?.[playerStore.currentIndex]
+    if (!currentSong) return
+    const lrcText = getAvailableMvLyrics(playerStore.lyric, playerStore.lyricsObjArr)
+    const handoff = createMvHandoff(currentSong, songId.value, lrcText)
+    stageMvHandoff(handoff)
+    preparePlayerForMv(playerStore, useOtherStore(), unloadMusicVideo)
+    await router.push('/mv')
+  }
   const toLogin = ref(false)
   const qrKey = ref(null)
   const qrcodeImg = ref(null)
@@ -524,6 +539,12 @@
                     <span class="add-title">添加该时间段</span>
                 </div>
             </Transition>
+            <div class="mv-entry-slot">
+                <button type="button" class="mv-entry-button" @click="toMv" aria-label="自制 MV，制作歌词动态视频">
+                    <span>自制 MV</span>
+                    <small>歌词动态视频</small>
+                </button>
+            </div>
         </div>
         <Transition name="fade">
             <div class="timing-container" v-if="timingList && currentVideoInfo">
@@ -1126,5 +1147,29 @@
   }
   .list-leave-active {
     position: absolute;
+  }
+  .mv-entry-slot {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 18px;
+  }
+  .mv-entry-button {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2Px;
+    min-width: 106Px;
+    padding: 8Px 14Px;
+    border: 1Px solid rgba(255, 255, 255, 0.28);
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.38);
+    color: rgba(255, 255, 255, 0.96);
+    font: 15Px SourceHanSansCN-Bold;
+    cursor: pointer;
+    transition: background-color 0.18s, border-color 0.18s, transform 0.18s;
+    &:hover { border-color: #31C27C; background: rgba(0, 0, 0, 0.6); }
+    &:active { transform: translateY(1Px); }
+    &:focus-visible { outline: 2Px solid #31C27C; outline-offset: 2Px; }
+    small { color: rgba(255, 255, 255, 0.78); font: 11Px SourceHanSansCN-Bold; }
   }
 </style>

@@ -1,15 +1,14 @@
 <script setup>
-  import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-  import { useRouter, useRoute } from 'vue-router';
-  import { logout } from '../api/user'
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import { useRoute, useRouter } from 'vue-router'
   import { noticeOpen } from "../utils/dialog";
   import { isLogin } from '../utils/authority'
   import { useUserStore } from '../store/userStore';
   import { isHydrogenWeb, clearWebProfileOnNas } from '../utils/webProfileNas'
-
   const router = useRouter()
   const route = useRoute()
   const userStore = useUserStore()
+
   const isActive = ref(false)
   const trackerLeft = ref(0)
   const trackerWidth = ref(14)
@@ -41,6 +40,7 @@
       else if (routeName === 'clouddisk') targetClass = 'button-cloud'
       else if (routeName === 'heartbeat') targetClass = 'button-heartbeat'
       else if (routeName === 'audiomatch') targetClass = 'button-match'
+      else if (routeName === 'mv') targetClass = 'button-mv'
       else if (routeName === 'toplist') targetClass = 'button-toplist'
       else if (route.fullPath.split('/')[1] === 'mymusic' || route.fullPath.split('/')[1] === 'login') targetClass = 'button-music'
 
@@ -76,7 +76,7 @@
   setTimeout(updateTracker, 600)
 
   // 页面切换动画：按导航序（首页→云盘→心动→识曲→我的音乐→搜索→设置）决定水平滑动方向
-  const routeOrder = { login: -1, homepage: 0, toplist: 1, clouddisk: 2, heartbeat: 3, audiomatch: 4, mymusic: 5, search: 6, settings: 7 }
+  const routeOrder = { login: -1, homepage: 0, toplist: 1, clouddisk: 2, heartbeat: 3, audiomatch: 4, mymusic: 5, mv: 6, search: 7, settings: 8 }
   let prevRouteName = null
   watch(() => route.name, (to, from) => { prevRouteName = from })
   const pageTransition = computed(() => {
@@ -124,8 +124,9 @@
           <router-link class="button-toplist" :style="{color: router.currentRoute.value.name == 'toplist' ? 'black' : '#353535'}" to="/toplist" v-if="userStore.toplistPage">排行</router-link>
           <router-link class="button-cloud" :style="{color: router.currentRoute.value.name == 'clouddisk' ? 'black' : '#353535'}" to="/cloud" v-if="userStore.cloudDiskPage">云盘</router-link>
           <router-link class="button-heartbeat" :style="{color: router.currentRoute.value.name == 'heartbeat' ? 'black' : '#353535'}" to="/heartbeat" v-if="userStore.heartbeatPage">心动</router-link>
-          <router-link class="button-match" :style="{color: router.currentRoute.value.name == 'audiomatch' ? 'black' : '#353535'}" to="/audiomatch" v-if="userStore.audioMatchPage">听歌识曲</router-link>
-          <router-link class="button-music" :style="{color: router.currentRoute.value.name == 'mymusic' ? 'black' : '#353535'}" to="/mymusic" v-if="userStore.homePage || userStore.cloudDiskPage || userStore.audioMatchPage">我的音乐</router-link>
+          <router-link class="button-match" :style="{color: route.name == 'audiomatch' ? 'black' : '#353535'}" to="/audiomatch" v-if="userStore.audioMatchPage">听歌识曲</router-link>
+          <router-link class="button-mv" :style="{color: route.name == 'mv' ? 'black' : '#353535'}" to="/mv">MV</router-link>
+          <router-link class="button-music" :style="{color: route.name == 'mymusic' ? 'black' : '#353535'}" to="/mymusic" v-if="userStore.homePage || userStore.cloudDiskPage || userStore.audioMatchPage">我的音乐</router-link>
           <div class="user">
             <div class="user-container">
               <div class="user-head" @click="userStore.appOptionShow = true">
@@ -152,7 +153,7 @@
       </div>
       
       <div class="home-content">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component }" v-if="route.name !== 'mv'">
           <Transition :name="pageTransition" mode="out-in">
             <keep-alive>
               <component :is="Component"></component>
@@ -170,10 +171,10 @@
   }
   
   /* 窄窗口时收紧导航间距，给左右悬浮层留出空间 */
-  @media (max-width: 1180px){
+  @media (min-width: 1181px) and (max-width: 1440px){
     .header-router .button-home, .header-router .button-cloud,
     .header-router .button-match, .header-router .button-heartbeat,
-    .header-router .button-toplist{
+    .header-router .button-toplist, .header-router .button-mv {
       margin-right: 26px;
     }
   }
@@ -207,7 +208,10 @@
 	        margin-right: 40px;
 	      }
 	      .button-toplist{
-	        margin-right: 40px;
+          margin-right: 40px;
+      }
+      .button-mv {
+        margin-right: 40px;
 	      }
 	      .router-tracker{
         height: 2px;
@@ -326,6 +330,55 @@
       }
     }
   }
+
+  @media (max-width: 1180px) {
+    .home-header {
+      margin: 66px 0 14px;
+      padding: 0 14px;
+      justify-content: flex-start;
+    }
+    .home-header .header-router:not(.router-closed) {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding-right: 32px;
+      min-width: 0;
+    }
+    .header-router a {
+      flex: 0 0 auto;
+      margin-right: 0 !important;
+      font-size: 16px !important;
+      white-space: nowrap;
+    }
+    .header-router .user { right: 0; }
+    .home-header .router-tracker { display: none; }
+  }
+
+  @media (max-width: 960px) {
+    .home-header {
+      margin: 82px 0 14px;
+      padding: 0 12px;
+      justify-content: flex-start;
+    }
+    .home-header .header-router:not(.router-closed) {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex: 1;
+      min-width: 0;
+    }
+    .header-router a {
+      flex: 0 0 auto;
+      margin-right: 0 !important;
+      font-size: 14px !important;
+      white-space: nowrap;
+    }
+    .header-router .button-match { display: none; }
+    .header-router .user { right: -32px; }
+    .home-header .router-tracker { display: none; }
+  }
+
   .home-content{
     padding: 0 45px;
     height: calc(100% + 1px);

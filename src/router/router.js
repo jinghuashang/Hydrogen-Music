@@ -15,6 +15,7 @@ import AudioMatch from '../views/AudioMatch.vue'
 import Heartbeat from '../views/Heartbeat.vue'
 import TopList from '../views/TopList.vue'
 import DesktopLyric from '../desktopLyric/DesktopLyric.vue'
+import MV from '../views/MV.vue'
 
 import { useUserStore } from '../store/userStore'
 import { useLibraryStore } from '../store/libraryStore'
@@ -191,6 +192,11 @@ const routes = [
             if(!userStore.toplistPage) next({name: 'mymusic'})
             else next()
         }
+    },
+    {
+        path: '/mv',
+        name: 'mv',
+        component: MV,
     },
     {
         path: '/desktop-lyric',
