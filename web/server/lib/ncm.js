@@ -1,5 +1,7 @@
 const { serveNcmApi, getModulesDefinitions } = require('@neteasecloudmusicapienhanced/api')
+const { generateRandomChineseIP } = require('@neteasecloudmusicapienhanced/api/util/index')
 const path = require('path')
+const { enableRandomCnIp } = require('../../../src/server/apiRiskControl')
 
 let started = false
 
@@ -67,6 +69,9 @@ async function startNcm(port = 36530) {
       module: require('../../../src/server/custom-cloud-upload'),
     })
   }
+
+  // 风控缓解：上游请求改用随机中国大陆 IP（不走 app.js 入口，需自行初始化 global.cnIp）
+  enableRandomCnIp({ generateIp: generateRandomChineseIP })
 
   await serveNcmApi({
     checkVersion: true,
