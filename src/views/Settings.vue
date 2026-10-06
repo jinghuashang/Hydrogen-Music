@@ -76,6 +76,7 @@ const newShortcut = ref([])
 const shortcutCharacter = ['=', '-', '~', '@', '#', '$', '[', ']', ';', "'", ',', '.', '/', '!'];
 const customFont = ref('')
 const updateProxy = ref('')
+const networkProxy = ref('')
 const appVersion = ref('')
 const isCheckingUpdate = ref(false)
 const unblockEnabled = ref(false)
@@ -153,6 +154,7 @@ onActivated(() => {
         quitApp.value = settings.other.quitApp
         customFont.value = settings.other.customFont
         updateProxy.value = settings.other.updateProxy || ''
+        networkProxy.value = settings.other.networkProxy || ''
         autoUpdate.value = settings.other.autoUpdate !== false
         autoMirror.value = settings.other.autoMirror !== false
         githubMirror.value = settings.other.githubMirror || ''
@@ -203,6 +205,7 @@ const setAppSettings = async () => {
             quitApp: quitApp.value,
             customFont: customFont.value,
             updateProxy: updateProxy.value,
+            networkProxy: networkProxy.value.trim(),
             autoUpdate: autoUpdate.value,
             autoMirror: autoMirror.value,
             githubMirror: githubMirror.value,
@@ -1376,6 +1379,12 @@ const toggleDesktopLyricRoma = () => {
                             <div class="option-name">更新加速地址</div>
                             <div class="option-operation">
                                 <input type="text" v-model="updateProxy" placeholder="留空不加速，如 https://gh.llkk.cc/" @change="persistWebSettingsFromForm()">
+                            </div>
+                        </div>
+                        <div class="option">
+                            <div class="option-name">网络代理</div>
+                            <div class="option-operation">
+                                <input type="text" v-model="networkProxy" :placeholder="isWebClient ? '留空=网关直连(忽略环境代理)，如 http://127.0.0.1:7890；仅作用于网关请求' : '留空=直连(忽略系统代理)，如 http://127.0.0.1:7890'" @change="persistWebSettingsFromForm()">
                             </div>
                         </div>
                         <div class="option">

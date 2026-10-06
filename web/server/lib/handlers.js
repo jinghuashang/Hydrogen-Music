@@ -8,6 +8,7 @@ const { createStore } = require('./store')
 const { defaultSettings } = require('./defaults')
 const { createDownloadManager } = require('./download-manager')
 const { createLocalScan } = require('./local-scan')
+const { applyGatewayProxy } = require('./proxy')
 
 const pkg = require('../../../package.json')
 
@@ -209,6 +210,8 @@ function createHandlers({ broadcast }) {
       settingsStore.set('settings', settings)
     }
     if (!settings.local) settings.local = { ...defaultSettings().local }
+    if (!settings.other) settings.other = { ...defaultSettings().other }
+    if (!Object.prototype.hasOwnProperty.call(settings.other, 'networkProxy')) settings.other.networkProxy = ''
     if (!Object.prototype.hasOwnProperty.call(settings.local, 'syncProfileToNas')) settings.local.syncProfileToNas = false
     if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadCover')) settings.local.downloadCover = false
     if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadInfo')) settings.local.downloadInfo = false
@@ -522,6 +525,8 @@ function createHandlers({ broadcast }) {
         const next = typeof payload === 'string' ? JSON.parse(payload) : payload
         const prev = settingsStore.get('settings')
         settingsStore.set('settings', next)
+        // 代理改动立即生效（无需重启网关）
+        applyGatewayProxy(next?.other?.networkProxy)
         if (prev?.local?.syncProfileToNas && !next?.local?.syncProfileToNas) {
           webProfileStore.delete('profile')
         }

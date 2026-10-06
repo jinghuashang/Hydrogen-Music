@@ -35,6 +35,7 @@ function defaultSettings() {
       quitApp: 'minimize',
       updateProxy: '',
       externalUnblockUrl: '',
+      networkProxy: '',
     },
     unblock: {
       enabled: true,

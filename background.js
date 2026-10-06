@@ -5,6 +5,7 @@ const LocalFiles = require('./src/electron/localmusic')
 const InitTray = require('./src/electron/tray')
 const registerShortcuts = require('./src/electron/shortcuts')
 const DesktopLyric = require('./src/desktopLyric/desktopLyricManager')
+const { applyNetworkProxy, registerProxyAuth } = require('./src/electron/networkProxy')
 
 const { app, BrowserWindow, globalShortcut, shell, session } = require('electron')
 const Winstate = require('electron-win-state').default
@@ -166,7 +167,10 @@ app.on('second-instance', (event, commandLine, workingDirectory) => {
     }
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+    // 网络代理：先定代理策略再建窗，避免首个请求走系统代理
+    registerProxyAuth()
+    await applyNetworkProxy(settingsStore.get('settings'))
     // 自动授权媒体设备权限（麦克风/摄像头/屏幕共享）
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
         const allowed = ['media', 'display-capture', 'mediaKeySystem']

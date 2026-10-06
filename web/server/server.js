@@ -6,12 +6,15 @@ const path = require('path')
 const { sseMiddleware, broadcast } = require('./lib/sse')
 const { createHandlers } = require('./lib/handlers')
 const { startNcm } = require('./lib/ncm')
+const { applyGatewayProxy } = require('./lib/proxy')
 
 const GATEWAY_PORT = Number(process.env.GATEWAY_PORT || 37890)
 const NCM_PORT = Number(process.env.NCM_PORT || 36530)
 
 async function main() {
   const handlers = createHandlers({ broadcast })
+  // 网络策略：先定代理再起 NCM API / 处理请求，避免首个请求走系统或环境变量代理
+  applyGatewayProxy(handlers.settingsStore.get('settings')?.other?.networkProxy)
   const app = express()
   app.use(
     cors({

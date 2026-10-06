@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const { parseFile } = require('music-metadata')
 const registerShortcuts = require('./shortcuts')
+const { applyNetworkProxy } = require('./networkProxy')
 const Store = require('electron-store')
 const CancelToken = axios.CancelToken
 let cancel = null
@@ -83,8 +84,11 @@ module.exports = IpcMainEvent = (win, app) => {
     })
     ipcMain.on('set-settings', (e, settings) => {
         try {
-            settingsStore.set('settings', JSON.parse(settings))
+            const parsed = JSON.parse(settings)
+            settingsStore.set('settings', parsed)
             registerShortcuts(win)
+            // 代理改动立即生效（无需重启）
+            applyNetworkProxy(parsed).catch(error => console.error('[proxy] 保存后应用失败:', error?.message || error))
         } catch (err) {
             console.error('[settings] 保存设置失败:', err)
         }
@@ -101,6 +105,7 @@ module.exports = IpcMainEvent = (win, app) => {
             if (!Object.prototype.hasOwnProperty.call(settings.other, 'autoUpdate')) settings.other.autoUpdate = true
             if (!Object.prototype.hasOwnProperty.call(settings.other, 'autoMirror')) settings.other.autoMirror = true
             if (!Object.prototype.hasOwnProperty.call(settings.other, 'githubMirror')) settings.other.githubMirror = ''
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'networkProxy')) settings.other.networkProxy = ''
             return settings
         }
         else {
@@ -173,6 +178,7 @@ module.exports = IpcMainEvent = (win, app) => {
                     globalShortcuts: true,
                     quitApp:'minimize',
                     updateProxy: '',
+                    networkProxy: '',
                     externalUnblockUrl: '',
                     autoUpdate: true,
                     autoMirror: true,
