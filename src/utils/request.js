@@ -64,6 +64,8 @@ request.interceptors.request.use(async function (config) {
     }
   }
   config.params = config.params || {}
+  // 风控缓解（-460 网络环境存在风险）：上游据此不再把调用方私有 IP（127.0.0.1 / 内网地址）当 X-Real-IP 传给网易
+  if (config.params.randomCNIP === undefined) config.params.randomCNIP = true
   if (config.url != '/login/qr/check' && isLogin()) {
     const cookieStr = getNeteaseCookieStringForApi()
     if (cookieStr) config.params.cookie = cookieStr

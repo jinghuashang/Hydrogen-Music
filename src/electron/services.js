@@ -1,5 +1,7 @@
 const { serveNcmApi, getModulesDefinitions } = require('@neteasecloudmusicapienhanced/api')
+const { generateRandomChineseIP } = require('@neteasecloudmusicapienhanced/api/util/index')
 const path = require('path')
+const { enableRandomCnIp } = require('../server/apiRiskControl')
 
 // 主进程顶层预加载 UNM 模块，确保 ASAR 内 require 能命中缓存
 let unmMatch = null
@@ -75,6 +77,9 @@ module.exports = async function startNeteaseMusicApi() {
       module: require('../server/custom-cloud-upload'),
     })
   }
+
+  // 风控缓解：上游请求改用随机中国大陆 IP（不走 app.js 入口，需自行初始化 global.cnIp）
+  enableRandomCnIp({ generateIp: generateRandomChineseIP })
 
   await serveNcmApi({
     checkVersion: true,
