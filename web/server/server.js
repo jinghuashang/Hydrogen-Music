@@ -33,10 +33,10 @@ async function main() {
 
   app.use(
     '/ncm',
+    // http-proxy-middleware v3 起挂载点由 express 剥离后直接转发剩余路径，
     createProxyMiddleware({
       target: `http://127.0.0.1:${NCM_PORT}`,
       changeOrigin: true,
-      pathRewrite: { '^/ncm': '' },
     }),
   )
 
@@ -45,7 +45,12 @@ async function main() {
 
   await startNcm(NCM_PORT)
 
-  app.listen(GATEWAY_PORT, '0.0.0.0', () => {
+  // express 5 将 listen 错误（如 EADDRINUSE）传入回调而非 throw，需显式检查
+  app.listen(GATEWAY_PORT, '0.0.0.0', (err) => {
+    if (err) {
+      console.error('[gateway] listen failed:', err)
+      process.exit(1)
+    }
     console.log(`[gateway] http://0.0.0.0:${GATEWAY_PORT}`)
     console.log(`[gateway] NCM 反代路径 /ncm -> http://127.0.0.1:${NCM_PORT}`)
     console.log(`[gateway] 静态资源目录 ${webDist}`)

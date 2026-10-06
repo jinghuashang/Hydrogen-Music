@@ -2,7 +2,6 @@ const axios = require('axios')
 const fs = require('fs')
 const path = require('path')
 const { URL } = require('url')
-const { parseFile } = require('music-metadata')
 const { CancelToken } = axios
 const { createStore } = require('./store')
 const { defaultSettings } = require('./defaults')
@@ -231,9 +230,11 @@ function createHandlers({ broadcast }) {
       }
     },
     'get-image-base64': async (_e, filePath) => {
+      // music-metadata 8+ 为 ESM-only，CJS 侧需动态导入
+      const { parseFile } = await import('music-metadata')
       const data = await parseFile(filePath)
       if (data.common.picture) {
-        return `data:${data.common.picture[0].format};base64,${data.common.picture[0].data.toString('base64')}`
+        return `data:${data.common.picture[0].format};base64,${Buffer.from(data.common.picture[0].data).toString('base64')}`
       }
       return null
     },
@@ -483,8 +484,10 @@ function createHandlers({ broadcast }) {
         const res = readLyric(txtPath)
         if (res) return lyricHandle(res)
       }
+      // music-metadata 8+ 为 ESM-only，CJS 侧需动态导入
+      const { parseFile } = await import('music-metadata')
       const metedata = await parseFile(filePath)
-      if (metedata.common.lyrics) return metedata.common.lyrics[0]
+      if (metedata.common.lyrics) return metedata.common.lyrics[0]?.text
       return false
     },
     'select-file': async () => ({

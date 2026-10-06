@@ -19,7 +19,8 @@ let mm = null
 module.exports = async (query, request) => {
   if (!mm) {
     try {
-      mm = require('music-metadata')
+      // music-metadata 8+ 为 ESM-only，动态导入
+      mm = await import('music-metadata')
     } catch (_) {}
   }
 
