@@ -115,6 +115,9 @@ function downloadUpdateProgress(callback) {
 function setWindowTile(title) {
     ipcRenderer.send('set-window-title', title)
 }
+function log(level, text) {
+    ipcRenderer.send('renderer-log', level, text)
+}
 contextBridge.exposeInMainWorld('windowApi', {
     unblockSongUrl: (payload) => ipcRenderer.invoke('unblock-song-url', payload),
     windowMin,
@@ -170,6 +173,8 @@ contextBridge.exposeInMainWorld('windowApi', {
     downloadUpdate: (url) => ipcRenderer.invoke('download-update', url),
     cancelDownloadUpdate: () => ipcRenderer.send('cancel-download-update'),
     setWindowTile,
+    log,
+    getLogDir: () => ipcRenderer.invoke('get-log-dir'),
     getDesktopSources: () => ipcRenderer.invoke('get-desktop-sources'),
     manualCheckUpdate: () => ipcRenderer.invoke('manual-check-update'),
     autoDownloadUpdate: (url, digest) => ipcRenderer.invoke('auto-download-update', url, digest),

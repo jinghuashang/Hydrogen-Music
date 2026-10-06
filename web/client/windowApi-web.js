@@ -202,6 +202,10 @@ export function installWebWindowApi() {
     copyTxt(txt) {
       if (navigator.clipboard?.writeText) navigator.clipboard.writeText(String(txt))
     },
+    log(level, text) {
+      send('renderer-log', { level, text }).catch(() => {})
+    },
+    getLogDir: () => invoke('get-log-dir'),
     checkUpdate(callback) {
       onSse('check-update', callback)
     },

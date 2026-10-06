@@ -6,11 +6,13 @@ const path = require('path')
 const { sseMiddleware, broadcast } = require('./lib/sse')
 const { createHandlers } = require('./lib/handlers')
 const { startNcm } = require('./lib/ncm')
+const logger = require('./lib/logger')
 
 const GATEWAY_PORT = Number(process.env.GATEWAY_PORT || 37890)
 const NCM_PORT = Number(process.env.NCM_PORT || 36530)
 
 async function main() {
+  logger.init()
   const handlers = createHandlers({ broadcast })
   const app = express()
   app.use(

@@ -8,6 +8,7 @@ const { createStore } = require('./store')
 const { defaultSettings } = require('./defaults')
 const { createDownloadManager } = require('./download-manager')
 const { createLocalScan } = require('./local-scan')
+const logger = require('./logger')
 
 const pkg = require('../../../package.json')
 
@@ -213,6 +214,8 @@ function createHandlers({ broadcast }) {
     if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadCover')) settings.local.downloadCover = false
     if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadInfo')) settings.local.downloadInfo = false
     if (!Object.prototype.hasOwnProperty.call(settings.local, 'downloadLyric')) settings.local.downloadLyric = false
+    if (!settings.other) settings.other = { ...defaultSettings().other }
+    if (!Object.prototype.hasOwnProperty.call(settings.other, 'logToFile')) settings.other.logToFile = false
     return settings
   }
 
@@ -235,6 +238,7 @@ function createHandlers({ broadcast }) {
       return null
     },
     'get-settings': getSettings,
+    'get-log-dir': async () => logger.getLogDir(),
     'dialog:openFile': async () => ({
       __web: true,
       kind: 'directory',
@@ -522,11 +526,15 @@ function createHandlers({ broadcast }) {
         const next = typeof payload === 'string' ? JSON.parse(payload) : payload
         const prev = settingsStore.get('settings')
         settingsStore.set('settings', next)
+        logger.setEnabled(next?.other?.logToFile === true)
         if (prev?.local?.syncProfileToNas && !next?.local?.syncProfileToNas) {
           webProfileStore.delete('profile')
         }
         break
       }
+      case 'renderer-log':
+        logger.writeRendererLog(payload && payload.level, payload && payload.text)
+        break
       case 'save-last-playlist':
         lastPlaylistStore.set('playlist', typeof payload === 'string' ? JSON.parse(payload) : payload)
         break

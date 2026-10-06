@@ -1,3 +1,6 @@
+const logger = require('./src/electron/logger')
+// 日志落盘需最先初始化：捕获后续模块加载阶段（UNM/NCM API）的输出
+logger.init()
 const startNeteaseMusicApi = require('./src/electron/services')
 const IpcMainEvent = require('./src/electron/ipcMain')
 const MusicDownload = require('./src/electron/download')

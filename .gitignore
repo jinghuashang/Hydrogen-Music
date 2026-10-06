@@ -29,6 +29,8 @@ dist/*
 *.sln
 *.sw?
 
+.gitignore
+
 # Vercel (contains user-specific API URLs)
 vercel.json.bak
 

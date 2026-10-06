@@ -83,6 +83,8 @@ const autoUpdate = ref(true)
 const autoMirror = ref(true)
 const lyricCompletion = ref(false)
 const githubMirror = ref('')
+const logToFile = ref(false)
+const logDir = ref('')
 const isTestingMirror = ref(false)
 const mirrorResults = ref([])
 const syncProfileToNas = ref(false)
@@ -132,6 +134,8 @@ onActivated(() => {
         autoUpdate.value = settings.other.autoUpdate !== false
         autoMirror.value = settings.other.autoMirror !== false
         githubMirror.value = settings.other.githubMirror || ''
+        logToFile.value = settings.other.logToFile === true
+        if (logToFile.value) refreshLogDir()
         if(settings.unblock) {
             unblockEnabled.value = settings.unblock.enabled
         }
@@ -182,6 +186,7 @@ const setAppSettings = async () => {
             autoUpdate: autoUpdate.value,
             autoMirror: autoMirror.value,
             githubMirror: githubMirror.value,
+            logToFile: logToFile.value,
         },
         unblock: {
             enabled: unblockEnabled.value,
@@ -452,6 +457,24 @@ const toggleUnblock = () => {
     unblockEnabled.value = !unblockEnabled.value
     setAppSettings()
     noticeOpen(unblockEnabled.value ? '解锁灰色歌曲已开启' : '解锁灰色歌曲已关闭', 1)
+}
+
+const refreshLogDir = async () => {
+    try {
+        logDir.value = (await windowApi.getLogDir?.()) || ''
+    } catch (_) {
+        logDir.value = ''
+    }
+}
+const toggleLogToFile = async () => {
+    logToFile.value = !logToFile.value
+    await setAppSettings()
+    if (logToFile.value) await refreshLogDir()
+    else logDir.value = ''
+    noticeOpen(logToFile.value ? '日志落盘已开启' : '日志落盘已关闭', 1)
+}
+const openLogDir = () => {
+    if (logDir.value) windowApi.openLocalFolder(logDir.value)
 }
 
 const testMirrors = async () => {
@@ -871,6 +894,27 @@ const testMirrors = async () => {
                             </div>
                         </div>
                         <div class="option">
+                            <div class="option-name">日志落盘</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleLogToFile">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': logToFile }">
+                                        {{ logToFile ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="logToFile"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="logToFile">
+                            <div class="option-name">日志目录</div>
+                            <div class="option-operation">
+                                <div class="log-dir">
+                                    <div class="log-dir-path" :title="logDir">{{ logDir || '获取中...' }}</div>
+                                    <div class="button" v-if="!isWebClient" @click="openLogDir()">打开文件夹</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option">
                             <div class="option-name">解锁灰色歌曲</div>
                             <div class="option-operation">
                                 <div class="toggle" @click="toggleUnblock()">
@@ -1237,6 +1281,28 @@ const testMirrors = async () => {
                                 cursor: pointer;
                                 opacity: 0.8;
                                 box-shadow: 0 0 0 1px black;
+                            }
+                        }
+
+                        .log-dir {
+                            display: flex;
+                            flex-direction: row;
+                            align-items: center;
+
+                            .log-dir-path {
+                                max-width: 320px;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
+                                white-space: nowrap;
+                                font: 13px SourceHanSansCN-Bold;
+                                color: #888;
+                            }
+
+                            .button {
+                                margin-left: 10px;
+                                width: auto;
+                                min-width: 100px;
+                                text-align: center;
                             }
                         }
 

@@ -8,11 +8,15 @@ if (import.meta.env.VITE_WEB === 'true' || import.meta.env.VITE_WEB === '1') {
 import router from './router/router.js'
 import pinia from './store/pinia'
 import { init } from './utils/initApp'
+import { installLogForwarding } from './utils/logForward'
 import lazy from './utils/lazy'
 import './style.css'
 import 'normalize.css'
 import '@/assets/css/common.css'
 import '@/assets/css/fonts.css'
+
+installLogForwarding()
+
 const app = createApp(App)
 app.use(router)
 app.use(pinia)

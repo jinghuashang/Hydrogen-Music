@@ -35,6 +35,7 @@ function defaultSettings() {
       quitApp: 'minimize',
       updateProxy: '',
       externalUnblockUrl: '',
+      logToFile: false,
     },
     unblock: {
       enabled: true,
