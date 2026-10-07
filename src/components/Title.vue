@@ -6,13 +6,11 @@
   import { storeToRefs } from 'pinia';
   const router = useRouter()
   const playerStore = usePlayerStore()
-  const { widgetState, lyricShow, musicVideo, videoIsPlaying, songList, currentIndex, localBase64Img, progress, time, playerShow } = storeToRefs(playerStore)
+  const { widgetState, musicVideo, videoIsPlaying, songList, currentIndex, localBase64Img, progress, time, playerShow } = storeToRefs(playerStore)
 
   const backHome = () => {
     if(widgetState.value) router.push('/')
-    if(videoIsPlaying.value) videoIsPlaying.value = false
-    widgetState.value = true
-    lyricShow.value = false
+    playerStore.exitPlayerPage()
   }
   windowApi.hidePlayer(() => {
     if(!widgetState.value) backHome()

@@ -78,9 +78,7 @@
         isHovering.value = false
         searchResults.value = []
         if(!playerStore.widgetState) {
-          playerStore.widgetState = true
-          playerStore.lyricShow = false
-          if(playerStore.videoIsPlaying) playerStore.videoIsPlaying = false
+          playerStore.exitPlayerPage()
         }
     } else {
         noticeOpen("输入不能为空", 2)
