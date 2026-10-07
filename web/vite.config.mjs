@@ -43,6 +43,8 @@ export default defineConfig({
   build: {
     outDir: path.join(webRoot, 'dist'),
     emptyOutDir: true,
+    // vite 8 默认 lightningcss 压缩器拒绝 plyr 的 `::after:empty` 伪类组合，回退 esbuild（与根 vite.config.mjs 保持一致）
+    cssMinify: 'esbuild',
     rollupOptions: {
       input: path.join(webRoot, 'index.html'),
     },

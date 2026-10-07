@@ -1004,6 +1004,13 @@ window.addEventListener('mouseup', (e) => {
   }
 })
 
+// 拖拽中窗口失焦（如指针在窗口外松开）会丢失 mouseup：兜底结束拖拽并恢复进度刷新，避免进度停在旧值后被误 seek
+window.addEventListener('blur', () => {
+  if(!isProgress) return
+  isProgress = false
+  if(playing.value) startProgress()
+})
+
 window.addEventListener('click', (e) => {
   // 目标控件可能尚未渲染，统一做存在性判断
   const contains = (cls) => {

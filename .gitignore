@@ -38,3 +38,6 @@ vercel.json.bak
 .zcode/
 CLAUDE.md
 DEBUG_REPORT.md
+.scratch/
+.spec-workflow/
+docs/agents/

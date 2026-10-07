@@ -22,6 +22,6 @@ export const useUserStore = defineStore('userStore', {
     },
     persist: {
         storage: localStorage,
-        paths: ['user','biliUser','homePage','cloudDiskPage','audioMatchPage','heartbeatPage','toplistPage']
+        pick: ['user','biliUser','homePage','cloudDiskPage','audioMatchPage','heartbeatPage','toplistPage']
     },
 })

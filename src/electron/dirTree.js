@@ -1,6 +1,5 @@
 const fs = require('fs-extra');
 const path = require('path');
-const { parseFile } = require('music-metadata');
 const { nanoid } = require('nanoid')
 /**
  * 函数作用: 初始化
@@ -69,6 +68,8 @@ module.exports = async function getDirTree(baseDir, type, win) {
         } else {
             if(getType == 'dir') return null
             if(musicType.indexOf(path.extname(tempDir).toLowerCase()) == -1) return null
+            // music-metadata 8+ 为 ESM-only，CJS 侧需动态导入
+            const { parseFile } = await import('music-metadata')
             const result = await parseFile(tempDir)
             obj.id = nanoid()
             obj.common = {

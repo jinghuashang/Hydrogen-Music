@@ -306,6 +306,8 @@ function getSeekTimeFromEvent(e) {
 }
 
 function onSeekDown(e) {
+  // 仅左键开始拖拽定位：侧键/中键/右键若触发，会在指针松开时把播放位置 seek 到鼠标处造成倒退
+  if (e.button !== 0) return
   if (!isFmPlaying.value || !displayTime.value) return
   seeking = true
   changeProgressByDragStart()
@@ -322,6 +324,7 @@ function onSeekMove(e) {
 }
 
 function onSeekUp(e) {
+  if (e.button !== 0) return
   if (!seeking) return
   seeking = false
   const targetTime = getSeekTimeFromEvent(e)

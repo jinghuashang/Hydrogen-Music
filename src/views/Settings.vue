@@ -524,7 +524,7 @@ const testMirrors = async () => {
         </div>
         <div class="settings-container">
             <h1 class="settings-title">设置</h1>
-            <div class="settings-user-info" v-if="isLogin()">
+            <div class="settings-user-info" v-if="isLogin() && userStore.user">
                 <div class="user">
                     <div class="user-head">
                         <img :src="userStore.user.avatarUrl + '?param=300y300'" alt="">
