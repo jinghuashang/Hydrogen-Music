@@ -50,6 +50,12 @@ export const usePlayerStore = defineStore('playerStore', {
         }
     },
     actions: {
+        // 退出播放页的统一出口：关闭 MV 播放层、恢复 widget 显示、隐藏歌词
+        exitPlayerPage() {
+            this.videoIsPlaying = false
+            this.widgetState = true
+            this.lyricShow = false
+        }
     },
     persist: {
         storage: localStorage,

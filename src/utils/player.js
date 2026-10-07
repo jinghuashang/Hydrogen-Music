@@ -987,13 +987,17 @@ export function musicVideoCheck(seek, update) {
 
 
 window.addEventListener('mousedown', (e) => {
-    if(e.target?.parentNode?.parentNode?.id == 'widget-progress') {
+    // 仅响应主键（左键）：侧键等非主键按下不进入进度条拖动
+    if(e.button !== 0) return
+    // 语义命中：统一识别进度条黑区/白区/头部，不再依赖 DOM 层级巧合
+    if(e.target?.closest?.('#widget-progress')) {
       changeProgressByDragStart()
       isProgress = true
     }
 })
 
-window.addEventListener('mouseup', () => {
+window.addEventListener('mouseup', (e) => {
+  if(e.button !== 0) return
   if(isProgress) {
       changeProgressByDragEnd(progress.value)
       isProgress = false

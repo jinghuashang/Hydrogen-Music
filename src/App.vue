@@ -77,8 +77,17 @@
     { immediate: true },
   )
 
+  /** 侧键 back（button 3）只接管播放页层：播放页打开时退出（与左上角 logo 同一出口），forward 与路由页一律放行浏览器默认历史导航
+   *  preventDefault 必须挂在 mouseup（capture）——mousedown/auxclick 均拦不住 Chromium 侧键历史导航（CDP 实证 2026-10-07） */
+  function onSideBackMouseUp(e) {
+    if (e.button !== 3 || playerStore.widgetState) return
+    e.preventDefault()
+    playerStore.exitPlayerPage()
+  }
+
   onMounted(() => {
     refreshWebHomeSplit()
+    window.addEventListener('mouseup', onSideBackMouseUp, true)
     if (!isWebClient) return
     window.addEventListener('resize', refreshWebHomeSplit)
     document.addEventListener('fullscreenchange', refreshWebHomeSplit)
@@ -86,6 +95,7 @@
   })
 
   onUnmounted(() => {
+    window.removeEventListener('mouseup', onSideBackMouseUp, true)
     if (!isWebClient) return
     window.removeEventListener('resize', refreshWebHomeSplit)
     document.removeEventListener('fullscreenchange', refreshWebHomeSplit)
