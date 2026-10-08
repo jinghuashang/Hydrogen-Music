@@ -6,6 +6,8 @@
 
   const playerStore = usePlayerStore()
   const { playing, progress, lyric, lyricsObjArr, songList, currentIndex, currentMusic, widgetState, lyricShow, lyricEle, isLyricDelay, lyricSize, tlyricSize, rlyricSize, lyricType, playerChangeSong, lyricInterludeTime, lyricBlur, playerShow, videoIsPlaying } = storeToRefs(playerStore)
+  // 空数组/仅占位项同样视为无歌词（否则空态提示会被 v-show 的 truthy 判断吃掉，页面看起来什么都没有）
+  const hasLyricData = computed(() => !!(lyricsObjArr.value || []).some((line) => line && String(line.lyric || '').trim()))
 
   const lyricScroll = ref()
   const lyricContent = ref()
@@ -441,9 +443,9 @@
       </div>
     </Transition>
     <Transition name="fade">
-      <div v-show="!lyricsObjArr || lyricType.indexOf('original') == -1" class="lyric-nodata">
+      <div v-show="!hasLyricData || lyricType.indexOf('original') == -1" class="lyric-nodata">
           <div class="line1"></div>
-          <span class="tip">Lyric-Area</span>
+          <span class="tip">{{ hasLyricData ? 'Lyric-Area' : '暂无歌词' }}</span>
           <div class="line2"></div>
       </div>
     </Transition>

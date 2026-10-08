@@ -23,6 +23,9 @@ const request = axios.create({
 // 重试配置
 const MAX_RETRIES = 3
 const RETRY_DELAY = 1000
+/** -460 风控自动重试的全局冷却：期间其它请求不再自动重试，避免重试风暴放大风控 */
+const RISK_RETRY_COOLDOWN = 8000
+let riskRetryAfter = 0
 
 export function clearProxyCache() {}
 
@@ -91,6 +94,17 @@ request.interceptors.response.use(function (response) {
 
     // 判断是否需要重试：仅幂等的 GET/HEAD 重试，避免 POST（验证码发送、登录等）重复执行
     const method = (config.method || 'get').toLowerCase()
+    // 网易云风控 -460（网络环境存在风险）：服务端已换 IP 重试一次，这里再兜一次（只兜一次，避免放大风控）
+    const riskCode = error.response && error.response.data && error.response.data.code
+    const isRiskControl = riskCode === -460
+    if (isRiskControl && (method === 'get' || method === 'head') && !config._riskRetried && Date.now() >= riskRetryAfter) {
+      config._riskRetried = true
+      riskRetryAfter = Date.now() + RISK_RETRY_COOLDOWN
+      if (!config.silent) noticeOpen('网易云风控：网络环境存在风险，正在重试', 2)
+      console.log(`[request] Risk control -460 on ${config.url}, retrying once`)
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      return request(config)
+    }
     const shouldRetry = (!error.response || error.response.status >= 500) && (method === 'get' || method === 'head')
     if (shouldRetry && config._retryCount < MAX_RETRIES) {
       config._retryCount++
@@ -101,7 +115,8 @@ request.interceptors.response.use(function (response) {
       return request(config)
     }
 
-    noticeOpen("请求错误", 2)
+    // silent：可选增强请求（如云盘歌词、歌词补全）失败时由调用方自行降级，不打扰用户
+    if (!config.silent) noticeOpen(isRiskControl ? '网易云风控：网络环境存在风险，请稍后再试' : '请求错误', 2)
     return Promise.reject(error);
 });
 

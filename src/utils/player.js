@@ -506,7 +506,7 @@ export async function completeMissingLyric(song, currentTargetId) {
     if (!keywords) return
 
     try {
-        const searchRes = await search({ keywords, limit: 5, type: 1 })
+        const searchRes = await search({ keywords, limit: 5, type: 1 }, { silent: true })
         const songs = searchRes?.result?.songs || []
         if (!songs.length) return
 

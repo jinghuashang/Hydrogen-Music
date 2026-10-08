@@ -1,7 +1,11 @@
-const { serveNcmApi, getModulesDefinitions } = require('@neteasecloudmusicapienhanced/api')
-const { generateRandomChineseIP } = require('@neteasecloudmusicapienhanced/api/util/index')
 const path = require('path')
-const { enableRandomCnIp } = require('../server/apiRiskControl')
+const { generateRandomChineseIP } = require('@neteasecloudmusicapienhanced/api/util/index')
+const { enableRandomCnIp, patchUpstreamRequest } = require('../server/apiRiskControl')
+
+// 风控包装必须在 require 上游 API 主入口之前完成（上游加载时会捕获 request 引用）
+patchUpstreamRequest({ generateIp: generateRandomChineseIP })
+
+const { serveNcmApi, getModulesDefinitions } = require('@neteasecloudmusicapienhanced/api')
 
 // 主进程顶层预加载 UNM 模块，确保 ASAR 内 require 能命中缓存
 let unmMatch = null

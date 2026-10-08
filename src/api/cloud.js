@@ -42,6 +42,8 @@ export function getCloudLyric(params) {
         url: '/cloud/lyric_get',
         method: 'get',
         params,
+        // 可选增强：云盘歌词取不到时由调用方降级，不弹「请求错误」
+        silent: true,
     })
 }
 

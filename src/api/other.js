@@ -25,10 +25,11 @@ export function getBanner(id) {
  * @param {*} id 
  * @returns 
  */
-export function search(params) {
+export function search(params, options = {}) {
     return request({
         url: '/cloudsearch',
         method: 'get',
         params,
+        ...options,
     })
 }

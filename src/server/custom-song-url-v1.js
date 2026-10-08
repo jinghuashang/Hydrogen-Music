@@ -33,6 +33,11 @@ function verifyFullSong(url, minSize = 500 * 1024) {
   })
 }
 
+// -460 风控熔断：连续命中后一段时间内跳过官方接口、直接走解灰
+// （网易云对 /song/url/v1 的判定在账号+出口 IP 维度，换 X-Real-IP 无效；持续冲击只会让风控更久）
+const RISK_COOLDOWN_MS = 5 * 60 * 1000
+let riskUntil = 0
+
 module.exports = async (query, request) => {
   const data = {
     ids: '[' + query.id + ']',
@@ -52,12 +57,23 @@ module.exports = async (query, request) => {
   // 优先官方音源：拿到完整 URL（非试听）就直接用，避免第三方源匹配到错误录音/片段
   // （VIP/免费曲在官方客户端可正常播放，第三方替换反而可能给出不同版本或十几秒片段）
   let plain = null
-  try {
-    plain = await plainRequest()
-    const info = plain && plain.body && plain.body.data && plain.body.data[0]
-    if (info && info.url && !info.freeTrialInfo) return plain
-  } catch (e) {
-    console.warn('[unblock] 官方 URL 请求失败，转 UNM 匹配:', e.message)
+  if (Date.now() >= riskUntil) {
+    try {
+      plain = await plainRequest()
+      const info = plain && plain.body && plain.body.data && plain.body.data[0]
+      if (info && info.url && !info.freeTrialInfo) return plain
+    } catch (e) {
+      // 命中风控（-460）：进入熔断窗口，后续直接走解灰，避免持续冲击官方接口
+      const code = e && e.body && e.body.code
+      if (code === -460) {
+        riskUntil = Date.now() + RISK_COOLDOWN_MS
+        console.warn('[unblock] 官方接口命中风控 -460，熔断 5 分钟并改用解灰音源')
+      } else {
+        console.warn('[unblock] 官方 URL 请求失败，转 UNM 匹配:', e && e.message)
+      }
+    }
+  } else {
+    console.warn('[unblock] 风控熔断中，跳过官方接口直接解灰')
   }
 
   let unblockUrl = null
