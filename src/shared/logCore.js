@@ -16,6 +16,26 @@ function pad(value, width = 2) {
   return String(value).padStart(width, '0')
 }
 
+/** 敏感信息脱敏规则：日志可能被公开分享（issue/工单），凭据与账号类参数一律替换为 *** */
+const SENSITIVE_RULES = [
+  // 查询串 / cookie 串中的 cookie 参数（值可能含 =，截到分隔符为止）
+  [/([?&;\s]cookie=)[^&\s"']+/gi, '$1***'],
+  // 网易云常用凭据 cookie
+  [/\b(MUSIC_U|MUSIC_A|__csrf|__remember_me)=[^;&\s"']+/gi, '$1=***'],
+  // 账号与令牌类查询参数
+  [/([?&;\s](?:password|phone|email|captcha|token|access_token|refresh_token)=)[^&\s"']+/gi, '$1***'],
+  // 请求头形式：Cookie / Authorization / Set-Cookie
+  [/(\b(?:cookie|authorization|set-cookie)\s*:\s*)[^\r\n]+/gi, '$1***'],
+]
+
+function redactSensitive(text) {
+  let out = text
+  for (const [pattern, replacement] of SENSITIVE_RULES) {
+    out = out.replace(pattern, replacement)
+  }
+  return out
+}
+
 function dateStamp(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
@@ -85,7 +105,8 @@ function createLogWriter(options = {}) {
         const head = typeof header === 'function' ? header() : header
         if (head) writeRaw(`${timeStamp()} [log] ===== ${head} =====`)
       }
-      const text = line.length > MAX_LINE_LENGTH ? `${line.slice(0, MAX_LINE_LENGTH)} …[truncated]` : line
+      const safe = redactSensitive(line)
+      const text = safe.length > MAX_LINE_LENGTH ? `${safe.slice(0, MAX_LINE_LENGTH)} …[truncated]` : safe
       fs.appendFileSync(currentFile, text.endsWith('\n') ? text : `${text}\n`, 'utf8')
     } catch (error) {
       broken = true

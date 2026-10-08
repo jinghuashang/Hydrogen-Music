@@ -40,9 +40,24 @@ module.exports = async (query, request) => {
     encodeType: 'flac',
   }
 
-  if (query.unblock !== 'true') {
+  const plainRequest = () => {
     if (data.level === 'sky') data.immerseType = 'c51'
     return request('/api/song/enhance/player/url/v1', data, createOption(query))
+  }
+
+  if (query.unblock !== 'true') {
+    return plainRequest()
+  }
+
+  // 优先官方音源：拿到完整 URL（非试听）就直接用，避免第三方源匹配到错误录音/片段
+  // （VIP/免费曲在官方客户端可正常播放，第三方替换反而可能给出不同版本或十几秒片段）
+  let plain = null
+  try {
+    plain = await plainRequest()
+    const info = plain && plain.body && plain.body.data && plain.body.data[0]
+    if (info && info.url && !info.freeTrialInfo) return plain
+  } catch (e) {
+    console.warn('[unblock] 官方 URL 请求失败，转 UNM 匹配:', e.message)
   }
 
   let unblockUrl = null
@@ -135,7 +150,7 @@ module.exports = async (query, request) => {
     }
   }
 
-  // 解灰未成功 — 回退正常网易云 API
-  if (data.level === 'sky') data.immerseType = 'c51'
-  return request('/api/song/enhance/player/url/v1', data, createOption(query))
+  // 解灰未成功 — 回退官方结果（可能为试听片段或 null）
+  if (plain) return plain
+  return plainRequest()
 }

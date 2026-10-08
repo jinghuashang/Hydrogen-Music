@@ -3,7 +3,7 @@ import { Howl } from 'howler'
 import dayjs from 'dayjs';
 import { noticeOpen } from './dialog'
 import { isHydrogenWeb, getBiliCookieForApi } from './webProfileNas'
-import { checkMusic, getMusicUrl, likeMusic, getLyric, scrobble } from '../api/song'
+import { getMusicUrl, likeMusic, getLyric, scrobble } from '../api/song'
 import { search } from '../api/other'
 import { isLogin } from './authority'
 import { getCloudLyric } from '../api/cloud'
@@ -159,6 +159,8 @@ function skipUnplayable(msg) {
     clearInterval(musicProgress)
     playing.value = false
     windowApi.playOrPauseMusicCheck(false)
+    // 必须先卸载上一首：否则旧 Howl 会继续出声，出现「界面已是新歌、声音还是上一首」的错乱
+    if(currentMusic.value) currentMusic.value.unload()
     currentMusic.value = null
     lyric.value = null
     scrobbleState = {
@@ -245,7 +247,14 @@ export function play(url, autoplay) {
         }
     })
     currentMusic.value.once('load', () => {
-        time.value = Math.floor(currentMusic.value.duration())
+        const actual = currentMusic.value.duration()
+        // 时长校验：解灰/第三方源可能匹配到别的录音，时长明显不符时判为错源并跳过
+        const expected = ((songList.value || [])[currentIndex.value]?.dt || 0) / 1000
+        if(expected > 30 && actual > 0 && Math.abs(actual - expected) > Math.max(20, expected * 0.15)) {
+            skipUnplayable('音源与歌曲时长不符，已跳过')
+            return
+        }
+        time.value = Math.floor(actual)
         playFailCount = 0
         if(loadLast) {
             currentMusic.value.volume(0)
@@ -551,6 +560,83 @@ function loadLyric(id, song) {
     })
 }
 
+/** 主进程 IPC 直连 UNM 兜底：无 URL / 仅试听 / 请求失败时调用 */
+async function tryUnblockFallback(id) {
+    try {
+        const song = (songList.value || [])[currentIndex.value]
+        if (song && song.name) {
+            console.log(`[unblock] Trying IPC fallback for: ${song.name} (id=${id})`)
+            return await windowApi.unblockSongUrl({
+                id,
+                name: song.name,
+                artist: song.ar ? song.ar.map(a => a.name).join('/') : '',
+                album: song.al ? song.al.name : '',
+                duration: song.dt || 0,
+            })
+        }
+    } catch (e) {
+        console.error('[unblock] IPC fallback error:', e)
+    }
+    return null
+}
+
+/** 探测音频体积（字节，失败返回 null）：用于在试听片段与替代音源之间择优 */
+async function probeAudioSize(url) {
+    try {
+        const options = { headers: { Range: 'bytes=0-1' } }
+        if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) options.signal = AbortSignal.timeout(4000)
+        const res = await fetch(url, options)
+        const range = res.headers.get('content-range')
+        if (range && range.includes('/')) {
+            const total = Number(range.split('/').pop())
+            if (Number.isFinite(total) && total > 0) return total
+        }
+        const len = Number(res.headers.get('content-length'))
+        return Number.isFinite(len) && len > 0 ? len : null
+    } catch (_) {
+        return null
+    }
+}
+
+/** 处理 /song/url/v1 结果：完整音源直接播放；空 URL / 仅试听则尝试 UNM 兜底 */
+async function playBySongInfo(songInfo, id, autoplay, unblockOn) {
+    const info = songInfo?.data?.[0]
+    const isTrial = !!info?.freeTrialInfo
+    if (info?.url && !isTrial) {
+        play(info.url, autoplay)
+        setSongLevel(info.level)
+        return
+    }
+    if (!unblockOn) {
+        skipUnplayable(isTrial ? '该歌曲仅支持试听' : '当前歌曲无法播放')
+        return
+    }
+    if (isTrial) noticeOpen('该歌曲仅可试听 30 秒，正在尝试其他音源', 2)
+    const fallbackUrl = await tryUnblockFallback(id)
+    if (fallbackUrl) {
+        if (!isTrial) {
+            play(fallbackUrl, autoplay)
+            return
+        }
+        // 试听场景：替代音源若明显偏小（部分源只给十几秒片段），不如保留 30 秒试听
+        const fallbackSize = await probeAudioSize(fallbackUrl)
+        if (fallbackSize != null && fallbackSize < 500 * 1024) {
+            play(info.url, autoplay)
+            setSongLevel(info.level)
+            return
+        }
+        play(fallbackUrl, autoplay)
+        return
+    }
+    if (isTrial && info.url) {
+        // 兜底失败时仍播放试听片段，避免直接跳过
+        play(info.url, autoplay)
+        setSongLevel(info.level)
+    } else {
+        skipUnplayable('当前歌曲无法播放')
+    }
+}
+
 export async function getSongUrl(id, index, autoplay, isLocal) {
     const cur = (songList.value || [])[currentIndex.value]
     initScrobble(cur)
@@ -578,75 +664,16 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
     }
     setSongToWindows()
     const unblockOn = await windowApi.getSettings().then(s => s?.unblock?.enabled !== false).catch(() => true)
-    await checkMusic(id).then(async result => {
-        if(result.success == true) {
-            getMusicUrl(id, quality.value).then(songInfo => {
-                if (songInfo?.data?.[0]?.url) {
-                    play(songInfo.data[0].url, autoplay)
-                    setSongLevel(songInfo.data[0].level)
-                } else {
-                    skipUnplayable('当前歌曲无法播放')
-                }
-            }).catch(() => skipUnplayable('当前歌曲无法播放'))
-            loadLyric(id, cur)
-        } else if (unblockOn) {
-            getMusicUrl(id, quality.value).then(async songInfo => {
-                if (songInfo.data[0].url) {
-                    play(songInfo.data[0].url, autoplay)
-                    setSongLevel(songInfo.data[0].level)
-                } else {
-                    // API 未返回 URL，尝试主进程 IPC 直连 UNM 匹配
-                    let fallbackUrl = null
-                    try {
-                        const song = (songList.value || [])[currentIndex.value]
-                        if (song && song.name) {
-                            console.log(`[unblock] Trying IPC fallback for: ${song.name} (id=${id})`)
-                            fallbackUrl = await windowApi.unblockSongUrl({
-                                id,
-                                name: song.name,
-                                artist: song.ar ? song.ar.map(a => a.name).join('/') : '',
-                                album: song.al ? song.al.name : '',
-                                duration: song.dt || 0,
-                            })
-                        }
-                    } catch (e) {
-                        console.error('[unblock] IPC fallback error:', e)
-                    }
-                    if (fallbackUrl) {
-                        play(fallbackUrl, autoplay)
-                    } else {
-                        skipUnplayable('当前歌曲无法播放')
-                    }
-                }
-            }).catch(async () => {
-                // 请求失败也尝试 IPC 兜底
-                let fallbackUrl = null
-                try {
-                    const song = (songList.value || [])[currentIndex.value]
-                    if (song && song.name) {
-                        console.log(`[unblock] Request failed, trying IPC fallback for: ${song.name} (id=${id})`)
-                        fallbackUrl = await windowApi.unblockSongUrl({
-                            id,
-                            name: song.name,
-                            artist: song.ar ? song.ar.map(a => a.name).join('/') : '',
-                            album: song.al ? song.al.name : '',
-                            duration: song.dt || 0,
-                        })
-                    }
-                } catch (e) {
-                    console.error('[unblock] IPC fallback error:', e)
-                }
-                if (fallbackUrl) {
-                    play(fallbackUrl, autoplay)
-                } else {
-                    skipUnplayable('当前歌曲无法播放')
-                }
-            })
-            loadLyric(id, cur)
-        } else {
-            skipUnplayable('当前歌曲无法播放')
-        }
-    }).catch(() => skipUnplayable('当前歌曲无法播放'))
+    // 不再用 check/music 决定分支（VIP 曲同样返回 success，导致拿不到完整 URL 时不会尝试解灰），统一以 URL 结果为准
+    getMusicUrl(id, quality.value).then(songInfo => {
+        playBySongInfo(songInfo, id, autoplay, unblockOn)
+    }).catch(async () => {
+        // 请求失败同样尝试 IPC 兜底
+        const fallbackUrl = unblockOn ? await tryUnblockFallback(id) : null
+        if (fallbackUrl) play(fallbackUrl, autoplay)
+        else skipUnplayable('当前歌曲无法播放')
+    })
+    loadLyric(id, cur)
 }
 
 export function startMusic() {
