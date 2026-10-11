@@ -74,6 +74,8 @@ const shortcutsList = ref(null)
 const selectedShortcut = ref(null)
 const newShortcut = ref([])
 const shortcutCharacter = ['=', '-', '~', '@', '#', '$', '[', ']', ';', "'", ',', '.', '/', '!'];
+// 功能区按键：Electron 加速键名与 KeyboardEvent.code 一致（PageUp/PageDown/Home/End/Insert/Delete）
+const shortcutFunctionKeys = ['PageUp', 'PageDown', 'Home', 'End', 'Insert', 'Delete'];
 const customFont = ref('')
 const updateProxy = ref('')
 const appVersion = ref('')
@@ -265,7 +267,13 @@ const deleteLocalFolder = (index) => {
 }
 
 const formatShortcutName = (name) => {
-    return name.replaceAll('+', ' + ').replace('Up', '↑').replace('Down', '↓').replace('Right', '→').replace('Left', '←').replace('Space', '空格').replace('Numpad', '').replace('num', '').replace('CommandOrControl', 'Ctrl').replace('Control', 'Ctrl');
+    // 按 + 分段映射，避免 replace('Up') 之类误伤 'PgUp' / 'PageUp' 等含关键字的键名
+    const partNames = {
+        Up: '↑', Down: '↓', Right: '→', Left: '←',
+        PageUp: 'PgUp', PageDown: 'PgDn', Space: '空格',
+        CommandOrControl: 'Ctrl', Control: 'Ctrl',
+    }
+    return name.split('+').map(part => partNames[part] ?? part.replace('Numpad', '').replace('num', '')).join(' + ')
 }
 const changeShortcut = (id, type) => {
     selectedShortcut.value = {
@@ -292,6 +300,8 @@ const updateShortcut = () => {
             shortcut.push(e.code);
         } else if (['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
             shortcut.push(e.code.replace('Arrow', ''));
+        } else if (shortcutFunctionKeys.includes(e.key)) {
+            shortcut.push(e.code);
         } else if (shortcutCharacter.includes(e.key)) {
             shortcut.push(e.key);
         }
@@ -316,9 +326,11 @@ const updateShortcut = () => {
 }
 const inputShortcut = (k) => {
     if (!selectedShortcut.value) return
+    // 录制期间阻止默认行为，避免 PageUp/PageDown、方向键滚动页面
+    k.preventDefault()
     if (newShortcut.value.find(nk => nk.keyCode === k.keyCode)) return;
     else newShortcut.value.push(k)
-    if ((k.keyCode >= 65 && k.keyCode <= 90) || (k.keyCode >= 48 && k.keyCode <= 57) || (k.keyCode >= 96 && k.keyCode <= 105) || (k.keyCode >= 112 && k.keyCode <= 123) || ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(k.key) || shortcutCharacter.includes(k.key)) {
+    if ((k.keyCode >= 65 && k.keyCode <= 90) || (k.keyCode >= 48 && k.keyCode <= 57) || (k.keyCode >= 96 && k.keyCode <= 105) || (k.keyCode >= 112 && k.keyCode <= 123) || ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(k.key) || shortcutFunctionKeys.includes(k.key) || shortcutCharacter.includes(k.key)) {
         if (selectedShortcut.value.type) shortcutsList.value.find(sc => (sc.id == selectedShortcut.value.id)).globalShortcut = updateShortcut()
         else shortcutsList.value.find(sc => (sc.id == selectedShortcut.value.id)).shortcut = updateShortcut()
         newShortcut.value = []
