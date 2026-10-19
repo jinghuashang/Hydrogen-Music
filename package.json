@@ -1,7 +1,7 @@
 {
   "name": "hydrogenmusic",
   "private": true,
-  "version": "0.2.2a",
+  "version": "0.2.2b",
   "main": "background.js",
   "author": "Kaidesuyo",
   "contributors": [
@@ -22,7 +22,7 @@
     "vercel-build": "npm run web:build"
   },
   "dependencies": {
-    "@neteasecloudmusicapienhanced/api": "^4.32.0",
+    "@neteasecloudmusicapienhanced/api": "^4.41.1",
     "@unblockneteasemusic/server": "^0.28.0",
     "@vue/devtools-api": "^8.1.5",
     "axios": "^1.2.0",
