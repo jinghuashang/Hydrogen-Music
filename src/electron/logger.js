@@ -40,18 +40,24 @@ function init() {
         writer.write('main:uncaught', `${origin} ${(error && (error.stack || error.message)) || String(error)}`)
     })
 
-    ipcMain.on('renderer-log', (_event, level, text) => {
-        const tag = `renderer:${typeof level === 'string' && level ? level : 'log'}`
-        writer.write(tag, typeof text === 'string' ? text : String(text ?? ''))
-    })
-    ipcMain.handle('get-log-dir', () => writer.ensureDir())
-
     writer.setEnabled(readEnabledFromStore())
     return writer
+}
+
+/** 在 IPC 统一来源校验包装之后调用（见 background.js），避免这两个通道绕过 sender 校验 */
+function bindIpc() {
+    ipcMain.on('renderer-log', (_event, level, text) => {
+        const lvl = typeof level === 'string' && /^[a-z]{1,16}$/i.test(level) ? level : 'log'
+        const tag = `renderer:${lvl}`
+        // 转义换行并限长，避免渲染层伪造日志条目/无限写盘
+        const safe = String(text ?? '').replace(/[\r\n]+/g, ' ⏎ ').slice(0, 8000)
+        writer.write(tag, safe)
+    })
+    ipcMain.handle('get-log-dir', () => writer.ensureDir())
 }
 
 function setEnabled(value) {
     if (writer) writer.setEnabled(value === true)
 }
 
-module.exports = { init, setEnabled }
+module.exports = { init, setEnabled, bindIpc }

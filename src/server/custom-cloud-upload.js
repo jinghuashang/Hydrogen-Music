@@ -1,5 +1,7 @@
 // 自定义云盘上传模块 — 修复 Token 分配与资源发布链路（支持大文件分片上传）
 const fs = require('fs')
+const os = require('os')
+const path = require('path')
 const crypto = require('crypto')
 const axios = require('axios')
 const createOption = require('@neteasecloudmusicapienhanced/api/util/option')
@@ -45,12 +47,37 @@ module.exports = async (query, request) => {
   const filename = sanitizeFilename(query.songFile.name)
   const bucket = 'jd-musicrep-privatecloud-audio-public'
 
+  // 调用方可通过 JSON body 伪造 songFile：仅接受位于系统临时目录内的路径，MD5 必须本地计算
+  const isSafeTempPath = (p) => {
+    try {
+      // realpath 解析符号链接/junction，避免借链接逃逸临时目录
+      const abs = fs.realpathSync.native(String(p))
+      const tmp = fs.realpathSync.native(os.tmpdir())
+      if (!abs.startsWith(tmp + path.sep)) return false
+      // 仅接受 express-fileupload 生成的临时文件命名，避免操纵共享 tmp 内的任意文件
+      return /^tmp[-.\w]+/i.test(path.basename(abs))
+    } catch {
+      return false
+    }
+  }
+  if (isTempFile(query.songFile) && !isSafeTempPath(query.songFile.tempFilePath)) {
+    return { status: 400, body: { msg: '非法的上传文件路径', code: 400 } }
+  }
+  delete query.songFile.md5
+
   const useTemp = isTempFile(query.songFile)
   const fileSize = await getFileSize(query.songFile)
   const fileMd5 = await getFileMd5(query.songFile)
 
   query.songFile.md5 = fileMd5
   query.songFile.size = fileSize
+
+  // 还原可能被 __proto__ 注入的原型，再剥离控制参数
+  if (Object.getPrototypeOf(query) !== Object.prototype) Object.setPrototypeOf(query, Object.prototype)
+  // 安全：domain/proxy/headers 只能由服务端控制，禁止来自调用方
+  delete query.domain
+  delete query.proxy
+  delete query.headers
 
   // 注入标准认证和设备信息
   let rawCookie = query.cookie || ''
@@ -147,8 +174,16 @@ module.exports = async (query, request) => {
         lbs = { upload: ['https://nosup-hz1.127.net'] }
       }
 
-      const uploadHost = lbs?.upload?.[0] || 'https://nosup-hz1.127.net'
-      const encodedKey = objectKey.replace(/\//g, '%2F')
+      const rawHost = lbs?.upload?.[0] || 'https://nosup-hz1.127.net'
+      let uploadHost = 'https://nosup-hz1.127.net'
+      try {
+        const u = new URL(String(rawHost))
+        // 仅允许网易云 NOS 域名；LBS 会返回 http:// 形式，协议统一升级为 https，不丢弃正确地域 host
+        if (/(^|\.)(127\.net|nos\.netease\.com)$/i.test(u.hostname)) {
+          uploadHost = `https://${u.host}`
+        }
+      } catch {}
+      const encodedKey = objectKey.split('/').map(encodeURIComponent).join('%2F')
 
       // 单次分片大小设为 32MB（避免超过 NOS 单请求体限制）
       const CHUNK_SIZE = 32 * 1024 * 1024

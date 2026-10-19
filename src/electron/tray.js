@@ -114,6 +114,8 @@ module.exports = function InitTray(win, app, iconPath) {
             win.show();
         });
         ipcMain.on('music-playmode-tray-change', (e, mode) => {
+            // 越界/非数字索引会抛 TypeError，直接忽略
+            if (!Number.isInteger(mode) || mode < 0 || mode > 3) return
             contextMenu.items[4].submenu.items[0].checked = false
             contextMenu.items[4].submenu.items[1].checked = false
             contextMenu.items[4].submenu.items[2].checked = false

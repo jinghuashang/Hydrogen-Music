@@ -372,6 +372,12 @@ const uploadNcblLog = async (ctx, body) => {
 
 // ==================== 主模块导出 ====================
 module.exports = async (query, request) => {
+  // 还原可能被 __proto__ 注入的原型，并剥离控制参数（proxy 可被用作任意代理/本地文件加载）
+  if (Object.getPrototypeOf(query) !== Object.prototype) Object.setPrototypeOf(query, Object.prototype)
+  delete query.domain
+  delete query.proxy
+  delete query.headers
+  delete query.eapiConfig
   const songId = Number(query.id)
   const sourceId = query.sourceid || 0
   const playedTime = Number(query.time) || 0

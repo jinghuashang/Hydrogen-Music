@@ -1,11 +1,16 @@
 const path = require('path')
 const { generateRandomChineseIP } = require('@neteasecloudmusicapienhanced/api/util/index')
-const { enableRandomCnIp, patchUpstreamRequest } = require('../../../src/server/apiRiskControl')
+const { enableRandomCnIp, patchUpstreamRequest, patchCookieToJson } = require('../../../src/server/apiRiskControl')
 
 // 风控包装必须在 require 上游 API 主入口之前完成（上游加载时会捕获 request 引用）
 patchUpstreamRequest({ generateIp: generateRandomChineseIP })
+// 修复上游 cookieToJson 丢弃含 '=' 的凭据（MUSIC_U 等）
+patchCookieToJson()
 
 const { serveNcmApi, getModulesDefinitions } = require('@neteasecloudmusicapienhanced/api')
+
+// UNM 统一使用最高码率；进程启动时设置一次，避免请求期改写环境变量造成并发污染
+process.env.SELECT_MAX_BR = 'true'
 
 let started = false
 
@@ -80,10 +85,11 @@ async function startNcm(port = 36530) {
   await serveNcmApi({
     checkVersion: true,
     port,
+    host: '127.0.0.1',
     moduleDefs: defaultModules,
   })
   started = true
-  console.log(`[NCM API] listening on ${port}`)
+  console.log(`[NCM API] listening on 127.0.0.1:${port}`)
 }
 
 module.exports = { startNcm }

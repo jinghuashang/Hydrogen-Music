@@ -25,6 +25,11 @@ function createStore(name) {
       data[key] = val
       fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8')
     },
+    delete(key) {
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'))
+      delete data[key]
+      fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8')
+    },
     has(key) {
       const data = JSON.parse(fs.readFileSync(file, 'utf8'))
       return Object.prototype.hasOwnProperty.call(data, key) && data[key] != null

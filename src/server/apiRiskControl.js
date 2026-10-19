@@ -113,4 +113,31 @@ function patchUpstreamRequest({ generateIp, logger } = {}) {
   }
 }
 
-module.exports = { FALLBACK_CN_IP, RANDOM_CN_IP_FLAG, enableRandomCnIp, createRiskControlledRequest, patchUpstreamRequest }
+/**
+ * 上游 cookieToJson 用 split('=') 且要求恰好两段，MUSIC_U 等带 base64 padding 的值会被整条丢弃。
+ * 改为按首个 '=' 分割。同样必须在 require 上游主入口之前调用。
+ */
+function patchCookieToJson({ logger } = {}) {
+  try {
+    const modulePath = require.resolve('@neteasecloudmusicapienhanced/api/util/index')
+    const util = require(modulePath)
+    if (util.__hmCookiePatched) return true
+    util.cookieToJson = (cookie) => {
+      const obj = {}
+      if (typeof cookie !== 'string' || !cookie) return obj
+      for (const part of cookie.split(';')) {
+        const i = part.indexOf('=')
+        if (i <= 0) continue
+        obj[part.slice(0, i).trim()] = part.slice(i + 1).trim()
+      }
+      return obj
+    }
+    util.__hmCookiePatched = true
+    return true
+  } catch (e) {
+    logger && logger.warn && logger.warn('[riskControl] cookieToJson 包装失败:', e.message)
+    return false
+  }
+}
+
+module.exports = { FALLBACK_CN_IP, RANDOM_CN_IP_FLAG, enableRandomCnIp, createRiskControlledRequest, patchUpstreamRequest, patchCookieToJson }

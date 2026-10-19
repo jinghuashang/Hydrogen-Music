@@ -8,6 +8,7 @@
   const isActive = ref(false)
 
   const isAutoDownloading = computed(() => otherStore.autoUpdateStatus === 'downloading')
+  const isReady = computed(() => otherStore.autoUpdateStatus === 'ready')
   const isInstalling = computed(() => otherStore.autoUpdateStatus === 'installing')
   const isFailed = computed(() => otherStore.autoUpdateStatus === 'failed')
   const autoProgress = computed(() => otherStore.autoUpdateProgress)
@@ -21,7 +22,12 @@
       .filter(line => !/full\s*changelog/i.test(line.trim()))
       .join('\n')
     // releaseBody 来自可能被镜像篡改的远端 JSON，渲染前必须消毒
-    return DOMPurify.sanitize(marked.parse(filtered), { USE_PROFILES: { html: true } })
+    return DOMPurify.sanitize(marked.parse(filtered), {
+      USE_PROFILES: { html: true },
+      // 禁止文档级样式/表单等主动内容，只保留展示型标签
+      FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'template', 'iframe', 'object', 'embed'],
+      FORBID_ATTR: ['style'],
+    })
   })
 
   onMounted(() => {
@@ -47,15 +53,50 @@
       otherStore.autoUpdateError = null
     }, 400)
   }
-  const toUpdate = () => {
-    if (otherStore.updateIsWindows && otherStore.updateDownloadUrl) {
+  const toUpdate = async () => {
+    // 已下载完成：用户确认后才启动安装程序
+    if (otherStore.autoUpdateStatus === 'ready') {
+      otherStore.autoUpdateStatus = 'installing'
+      try {
+        const r = await windowApi.installUpdate()
+        if (r !== 'started') {
+          otherStore.autoUpdateStatus = 'failed'
+          otherStore.autoUpdateError = '安装程序启动失败'
+        }
+      } catch (e) {
+        otherStore.autoUpdateStatus = 'failed'
+        otherStore.autoUpdateError = '安装程序启动失败'
+      }
+      return
+    }
+    if (otherStore.updateIsWindows) {
       otherStore.autoUpdateStatus = 'downloading'
       otherStore.autoUpdateProgress = 0
-      windowApi.autoDownloadUpdate(otherStore.updateDownloadUrl, otherStore.updateDigest || '')
+      try {
+        const r = await windowApi.startUpdateDownload()
+        if (r === 'ready') {
+          // 已下载完成（安装失败后重试）：直接回到可安装状态
+          otherStore.autoUpdateStatus = 'ready'
+        } else if (r !== 'started') {
+          otherStore.autoUpdateStatus = 'failed'
+          otherStore.autoUpdateError = r === 'not-ready' ? '请重新检查更新' : '下载启动失败'
+        }
+      } catch (e) {
+        otherStore.autoUpdateStatus = 'failed'
+        otherStore.autoUpdateError = '下载启动失败'
+      }
     } else {
       windowApi.toRegister("https://github.com/jinghuashang/Hydrogen-Music/releases")
       close()
     }
+  }
+  // 更新说明中的链接一律交给系统浏览器打开，避免特权窗口导航
+  const onReleaseClick = (e) => {
+    const a = e.target?.closest?.('a')
+    if (!a) return
+    e.preventDefault()
+    const href = a.getAttribute('href') || ''
+    if (/^https?:\/\//i.test(href)) windowApi.toRegister(href)
   }
 </script>
 
@@ -80,9 +121,9 @@
         </div>
         <div class="release-body">
           <div class="release-label">更新内容</div>
-          <div class="release-content" v-html="formattedReleaseBody"></div>
+          <div class="release-content" v-html="formattedReleaseBody" @click="onReleaseClick"></div>
         </div>
-        <div class="download-section" v-if="isAutoDownloading || isInstalling || isFailed">
+        <div class="download-section" v-if="isAutoDownloading || isReady || isInstalling || isFailed">
           <div class="progress-bar">
             <div class="progress-fill" :style="{width: autoProgress + '%'}"></div>
           </div>
@@ -90,10 +131,11 @@
             <span class="progress-text">下载中 {{ autoProgress }}%</span>
             <span class="progress-size" v-if="totalSize">{{ downloadedSize }} / {{ totalSize }}</span>
           </div>
-          <span class="progress-text" v-else-if="isInstalling">下载完成，正在启动安装程序...</span>
+          <span class="progress-text" v-else-if="isReady">下载完成，点击「安装」继续</span>
+          <span class="progress-text" v-else-if="isInstalling">正在启动安装程序...</span>
           <span class="progress-text error" v-else-if="isFailed">{{ otherStore.autoUpdateError || '更新失败' }}</span>
         </div>
-        <div class="download-section" v-else-if="otherStore.updateIsWindows && otherStore.updateDownloadUrl">
+        <div class="download-section" v-else-if="otherStore.updateIsWindows">
           <span class="progress-text">准备自动下载更新...</span>
         </div>
       </div>
@@ -102,7 +144,7 @@
           {{ isFailed ? '关闭' : '忽略' }}
         </div>
         <div class="btn btn-update" :class="{'btn-downloading': isAutoDownloading || isInstalling}" @click="!isAutoDownloading && !isInstalling && toUpdate()">
-          {{ isAutoDownloading ? '下载中...' : isInstalling ? '安装中...' : isFailed ? '重试' : '更新' }}
+          {{ isAutoDownloading ? '下载中...' : isInstalling ? '安装中...' : isReady ? '安装' : isFailed ? '重试' : '更新' }}
         </div>
       </div>
     </div>

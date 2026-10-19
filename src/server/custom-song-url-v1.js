@@ -11,14 +11,30 @@ try {
 
 // 验证 URL 是否为完整歌曲（非试听），通过 Content-Length 判断
 // 30秒试听 MP3 ≈ 480KB（128kbps），完整歌曲通常 > 1MB
-function verifyFullSong(url, minSize = 500 * 1024) {
+function isPrivateVerifyTarget(urlStr) {
+  try {
+    const h = new URL(urlStr).hostname.toLowerCase().replace(/^\[|\]$/g, '')
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return true
+    return /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.0\.0\.0)/.test(h)
+      || /^(::1?$|::$|fc|fd|fe80|::ffff:)/.test(h)
+  } catch {
+    return true
+  }
+}
+function verifyFullSong(url, minSize = 500 * 1024, redirects = 3) {
+  // 第三方音源返回的 URL 不得指向回环/内网
+  if (isPrivateVerifyTarget(url)) return Promise.resolve(false)
   return new Promise((resolve) => {
     try {
       const mod = url.startsWith('https') ? https : http
       const req = mod.get(url, { timeout: 5000 }, (res) => {
-        // 跟随重定向
+        // 跟随重定向（最多 3 次，且目标必须是 http/https）
         if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
-          verifyFullSong(res.headers.location, minSize).then(resolve)
+          if (redirects <= 0) { res.resume(); resolve(false); return }
+          let next
+          try { next = new URL(res.headers.location, url).toString() } catch { res.resume(); resolve(false); return }
+          if (!/^https?:\/\//i.test(next)) { res.resume(); resolve(false); return }
+          verifyFullSong(next, minSize, redirects - 1).then(resolve)
           return
         }
         const len = parseInt(res.headers['content-length'] || '0', 10)
@@ -39,6 +55,12 @@ const RISK_COOLDOWN_MS = 5 * 60 * 1000
 let riskUntil = 0
 
 module.exports = async (query, request) => {
+  // 上游 Object.assign 合并 body 时可经 __proto__ 注入继承属性，delete 对继承属性无效 —— 先还原原型
+  if (Object.getPrototypeOf(query) !== Object.prototype) Object.setPrototypeOf(query, Object.prototype)
+  // 安全：domain/proxy/headers 只能由服务端控制，禁止来自调用方（SSRF）
+  delete query.domain
+  delete query.proxy
+  delete query.headers
   const data = {
     ids: '[' + query.id + ']',
     level: query.level,
@@ -97,15 +119,8 @@ module.exports = async (query, request) => {
         const sources = ['bodian', 'kuwo', 'kugou', 'qq', 'migu', 'bilibili']
         console.log(`[unblock] API matching: ${query.unblock_name} (id=${query.id})`)
 
-        // SELECT_MAX_BR 让 UNM 用 Promise.allSettled 等所有源，选码率最高
-        const prevMaxBr = process.env.SELECT_MAX_BR
-        process.env.SELECT_MAX_BR = 'true'
-        let resp
-        try {
-          resp = await match(query.id, sources, songData)
-        } finally {
-          process.env.SELECT_MAX_BR = prevMaxBr
-        }
+        // SELECT_MAX_BR 在进程启动时统一设置（见入口），这里不再每请求改写环境变量
+        const resp = await match(query.id, sources, songData)
 
         if (resp && resp.url) {
           const isFull = await verifyFullSong(resp.url)
@@ -130,7 +145,10 @@ module.exports = async (query, request) => {
   if (!unblockUrl) {
     try {
       const { matchID } = require('@neteasecloudmusicapienhanced/unblockmusic-utils')
-      const result = await matchID(query.id, query.source)
+      // 白名单：source 会参与模块路径拼接，绝不能直接透传（否则可 require 任意 .js）
+      const ALLOWED_UNM_SOURCES = ['bodian', 'kuwo', 'kugou', 'qq', 'migu', 'bilibili']
+      const source = ALLOWED_UNM_SOURCES.includes(String(query.source)) ? query.source : undefined
+      const result = await matchID(query.id, source)
       if (result.data && result.data.url) {
         unblockUrl = result.data.url
         unblockSource = result.data.source

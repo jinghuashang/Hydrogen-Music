@@ -68,11 +68,12 @@ async function invoke(name, args = []) {
 }
 
 async function send(event, payload) {
-  await fetch(`${API}/send`, {
+  const res = await fetch(`${API}/send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ event, payload }),
   })
+  if (!res.ok) throw new Error(`send failed: ${res.status}`)
 }
 
 function promptPath(title) {
@@ -213,7 +214,8 @@ export function installWebWindowApi() {
     manualCheckUpdate() {
       return Promise.resolve({ hasUpdate: false, error: 'Web 端不支持自动更新' })
     },
-    autoDownloadUpdate() {},
+    startUpdateDownload() {},
+    installUpdate() {},
     onAutoUpdateStatus() {},
     downloadUpdate() {
       return Promise.resolve()

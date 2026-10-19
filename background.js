@@ -9,6 +9,7 @@ const InitTray = require('./src/electron/tray')
 const registerShortcuts = require('./src/electron/shortcuts')
 
 const { app, BrowserWindow, globalShortcut, shell, session } = require('electron')
+const fs = require('fs')
 const Winstate = require('electron-win-state').default
 const path = require('path')
 const Store = require('electron-store');
@@ -124,26 +125,21 @@ function httpsGetText(urlStr, maxRedirects = 5) {
     })
 }
 
-// 依次尝试镜像站 / 官方源 / 代理获取最新 release
+// 依次尝试官方源获取最新 release
+// 安全：安全元数据（下载地址/摘要）只信任 GitHub 官方 API，镜像仅用于加速资产下载
 async function fetchLatestRelease() {
     const apiUrl = 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
-    const settings = settingsStore.get('settings')
-    const proxy = settings?.other?.updateProxy || ''
-    const mirror = await getFastestMirror()
-
-    const candidates = []
-    if (mirror) candidates.push(mirror + apiUrl)
-    candidates.push(apiUrl)
-    if (proxy) candidates.push(proxy + apiUrl)
+    const candidates = [apiUrl]
 
     for (const url of candidates) {
         try {
             const { status, body } = await httpsGetText(url)
             if (status !== 200) continue
             const release = JSON.parse(body)
-            if (release && release.tag_name) return { release, mirror }
+            if (release && release.tag_name) return { release, mirror: null }
         } catch (_) {}
     }
+    console.warn('[update] 无法获取最新 release（api.github.com 不可达）')
     return null
 }
 
@@ -154,6 +150,31 @@ function pickExeAsset(release) {
 }
 
 let myWindow = null
+
+// 统一来源校验：所有 IPC（含 background/createWindow 中后注册的通道）只接受主窗口主框架的调用
+const { ipcMain: ipcGuard } = require('electron')
+const isTrustedIpc = (event) => {
+    try {
+        return !!myWindow
+            && event.sender === myWindow.webContents
+            && event.senderFrame === myWindow.webContents.mainFrame
+    } catch {
+        return false
+    }
+}
+if (!ipcGuard._hmGuarded) {
+    const originalHandle = ipcGuard.handle.bind(ipcGuard)
+    const originalOn = ipcGuard.on.bind(ipcGuard)
+    ipcGuard.handle = (channel, listener) => originalHandle(channel, (event, ...args) => {
+        if (!isTrustedIpc(event)) throw new Error('ipc: untrusted sender')
+        return listener(event, ...args)
+    })
+    ipcGuard.on = (channel, listener) => originalOn(channel, (event, ...args) => {
+        if (!isTrustedIpc(event)) return
+        listener(event, ...args)
+    })
+    ipcGuard._hmGuarded = true
+}
 //electron单例
 const gotTheLock = app.requestSingleInstanceLock()
 
@@ -170,9 +191,20 @@ app.on('second-instance', (event, commandLine, workingDirectory) => {
 
 app.whenReady().then(() => {
     // 自动授权媒体设备权限（麦克风/摄像头/屏幕共享）
-    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+        // 仅主窗口主框架且仅本应用页面可申请媒体权限
         const allowed = ['media', 'display-capture', 'mediaKeySystem']
-        callback(allowed.includes(permission))
+        const requestingUrl = String(details?.requestingUrl || webContents.getURL() || '')
+        const isMainWindow = !!myWindow && webContents === myWindow.webContents
+        const isAppOrigin =
+            requestingUrl.startsWith('file://') ||
+            requestingUrl.startsWith('http://localhost:5173/') ||
+            requestingUrl.startsWith('http://127.0.0.1:5173/')
+        callback(isMainWindow && allowed.includes(permission) && isAppOrigin && details?.isMainFrame !== false)
+    })
+    session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+        // 同步权限检查默认拒绝，仅放行主窗口的媒体类权限
+        return !!myWindow && webContents === myWindow.webContents && ['media', 'mediaKeySystem'].includes(permission)
     })
     createWindow()
     app.on('activate', () => {
@@ -210,10 +242,30 @@ const createWindow = () => {
         webPreferences: {
             //预加载脚本
             preload: path.resolve(__dirname, './src/electron/preload.js'),
-            webSecurity: false,
+            webSecurity: true,
         }
     })
     myWindow = win
+    // 导航与弹窗守卫：外部页面不得进入特权窗口（preload 桥会随导航注入）
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    const navigateGuard = (event, target) => {
+        const current = win.webContents.getURL()
+        let ok = false
+        try {
+            const a = new URL(target)
+            const b = new URL(current)
+            ok = a.origin === b.origin && a.protocol === b.protocol && (a.protocol !== 'file:' || a.pathname === b.pathname)
+        } catch {
+            ok = false
+        }
+        if (!ok) {
+            event.preventDefault()
+            if (/^https?:/i.test(target)) shell.openExternal(target)
+        }
+    }
+    win.webContents.on('will-navigate', navigateGuard)
+    win.webContents.on('will-redirect', navigateGuard)
+    win.webContents.on('will-frame-navigate', navigateGuard)
     win.once('ready-to-show', () => {
         win.show()
         if(process.resourcesPath.indexOf('\\node_modules\\') == -1) {
@@ -237,8 +289,35 @@ const createWindow = () => {
     })
     // 手动检测更新
     const { ipcMain } = require('electron')
-    ipcMain.handle('auto-download-update', async (e, url, digest) => {
-        autoDownloadAndInstall(win, url, digest)
+    ipcMain.handle('start-update-download', async () => startUpdateDownload(win))
+    ipcMain.handle('install-update', async () => {
+        if (!pendingUpdate || !pendingUpdate.savePath) return 'not-ready'
+        // 安装前重新校验磁盘文件，避免下载完成到点击安装之间被替换（TOCTOU）
+        try {
+            const crypto = require('crypto')
+            const hash = crypto.createHash('sha256')
+            await new Promise((resolve, reject) => {
+                fs.createReadStream(pendingUpdate.savePath)
+                    .on('data', (chunk) => hash.update(chunk))
+                    .on('error', reject)
+                    .on('end', resolve)
+            })
+            const expect = String(pendingUpdate.digest || '').replace(/^sha256:/, '')
+            if (!expect || hash.digest('hex') !== expect) {
+                try { fs.unlinkSync(pendingUpdate.savePath) } catch (e) {}
+                pendingUpdate = null
+                return 'failed'
+            }
+        } catch {
+            return 'failed'
+        }
+        const { shell } = require('electron')
+        const err = await shell.openPath(pendingUpdate.savePath)
+        if (err) {
+            // 保留 savePath 以便重试时直接重新校验+安装（start-update-download 会返回 ready）
+            return 'failed'
+        }
+        setTimeout(() => { app.exit(0) }, 800)
         return 'started'
     })
     ipcMain.on('cancel-auto-download-update', () => {
@@ -251,26 +330,30 @@ const createWindow = () => {
             return { hasUpdate: false, error: '网络连接失败，请手动查看更新' }
         }
         try {
-            const { release, mirror } = fetched
-            const settings = settingsStore.get('settings')
-            const proxy = settings?.other?.updateProxy || ''
+            const { release } = fetched
             const latestVersion = release.tag_name.replace(/^v/, '')
             if (!isNewerVersion(latestVersion, currentVersion)) {
+                console.log(`[update] manual check: current=${currentVersion} latest=${latestVersion} -> no update`)
                 return { hasUpdate: false }
             }
+            console.log(`[update] manual check: current=${currentVersion} latest=${latestVersion} -> update available`)
             const exeAsset = pickExeAsset(release)
-            let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
-            // 使用镜像站加速下载链接
-            if (downloadUrl && mirror) {
-                downloadUrl = mirror + downloadUrl
-            } else if (downloadUrl && proxy) {
-                downloadUrl = proxy + downloadUrl
+            if (!exeAsset) return { hasUpdate: false, error: '未找到安装包' }
+            if (!exeAsset.digest || !String(exeAsset.digest).startsWith('sha256:')) {
+                console.warn('[update] 官方资产缺少 sha256 摘要，拒绝自动更新')
+                return { hasUpdate: false, error: '更新包缺少校验摘要' }
+            }
+            // 主进程持有下载地址与摘要；渲染层只能触发下载/安装，不能指定 URL
+            pendingUpdate = {
+                version: latestVersion,
+                remoteUrl: exeAsset.browser_download_url,
+                digest: exeAsset.digest,
+                savePath: null,
             }
             return {
                 hasUpdate: true,
                 version: latestVersion,
-                downloadUrl,
-                digest: exeAsset?.digest || '',
+                digest: exeAsset.digest,
                 isWindows: process.platform === 'win32',
                 releaseBody: release.body || ''
             }
@@ -302,6 +385,7 @@ const createWindow = () => {
     })
     //ipcMain初始化
     IpcMainEvent(win, app)
+    logger.bindIpc()
     MusicDownload(win)
     LocalFiles(win, app)
     InitTray(win, app, path.resolve(__dirname, './src/assets/icon/icon.ico'))
@@ -322,31 +406,73 @@ async function checkForGithubUpdate(win) {
     const fetched = await fetchLatestRelease()
     if (!fetched) return
     try {
-        const { release, mirror } = fetched
-        const proxy = settings?.other?.updateProxy || ''
+        const { release } = fetched
         const latestVersion = release.tag_name.replace(/^v/, '')
-        if (!isNewerVersion(latestVersion, currentVersion)) return
+        if (!isNewerVersion(latestVersion, currentVersion)) {
+            console.log(`[update] auto check: current=${currentVersion} latest=${latestVersion} -> no update`)
+            return
+        }
+        console.log(`[update] auto check: current=${currentVersion} latest=${latestVersion} -> update available`)
 
         const exeAsset = pickExeAsset(release)
-        let downloadUrl = exeAsset ? exeAsset.browser_download_url : null
-        // 使用镜像站加速下载链接
-        if (downloadUrl && mirror) {
-            downloadUrl = mirror + downloadUrl
-        } else if (downloadUrl && proxy) {
-            downloadUrl = proxy + downloadUrl
+        if (!exeAsset) return
+        if (!exeAsset.digest || !String(exeAsset.digest).startsWith('sha256:')) {
+            console.warn('[update] 官方资产缺少 sha256 摘要，跳过自动更新')
+            return
+        }
+        pendingUpdate = {
+            version: latestVersion,
+            remoteUrl: exeAsset.browser_download_url,
+            digest: exeAsset.digest,
+            savePath: null,
         }
         win.webContents.send('check-update', {
             version: latestVersion,
-            downloadUrl,
-            digest: exeAsset?.digest || '',
+            digest: exeAsset.digest,
             isWindows: process.platform === 'win32',
             releaseBody: release.body || ''
         })
+        // 下载由主进程发起（渲染层不接触 URL/摘要）
+        if (process.platform === 'win32') startUpdateDownload(win)
     } catch (e) {}
 }
 
-// 自动下载更新并安装（带重定向上限与 SHA-256 校验，校验通过才启动安装包；支持中途取消）
+// 自动下载更新（带重定向上限与 SHA-256 校验）；下载完成后由用户确认安装
 let autoUpdateCancelFn = null
+let pendingUpdate = null
+let downloadInFlight = false
+
+async function startUpdateDownload(win) {
+    if (!pendingUpdate) return 'not-ready'
+    if (pendingUpdate.savePath) return 'ready'
+    if (downloadInFlight) return 'started'
+    downloadInFlight = true
+    // 先注册取消钩子，避免镜像探测期间无法取消
+    let cancelled = false
+    autoUpdateCancelFn = () => { cancelled = true }
+    try {
+        // 镜像仅用于加速资产下载；摘要来自官方 API，内容被篡改会在校验时失败
+        const mirror = await getFastestMirror()
+        let url = pendingUpdate.remoteUrl
+        if (mirror) {
+            let ok = false
+            try {
+                const u = new URL(String(mirror))
+                ok = u.protocol === 'https:'
+            } catch {}
+            if (ok) url = String(mirror).replace(/\/?$/, '/') + pendingUpdate.remoteUrl
+        }
+        autoUpdateCancelFn = null
+        if (cancelled) { downloadInFlight = false; return 'cancelled' }
+        autoDownloadAndInstall(win, url, pendingUpdate.digest)
+        return 'started'
+    } catch (e) {
+        autoUpdateCancelFn = null
+        downloadInFlight = false
+        win.webContents.send('auto-update-status', { status: 'failed', error: '下载启动失败' })
+        return 'failed'
+    }
+}
 function autoDownloadAndInstall(win, url, expectedDigest = '') {
     const https = require('https')
     const fs = require('fs')
@@ -368,6 +494,7 @@ function autoDownloadAndInstall(win, url, expectedDigest = '') {
     const fail = (error) => {
         if (cancelled) return
         autoUpdateCancelFn = null
+        downloadInFlight = false
         win.setProgressBar(-1)
         win.webContents.send('auto-update-status', { status: 'failed', error })
     }
@@ -377,6 +504,7 @@ function autoDownloadAndInstall(win, url, expectedDigest = '') {
     autoUpdateCancelFn = () => {
         cancelled = true
         autoUpdateCancelFn = null
+        downloadInFlight = false
         try { if (currentReq) currentReq.destroy(new Error('cancelled')) } catch (e) {}
         try { fs.unlinkSync(savePath) } catch (e) {}
         win.setProgressBar(-1)
@@ -391,6 +519,11 @@ function autoDownloadAndInstall(win, url, expectedDigest = '') {
         const req = https.get(target, (res) => {
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                 res.resume()
+                // 仅跟随 https 重定向，避免 http 目标让 https.get 同步抛错
+                if (!/^https:\/\//i.test(String(res.headers.location))) {
+                    fail('下载重定向协议不受支持')
+                    return
+                }
                 download(res.headers.location, redirects - 1)
                 return
             }
@@ -399,9 +532,20 @@ function autoDownloadAndInstall(win, url, expectedDigest = '') {
                 return
             }
             const total = parseInt(res.headers['content-length'], 10) || 0
+            // 更新包大小上限，避免被超大盘/无限流写满磁盘
+            const MAX_UPDATE_BYTES = 400 * 1024 * 1024
+            if (total > MAX_UPDATE_BYTES) {
+                res.resume()
+                fail('安装包超出大小限制')
+                return
+            }
             let downloaded = 0
             const hash = crypto.createHash('sha256')
             const file = fs.createWriteStream(savePath)
+            file.on('error', (err) => {
+                try { fs.unlinkSync(savePath) } catch (e) {}
+                fail('写入文件失败')
+            })
             res.on('data', (chunk) => {
                 downloaded += chunk.length
                 hash.update(chunk)
@@ -437,10 +581,10 @@ function autoDownloadAndInstall(win, url, expectedDigest = '') {
                             return
                         }
                     }
-                    win.webContents.send('auto-update-status', { status: 'installing' })
-                    const { shell } = require('electron')
-                    shell.openPath(savePath)
-                    setTimeout(() => { app.exit(0) }, 500)
+                    // 校验通过后仅标记就绪，安装需用户显式确认（install-update）
+                    downloadInFlight = false
+                    pendingUpdate = { ...(pendingUpdate || {}), savePath }
+                    win.webContents.send('auto-update-status', { status: 'ready', version: pendingUpdate.version || '' })
                 })
             })
         })
@@ -452,21 +596,27 @@ function autoDownloadAndInstall(win, url, expectedDigest = '') {
 }
 
 function isNewerVersion(latest, current) {
+    // 本项目版本约定：主线 0.2.2 → 小版本 0.2.2a → 0.2.2b …（字母后缀是增量修复，比无后缀新）
+    // 同时兼容 0.2.2-b / 0.2.2-beta 这类连字符写法
     function parsePart(s) {
-        const m = String(s).match(/^(\d+)(.*)$/)
-        return m ? [parseInt(m[1], 10), m[2] || ''] : [0, '']
+        // 兼容 0.2.2b（字母增量）与 0.2.2-b / 0.2.2-beta（连字符预发布）
+        const m = String(s).match(/^(\d+)([-._]?)(.*)$/)
+        if (!m) return [0, '', '']
+        return [parseInt(m[1], 10), m[3] || '', m[2] || '']
     }
     const l = latest.split('.').map(parsePart)
     const c = current.split('.').map(parsePart)
     for (let i = 0; i < Math.max(l.length, c.length); i++) {
-        const [aNum, aSuffix] = l[i] || [0, '']
-        const [bNum, bSuffix] = c[i] || [0, '']
+        const [aNum, aSuffix, aSep] = l[i] || [0, '', '']
+        const [bNum, bSuffix, bSep] = c[i] || [0, '', '']
         if (aNum !== bNum) return aNum > bNum
+        // 连字符后缀 = 预发布，低于同号正式版；字母后缀 = 增量，高于无后缀
+        const aPre = aSep === '-'
+        const bPre = bSep === '-'
+        if (aPre !== bPre) return bPre
         if ((aSuffix || '') !== (bSuffix || '')) {
-            // 正式版优先于预发布后缀：1.2.0 > 1.2.0-beta，而不是字典序误判
-            if (!aSuffix) return true
-            if (!bSuffix) return false
-            return aSuffix > bSuffix
+            // 字典序即符合约定：'' < 'a' < 'b' < …（0.2.2b > 0.2.2、0.2.2c > 0.2.2b）
+            return (aSuffix || '') > (bSuffix || '')
         }
     }
     return false

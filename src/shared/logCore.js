@@ -20,10 +20,16 @@ function pad(value, width = 2) {
 const SENSITIVE_RULES = [
   // 查询串 / cookie 串中的 cookie 参数（值可能含 =，截到分隔符为止）
   [/([?&;\s]cookie=)[^&\s"']+/gi, '$1***'],
-  // 网易云常用凭据 cookie
-  [/\b(MUSIC_U|MUSIC_A|__csrf|__remember_me)=[^;&\s"']+/gi, '$1=***'],
-  // 账号与令牌类查询参数
-  [/([?&;\s](?:password|phone|email|captcha|token|access_token|refresh_token)=)[^&\s"']+/gi, '$1***'],
+  // 网易云常用凭据 cookie（严格大写，避免误伤 musicName 等普通字段；含 _ntes_* 变体）
+  [/\b((?:MUSIC_|__csrf|__remember_me|_?ntes)[A-Za-z0-9_]*)=[^;&\s"']+/g, '$1=***'],
+  // 其它常见会话 cookie
+  [/\b(JSESSIONID-WYYY|NMTID|x-access-token|SESSDATA|bili_jct|DedeUserID)=[^;&\s"']+/g, '$1=***'],
+  // JSON / 结构化形式："password": "value"（含 cookie 字段与常见会话名）
+  [/("(?:password|md5_password|token|access_token|refresh_token|phone|email|cookie|Cookie|SESSDATA|MUSIC_U|NMTID|JSESSIONID-WYYY|_ntes_nnid|_ntes_nuid)":\s*")[^"]*"/g, '$1***"'],
+  // 账号与令牌类查询参数（含 md5_password 等等价凭据）
+  [/([?&;\s](?:md5_password|password|phone|email|captcha|token|access_token|refresh_token)=)[^&\s"']+/gi, '$1***'],
+  // 键名包含敏感词的形式：&md5_password= / ?_password= / &userToken= 等
+  [/([?&;][A-Za-z0-9_]*(?:password|passwd|token|phone|email|csrf)[A-Za-z0-9_]*=)[^&\s"']+/gi, '$1***'],
   // 请求头形式：Cookie / Authorization / Set-Cookie
   [/(\b(?:cookie|authorization|set-cookie)\s*:\s*)[^\r\n]+/gi, '$1***'],
 ]

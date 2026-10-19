@@ -6,10 +6,23 @@ const { File, Picture, PictureType, ByteVector } = require('node-taglib-sharp')
 
 function fetchBuffer(url) {
   return new Promise((resolve, reject) => {
+    if (isPrivateTarget(url)) return reject(new Error('url not allowed'))
     axios.get(url, { responseType: 'arraybuffer' })
       .then(res => resolve(Buffer.from(res.data)))
       .catch(reject)
   })
+}
+
+/** 拒绝回环/内网目标，避免下载器被用作 SSRF */
+function isPrivateTarget(urlStr) {
+  try {
+    const h = new URL(String(urlStr)).hostname.toLowerCase()
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return true
+    return /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.0\.0\.0)/.test(h)
+      || /^\[(::1|::ffff:)/.test(h)
+  } catch {
+    return true
+  }
 }
 
 function fetchLyric(songId) {
@@ -111,8 +124,25 @@ function createDownloadManager({ settingsStore, broadcast }) {
       broadcast('download-next', null)
       return
     }
-    const fileName = args.name.replaceAll('/', ' - ').replaceAll('\\', ' - ')
-    const dest = path.join(folder, `${fileName}.${args.type}`)
+    const fileName = path.basename(String(args.name || 'unknown').replace(/[\\/:*?"<>|]/g, ' - ')).trim() || 'unknown'
+    const type = String(args.type || '').toLowerCase().replace(/^\./, '')
+    // 类型白名单 + 目录收敛，防止 ../ 穿越写入任意文件
+    if (!/^(mp3|flac|m4a|aac|wav|ogg|opus|ape)$/.test(type)) {
+      console.error('[download] 非法文件类型:', args.type)
+      broadcast('download-next', null)
+      return
+    }
+    const dest = path.join(folder, `${fileName}.${type}`)
+    if (path.dirname(path.resolve(dest)) !== folder) {
+      console.error('[download] 非法目标路径:', dest)
+      broadcast('download-next', null)
+      return
+    }
+    if (!/^https?:\/\//i.test(String(args.url || '')) || isPrivateTarget(args.url)) {
+      console.error('[download] 非法下载地址')
+      broadcast('download-next', null)
+      return
+    }
     abortController = new AbortController()
     try {
       const res = await axios({

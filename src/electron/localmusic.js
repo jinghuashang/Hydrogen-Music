@@ -29,11 +29,16 @@ module.exports = function LocalFiles(win, app) {
                 let url = await settingsStore.get('settings')
                 baseUrl = url.local.localFolder
             }
+            baseUrl = (baseUrl || []).filter(Boolean)
             let count = 0
             for (let i = 0; i < baseUrl.length; i++) {
-                dirTree.push(await getDirTree(baseUrl[i], 'dir'))
-                metadata.push(await getDirTree(baseUrl[i], 'data', win))
-                count += metadata[i].count
+                try {
+                    dirTree.push(await getDirTree(baseUrl[i], 'dir'))
+                    metadata.push(await getDirTree(baseUrl[i], 'data', win))
+                    count += (metadata[i] && metadata[i].count) || 0
+                } catch (err) {
+                    console.warn('[local-scan]', baseUrl[i], err.message)
+                }
             }
             sendLocalFiles(dirTree, metadata, type, count)
             count = null
@@ -60,7 +65,10 @@ module.exports = function LocalFiles(win, app) {
         }
     }
     ipcMain.on('scan-local-music', (e, params) => {
-        readLocalFiles(params.type, params.refresh)
+        // 目录被删除/断开或文件损坏时不能让未捕获拒绝终止主进程
+        readLocalFiles(params.type, params.refresh).catch((err) => {
+            console.warn('[local-scan]', err && err.message)
+        })
     })
     ipcMain.on('clear-local-music-data', (e, type) => {
         if(type == 'downloaded') {

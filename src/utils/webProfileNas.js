@@ -42,16 +42,18 @@ function extractSessdataFromCookieHeader(header) {
 /** 写入扫码登录得到的完整 Cookie 串（含 bili_jct、DedeUserID 等），并同步 Sessdata 供旧逻辑使用 */
 export function persistFullBiliSessionCookieHeader(cookieHeader) {
   if (typeof localStorage === 'undefined') return
-  const raw = (cookieHeader || '').trim()
+  const raw = String(cookieHeader || '').trim()
   if (!raw) {
     localStorage.removeItem('Sessdata')
     localStorage.removeItem(BILI_FULL_COOKIE_STORAGE_KEY)
     return
   }
+  // 拒绝换行/NUL（header 注入）；分号是 cookie 分隔符，属合法
+  if (/[\r\n\0]/.test(raw)) return
   const normalized = raw.endsWith(';') ? raw : `${raw};`
   localStorage.setItem(BILI_FULL_COOKIE_STORAGE_KEY, normalized)
   const sd = extractSessdataFromCookieHeader(normalized)
-  if (sd) localStorage.setItem('Sessdata', sd)
+  if (sd && !/[;\r\n\0]/.test(sd)) localStorage.setItem('Sessdata', sd)
 }
 
 export function clearBiliStoredSession() {
@@ -109,6 +111,11 @@ export function applyBiliFromNas(bili) {
   }
   if (bili.sessdata != null && bili.sessdata !== '') {
     const s = String(bili.sessdata)
+    // 拒绝属性/换行注入，避免写入被污染的 cookie
+    if (/[;\r\n]/.test(s)) {
+      clearBiliStoredSession()
+      return
+    }
     localStorage.setItem('Sessdata', s)
     localStorage.setItem(BILI_FULL_COOKIE_STORAGE_KEY, `SESSDATA=${s};`)
     return
@@ -119,10 +126,14 @@ export function applyBiliFromNas(bili) {
 export function applyNeteaseCookiesFromNas(map) {
   if (!map || typeof map !== 'object') return
   for (const [key, val] of Object.entries(map)) {
+    // 仅允许网易云相关 cookie 键，拒绝任意键与 CRLF 注入
+    if (!/^(MUSIC_|__csrf|ntes_)/i.test(key)) continue
     if (val == null || val === '') continue
-    localStorage.setItem(`cookie:${key}`, String(val))
+    const v = String(val)
+    if (/[;\r\n]/.test(key) || /[;\r\n]/.test(v)) continue
+    localStorage.setItem(`cookie:${key}`, v)
     try {
-      document.cookie = `${key}=${String(val)}; path=/`
+      document.cookie = `${key}=${v}; path=/`
     } catch (_) {}
   }
 }

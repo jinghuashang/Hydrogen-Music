@@ -1,9 +1,11 @@
 const path = require('path')
 const { generateRandomChineseIP } = require('@neteasecloudmusicapienhanced/api/util/index')
-const { enableRandomCnIp, patchUpstreamRequest } = require('../server/apiRiskControl')
+const { enableRandomCnIp, patchUpstreamRequest, patchCookieToJson } = require('../server/apiRiskControl')
 
 // 风控包装必须在 require 上游 API 主入口之前完成（上游加载时会捕获 request 引用）
 patchUpstreamRequest({ generateIp: generateRandomChineseIP })
+// 修复上游 cookieToJson 丢弃含 '=' 的凭据（MUSIC_U 等）
+patchCookieToJson()
 
 const { serveNcmApi, getModulesDefinitions } = require('@neteasecloudmusicapienhanced/api')
 
@@ -88,6 +90,7 @@ module.exports = async function startNeteaseMusicApi() {
   await serveNcmApi({
     checkVersion: true,
     port: 36530,
+    host: '127.0.0.1',
     moduleDefs: defaultModules,
   })
 }

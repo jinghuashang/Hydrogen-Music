@@ -1,7 +1,16 @@
-const { Menu, globalShortcut } = require('electron')
+const { app, Menu, globalShortcut } = require('electron')
 const Store = require('electron-store');
 
 module.exports = async function registerShortcuts(win) {
+    try {
+        await registerShortcutsInner(win)
+    } catch (e) {
+        // 畸形设置不应产生未捕获拒绝
+        console.error('[shortcuts] 注册失败:', e && e.message)
+    }
+}
+
+async function registerShortcutsInner(win) {
     const settingsStore = new Store({name: 'settings'});
     const shortcuts =  await settingsStore.get('settings.shortcuts');
     if(!shortcuts) return
@@ -82,9 +91,13 @@ module.exports = async function registerShortcuts(win) {
                 { role: 'close' },
                 { role: 'minimize' },
                 { role: 'zoom' },
-                { role: 'reload' },
-                { role: 'forcereload' },
-                { role: 'toggledevtools' },
+                ...(app.isPackaged
+                    ? []
+                    : [
+                        { role: 'reload' },
+                        { role: 'forcereload' },
+                        { role: 'toggledevtools' },
+                    ]),
                 { type: 'separator' },
                 { role: 'togglefullscreen' },
             ]
@@ -93,10 +106,13 @@ module.exports = async function registerShortcuts(win) {
         
     Menu.setApplicationMenu(Menu.buildFromTemplate(menu))
     
-    globalShortcut.register('CommandOrControl+Shift+F12', () => {
-        // 获取当前窗口并打开控制台
-        win.webContents.openDevTools({mode: 'detach'});
-    });
+    // 仅开发环境开放 DevTools 快捷键，打包版本不暴露控制台
+    if (!app.isPackaged) {
+        globalShortcut.register('CommandOrControl+Shift+F12', () => {
+            // 获取当前窗口并打开控制台
+            win.webContents.openDevTools({mode: 'detach'});
+        });
+    }
     
     if(!settingsStore.get('settings.other.globalShortcuts')) return
     globalShortcut.register(shortcuts.find(shortcut => shortcut.id == 'play').globalShortcut, () => {

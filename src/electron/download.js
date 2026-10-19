@@ -117,9 +117,21 @@ module.exports = MusicDownload = (win) => {
         options: { cover: false, info: false, lyric: false },
     };
     ipcMain.on("download", async (event, args) => {
-        downloadObj.fileName = args.name.replaceAll("/", " - ").replaceAll("\\", " - ");
+        // 类型白名单 + URL 协议校验，防止 ../ 穿越写入任意文件
+        const safeType = String(args?.type || '').toLowerCase().replace(/^\./, "");
+        if (!/^(mp3|flac|m4a|aac|wav|ogg|opus|ape)$/.test(safeType)) {
+            console.warn("[download] 非法文件类型:", args?.type);
+            win.webContents.send("download-next");
+            return;
+        }
+        if (!/^https?:\/\//i.test(String(args?.url || ""))) {
+            console.warn("[download] 非法下载地址");
+            win.webContents.send("download-next");
+            return;
+        }
+        downloadObj.fileName = path.basename(String(args.name || "unknown").replace(/[\\/:*?"<>|]/g, " - ")).trim() || "unknown";
         downloadObj.downloadUrl = args.url;
-        downloadObj.type = args.type;
+        downloadObj.type = safeType;
         downloadObj.meta = args.meta || null;
         downloadObj.options = args.options || { cover: false, info: false, lyric: false };
         const savePath = await settingsStore.get("settings");

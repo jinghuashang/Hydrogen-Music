@@ -7,6 +7,7 @@ const { createStore } = require('./store')
 const { defaultSettings } = require('./defaults')
 const { createDownloadManager } = require('./download-manager')
 const { createLocalScan } = require('./local-scan')
+const { stripControlParams } = require('./security')
 const logger = require('./logger')
 
 const pkg = require('../../../package.json')
@@ -26,12 +27,47 @@ function isAllowedBilibiliMediaUrl(urlStr) {
   }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return false
   const h = u.hostname.toLowerCase()
+  // 严格后缀 + 点边界匹配（旧实现的 includes('akamaized.net') 可被 akamaized.net.evil.com 绕过）
+  // 不包含 *.bilibili.com：该域承载 HTML 页面，代理回源会造成网关同源内容风险
   return (
+    h === 'bilivideo.com' ||
     h.endsWith('.bilivideo.com') ||
-    h.endsWith('.bilibili.com') ||
+    h === 'hdslb.com' ||
     h.endsWith('.hdslb.com') ||
-    h.includes('akamaized.net')
+    h === 'akamaized.net' ||
+    h.endsWith('.akamaized.net')
   )
+}
+
+/** B 站 API 主机白名单（biliFetch 用） */
+function isAllowedBiliApiUrl(urlStr) {
+  try {
+    const u = new URL(urlStr)
+    if (u.protocol !== 'https:') return false
+    const h = u.hostname.toLowerCase()
+    return ['api.bilibili.com', 'passport.bilibili.com', 'api.live.bilibili.com'].includes(h)
+  } catch {
+    return false
+  }
+}
+
+/** 去掉调用方可滥用的传输层选项（socketPath/proxy/agent/auth/重定向） */
+function safeAxiosOption(option, maxRedirects = 0) {
+  const o = option && typeof option === 'object' ? { ...option } : {}
+  for (const k of ['socketPath', 'proxy', 'agent', 'httpAgent', 'httpsAgent', 'auth', 'beforeRedirect', 'transport', 'data']) {
+    delete o[k]
+  }
+  o.maxRedirects = maxRedirects
+  if (maxRedirects > 0) {
+    // 逐跳复检，防止借跳转绕过 B 站主机白名单
+    o.beforeRedirect = (opts) => {
+      const next = `${opts.protocol || 'https:'}//${opts.hostname || opts.host}${opts.path || ''}`
+      if (!isAllowedBiliApiUrl(next) && !isAllowedBilibiliMediaUrl(next)) {
+        throw new Error('redirect not allowed')
+      }
+    }
+  }
+  return o
 }
 
 const BILI_UA =
@@ -86,6 +122,35 @@ function createHandlers({ broadcast }) {
   const biliCookies = {}
   let biliVideoCancel = null
 
+  /** 本地音乐相关根目录（歌词/图片读取必须落在此范围内） */
+  function musicRoots() {
+    const s = settingsStore.get('settings') || {}
+    const roots = []
+    if (s.local?.downloadFolder) roots.push(s.local.downloadFolder)
+    if (Array.isArray(s.local?.localFolder)) roots.push(...s.local.localFolder)
+    if (s.local?.videoFolder) roots.push(s.local.videoFolder)
+    return roots.map((r) => path.resolve(String(r).trim())).filter(Boolean)
+  }
+
+  function isInsideMusicRoots(target) {
+    let abs
+    try {
+      // realpath 解析符号链接，避免库内链接指向根目录之外
+      abs = fs.realpathSync.native(path.resolve(String(target || '')))
+    } catch {
+      return false
+    }
+    // 单个根目录不存在只跳过该根，不能拖垮其它合法根
+    return musicRoots().some((r) => {
+      try {
+        const real = fs.realpathSync.native(r)
+        return abs.startsWith(real + path.sep)
+      } catch {
+        return false
+      }
+    })
+  }
+
   async function searchMusicVideo(id) {
     if (!musicVideoStore.has('musicVideo')) return false
     const result = musicVideoStore.get('musicVideo')
@@ -117,6 +182,7 @@ function createHandlers({ broadcast }) {
   }
 
   async function probeBiliStreamAlive(urlStr, mergedCookie) {
+    if (!isAllowedBilibiliMediaUrl(urlStr)) return false
     const headers = {
       Referer: 'https://www.bilibili.com/',
       'User-Agent': BILI_UA,
@@ -126,10 +192,10 @@ function createHandlers({ broadcast }) {
       const head = await axios({
         method: 'HEAD',
         url: urlStr,
+        maxRedirects: 0,
         headers,
         timeout: 12000,
         validateStatus: () => true,
-        maxRedirects: 5,
       })
       if (head.status === 200 || head.status === 206) return true
       if (head.status === 405) {
@@ -230,6 +296,8 @@ function createHandlers({ broadcast }) {
       }
     },
     'get-image-base64': async (_e, filePath) => {
+      // 仅允许读取本地音乐库目录内的文件
+      if (!isInsideMusicRoots(filePath)) return null
       // music-metadata 8+ 为 ESM-only，CJS 侧需动态导入
       const { parseFile } = await import('music-metadata')
       const data = await parseFile(filePath)
@@ -251,11 +319,30 @@ function createHandlers({ broadcast }) {
       return lastPlaylist || null
     },
     'get-request-data': async (_e, request) => {
-      const result = await axios.get(request.url, request.option)
+      // 剥离可改写上游目标的控制参数（与 /ncm 代理一致），防止 SSRF
+      // 调用方给出的 params 先并入 URL 查询串，再做同样的剥离
+      const raw0 = String(request?.url || '')
+      const params = request?.option && typeof request.option.params === 'object' ? request.option.params : null
+      let raw = raw0
+      if (params) {
+        const qs = new URLSearchParams(params).toString()
+        raw = raw0 + (raw0.includes('?') ? '&' : '?') + qs
+      }
+      raw = stripControlParams(raw)
+      // 仅允许代理到本机 NCM API，防止任意 URL SSRF
+      const ncmPort = Number(process.env.NCM_PORT || 36530)
+      let target
+      if (raw.startsWith('/')) target = `http://127.0.0.1:${ncmPort}${raw}`
+      else if (new RegExp(`^https?://(127\\.0\\.0\\.1|localhost):${ncmPort}/`).test(raw)) target = raw
+      else throw new Error('url not allowed')
+      const option = safeAxiosOption(request?.option)
+      delete option.params
+      const result = await axios.get(target, option)
       return result.data
     },
     'get-bili-request-data': async (_e, request) => {
-      const option = request.option || {}
+      if (!isAllowedBiliApiUrl(request?.url)) throw new Error('url not allowed')
+      const option = safeAxiosOption(request?.option, 3)
       option.headers = option.headers || {}
       const cookieStr = Object.entries(biliCookies)
         .map(([k, v]) => `${k}=${v}`)
@@ -270,14 +357,15 @@ function createHandlers({ broadcast }) {
           biliCookies[name.trim()] = vals.join('=')
         })
       }
-      return { data: result.data, cookies: { ...biliCookies } }
+      return { data: result.data }
     },
     /**
      * Web 端专用：浏览器不能直接请求 B 站 API（CORS），由网关代为请求并与 biliCookies 合并。
      * 返回体与 Electron preload 中 biliFetch 一致，为接口 JSON（非 axios 包装）。
      */
     'get-bili-fetch': async (_e, request) => {
-      const option = request.option || {}
+      if (!isAllowedBiliApiUrl(request?.url)) throw new Error('url not allowed')
+      const option = safeAxiosOption(request?.option, 3)
       option.headers = { ...(option.headers || {}) }
       const serverCookieStr = Object.entries(biliCookies)
         .map(([k, v]) => `${k}=${v}`)
@@ -304,6 +392,7 @@ function createHandlers({ broadcast }) {
       const params = request?.option?.params || {}
       /** Web：不落盘，仅保存 B 站视频轨直链供 /api/bili-cdn 代理播放 */
       if (params.webStreamOnly && params.streamBaseUrl) {
+        if (!isAllowedBilibiliMediaUrl(String(params.streamBaseUrl))) return 'failed'
         try {
           const timing = JSON.parse(params.timing || 'null')
           if (!timing) return 'failed'
@@ -332,8 +421,13 @@ function createHandlers({ broadcast }) {
         console.error('[get-bili-video] mkdir', e.message)
         return 'failed'
       }
-      const q = request.option.params.quality || ''
-      const outPath = path.join(folder, `${request.option.params.cid}_${q.substring(3)}.mp4`)
+      const cid = String(request.option.params.cid || '')
+      const q = String(request.option.params.quality || '')
+      // 参数白名单：防止 ../ 穿越写入任意路径
+      if (!/^\d+$/.test(cid) || !/^[0-9a-z-]{1,20}$/i.test(q.replace(/^qn?/i, ''))) return 'failed'
+      if (!isAllowedBilibiliMediaUrl(String(request.url || ''))) return 'failed'
+      const safeQ = q.substring(3).replace(/[^0-9a-z-]/gi, '').slice(0, 20)
+      const outPath = path.join(folder, `${cid}_${safeQ}.mp4`)
       if (await fileExists(outPath)) {
         request.option.params.timing = JSON.parse(request.option.params.timing)
         request.option.params.path = outPath
@@ -432,6 +526,8 @@ function createHandlers({ broadcast }) {
       const musicVideo = musicVideoStore.get('musicVideo') || []
       const files = fs.readdirSync(folderPath)
       files.forEach((filename) => {
+        // 仅清理本应用生成的视频文件（<cid>_<quality>.mp4），避免误删目录中的其它文件
+        if (!/^\d+_[0-9a-z-]*\.mp4$/i.test(filename)) return
         const filePath = path.join(folderPath, filename)
         if (
           !musicVideo.some(
@@ -456,6 +552,8 @@ function createHandlers({ broadcast }) {
       return false
     },
     'get-local-music-lyric': async (_e, filePath) => {
+      // 仅允许读取本地音乐库目录内的文件
+      if (!isInsideMusicRoots(filePath)) return false
       const str = filePath.split(/[/\\]/)
       const folderPath = filePath.substring(0, filePath.length - str[str.length - 1].length - 1)
       const fileName = path.basename(filePath, path.extname(filePath))
@@ -527,6 +625,16 @@ function createHandlers({ broadcast }) {
         break
       case 'set-settings': {
         const next = typeof payload === 'string' ? JSON.parse(payload) : payload
+        if (!next || typeof next !== 'object' || Array.isArray(next)) break
+        // 目录类配置必须是合法字符串，避免任意值进入文件操作
+        if (next.local != null && (typeof next.local !== 'object' || Array.isArray(next.local))) break
+        const local = next.local || {}
+        const checkDir = (v) => v == null || v === '' || (typeof v === 'string' && v.length < 4096 && !v.includes('\0'))
+        if (!checkDir(local.videoFolder) || !checkDir(local.downloadFolder)) break
+        if (local.localFolder != null) {
+          if (!Array.isArray(local.localFolder) || !local.localFolder.every(checkDir)) break
+          if (local.localFolder.some((v) => typeof v === 'string' && v && !path.isAbsolute(v))) break
+        }
         const prev = settingsStore.get('settings')
         settingsStore.set('settings', next)
         logger.setEnabled(next?.other?.logToFile === true)
@@ -573,7 +681,7 @@ function createHandlers({ broadcast }) {
   async function invokeRoute(req, res) {
     try {
       const { name, args = [] } = req.body
-      const fn = invokeHandlers[name]
+      const fn = Object.hasOwn(invokeHandlers, name) ? invokeHandlers[name] : null
       if (!fn) {
         res.status(404).json({ error: `unknown invoke: ${name}` })
         return
@@ -582,7 +690,7 @@ function createHandlers({ broadcast }) {
       res.json({ ok: true, result })
     } catch (e) {
       console.error('[invoke]', e)
-      res.status(500).json({ ok: false, error: e.message })
+      res.status(500).json({ ok: false, error: 'internal error' })
     }
   }
 
@@ -593,7 +701,7 @@ function createHandlers({ broadcast }) {
       res.json({ ok: true })
     } catch (e) {
       console.error('[send]', e)
-      res.status(500).json({ ok: false, error: e.message })
+      res.status(500).json({ ok: false, error: 'internal error' })
     }
   }
 
@@ -607,21 +715,18 @@ function createHandlers({ broadcast }) {
         res.status(400).end('missing u')
         return
       }
-      const targetUrl = decodeURIComponent(raw)
+      const targetUrl = String(raw)
       if (!isAllowedBilibiliMediaUrl(targetUrl)) {
         res.status(403).end('host not allowed')
         return
       }
-      const serverC = biliCookieHeader()
-      const clientC = req.headers.cookie || ''
-      const cookie = [serverC, clientC].filter(Boolean).join('; ')
       const upstreamHeaders = {
         Referer: 'https://www.bilibili.com/',
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       }
       if (req.headers.range) upstreamHeaders.Range = req.headers.range
-      if (cookie) upstreamHeaders.Cookie = cookie
+      // 媒体直链为签名 URL，不转发任何 cookie（避免凭据泄露到 CDN / 伪造域）
 
       const upstream = await axios({
         method: 'GET',
@@ -629,7 +734,12 @@ function createHandlers({ broadcast }) {
         headers: upstreamHeaders,
         responseType: 'stream',
         validateStatus: () => true,
-        maxRedirects: 5,
+        maxRedirects: 3,
+        // 逐跳复检重定向目标，防止借跳转绕过主机白名单
+        beforeRedirect: (options) => {
+          const next = `${options.protocol || 'https:'}//${options.hostname || options.host}${options.path || ''}`
+          if (!isAllowedBilibiliMediaUrl(next)) throw new Error('redirect not allowed')
+        },
       })
 
       const hop = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control']

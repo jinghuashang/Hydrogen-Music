@@ -21,13 +21,17 @@ try {
 process.env.SELECT_MAX_BR = 'true'
 
 // 验证 URL 是否为完整歌曲（非试听），通过 Content-Length 判断
-function verifyFullSong(url, minSize = 500 * 1024) {
+function verifyFullSong(url, minSize = 500 * 1024, redirects = 3) {
     return new Promise((resolve) => {
         try {
             const mod = url.startsWith('https') ? require('https') : require('http')
             const req = mod.get(url, { timeout: 5000 }, (res) => {
                 if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
-                    verifyFullSong(res.headers.location, minSize).then(resolve)
+                    if (redirects <= 0) { res.resume(); resolve(false); return }
+                    let next
+                    try { next = new URL(res.headers.location, url).toString() } catch { res.resume(); resolve(false); return }
+                    if (!/^https?:\/\//i.test(next)) { res.resume(); resolve(false); return }
+                    verifyFullSong(next, minSize, redirects - 1).then(resolve)
                     return
                 }
                 const len = parseInt(res.headers['content-length'] || '0', 10)
@@ -69,12 +73,23 @@ module.exports = IpcMainEvent = (win, app) => {
         }
     })
     ipcMain.on('to-register', (e, url) => {
+        // 仅允许 http(s) 外链，避免 file:///ms-*: 等协议交给系统处理
+        if (!/^https?:\/\//i.test(String(url || ''))) return
         shell.openExternal(url)
     })
     ipcMain.on('download-start', () => {
         win.webContents.send('download-next')
     })
     ipcMain.handle('get-image-base64', async (e, filePath) => {
+        // 仅允许读取本地音乐库目录内的文件
+        const s = (await settingsStore.get('settings')) || {}
+        const roots = []
+        if (s.local?.downloadFolder) roots.push(s.local.downloadFolder)
+        if (Array.isArray(s.local?.localFolder)) roots.push(...s.local.localFolder)
+        if (s.local?.videoFolder) roots.push(s.local.videoFolder)
+        const abs = path.resolve(String(filePath || ''))
+        const allowed = roots.map(r => path.resolve(String(r).trim())).some(r => abs.startsWith(r + path.sep))
+        if (!allowed) return null
         // music-metadata 8+ 为 ESM-only，CJS 侧需动态导入
         const { parseFile } = await import('music-metadata')
         const data = await parseFile(filePath)
@@ -231,6 +246,17 @@ module.exports = IpcMainEvent = (win, app) => {
     ipcMain.on('open-local-folder', (e, targetPath) => {
         const p = path.normalize(String(targetPath || ''))
         if (!p) return
+        // 仅允许打开音乐库相关目录/文件
+        const s = settingsStore.get('settings') || {}
+        const roots = []
+        if (s.local?.downloadFolder) roots.push(s.local.downloadFolder)
+        if (Array.isArray(s.local?.localFolder)) roots.push(...s.local.localFolder)
+        if (s.local?.videoFolder) roots.push(s.local.videoFolder)
+        const abs = path.resolve(p)
+        const allowed = roots
+            .map(r => path.resolve(String(r).trim()))
+            .some(r => abs === r || abs.startsWith(r + path.sep))
+        if (!allowed) return
         try {
             if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
                 shell.openPath(p)
@@ -242,13 +268,32 @@ module.exports = IpcMainEvent = (win, app) => {
         }
     })
     ipcMain.handle('get-request-data', async (e, request) => {
-        const result = await axios.get(request.url, request.option)
+        const raw = String(request?.url || '')
+        // 仅允许代理到本机 NCM API，防止任意 URL SSRF
+        const target = raw.startsWith('/') ? `http://127.0.0.1:36530${raw}` : raw
+        if (!/^https?:\/\/(127\.0\.0\.1|localhost):36530\//.test(target)) throw new Error('url not allowed')
+        const option = { ...(request?.option || {}) }
+        for (const k of ['socketPath', 'proxy', 'agent', 'httpAgent', 'httpsAgent', 'auth', 'transport']) delete option[k]
+        option.maxRedirects = 0
+        const result = await axios.get(target, option)
         return result.data
     })
     const biliCookies = {}
     ipcMain.handle('get-bili-request-data', async (e, request) => {
-        const option = request.option || {}
-        option.headers = option.headers || {}
+        // 仅允许 B 站官方 API，且不转发调用方提供的传输层/敏感头
+        const urlOk = (() => {
+            try {
+                const u = new URL(String(request?.url || ''))
+                return u.protocol === 'https:' && ['api.bilibili.com', 'passport.bilibili.com', 'api.live.bilibili.com'].includes(u.hostname.toLowerCase())
+            } catch { return false }
+        })()
+        if (!urlOk) throw new Error('url not allowed')
+        const option = { ...(request.option || {}) }
+        for (const k of ['socketPath', 'proxy', 'agent', 'httpAgent', 'httpsAgent', 'auth', 'transport', 'beforeRedirect']) delete option[k]
+        option.maxRedirects = 0
+        option.headers = { ...(option.headers || {}) }
+        delete option.headers.Host
+        delete option.headers.host
         const cookieStr = Object.entries(biliCookies).map(([k, v]) => `${k}=${v}`).join('; ')
         if (cookieStr) option.headers['Cookie'] = cookieStr
         const result = await axios.get(request.url, option)
@@ -309,10 +354,16 @@ module.exports = IpcMainEvent = (win, app) => {
     ipcMain.handle('get-bili-video', async (e, request) => {
         const settings = await settingsStore.get('settings')
         if(!settings?.local?.videoFolder) return 'noSavePath'
+        const cid = String(request?.option?.params?.cid || '')
+        const quality = String(request?.option?.params?.quality || '')
+        // 参数白名单 + CDN 主机校验，防止 ../ 穿越写入任意路径
+        if (!/^\d+$/.test(cid) || !/^[0-9a-z-]{1,20}$/i.test(quality.replace(/^qn?/i, ''))) return 'failed'
+        if (!/^https?:\/\/([a-z0-9-]+\.)*(bilivideo\.com|hdslb\.com|akamaized\.net)\//i.test(String(request.url || ''))) return 'failed'
         const videoAbsPath = path.join(
             settings.local.videoFolder,
-            `${request.option.params.cid}_${request.option.params.quality.substring(3)}.mp4`,
+            `${cid}_${quality.substring(3).replace(/[^0-9a-z-]/gi, '').slice(0, 20)}.mp4`,
         )
+        if (path.dirname(path.resolve(videoAbsPath)) !== path.resolve(String(settings.local.videoFolder))) return 'failed'
         let returnCode = 'success'
         if(await fileIsExists(videoAbsPath)) {
             request.option.params.timing = JSON.parse(request.option.params.timing)
@@ -382,6 +433,8 @@ module.exports = IpcMainEvent = (win, app) => {
         try {
             const files = fs.readdirSync(folderPath)
             files.forEach(filename => {
+                // 仅清理本应用生成的视频文件（<cid>_<quality>.mp4），避免误删目录中的其它文件
+                if (!/^\d+_[0-9a-z-]*\.mp4$/i.test(filename)) return
                 const filePath = path.join(folderPath, filename)
                 if(!musicVideo.some(video => video.path && path.normalize(video.path) === path.normalize(filePath))) {
                     // 单个文件清理失败不中断整个流程
@@ -410,6 +463,15 @@ module.exports = IpcMainEvent = (win, app) => {
     //获取本地歌词
     ipcMain.handle('get-local-music-lyric', async (e, filePath) => {
         const abs = path.normalize(filePath)
+        // 仅允许读取本地音乐库目录内的文件
+        const s = (await settingsStore.get('settings')) || {}
+        const roots = []
+        if (s.local?.downloadFolder) roots.push(s.local.downloadFolder)
+        if (Array.isArray(s.local?.localFolder)) roots.push(...s.local.localFolder)
+        const allowed = roots
+            .map(r => path.resolve(String(r).trim()))
+            .some(r => abs.startsWith(r + path.sep))
+        if (!allowed) return false
         const folderPath = path.dirname(abs)
         const fileName = path.basename(abs, path.extname(abs))
         async function readLyric(lyricPath) {
@@ -600,7 +662,20 @@ module.exports = IpcMainEvent = (win, app) => {
     ipcMain.handle('test-mirror-latency', async (_e, mirrorUrl) => {
         const https = require('https')
         const { URL } = require('url')
-        const testUrl = mirrorUrl + 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
+        // 仅允许 https 的公网镜像地址，避免被用于内网探测
+        let base
+        try { base = new URL(String(mirrorUrl)) } catch { return { url: mirrorUrl, latency: Infinity, success: false } }
+        const net = require('net')
+        const host = base.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+        // 拒绝所有 IP 字面量与私网/回环地址（含 IPv6 方括号形式）
+        const isPrivate = net.isIP(host) !== 0
+            || /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.0\.0\.0)/.test(host)
+            || /^(::1|fc|fd|fe80|::ffff:)/.test(host)
+        if (base.protocol !== 'https:' || isPrivate) {
+            return { url: mirrorUrl, latency: Infinity, success: false }
+        }
+        const normalized = base.origin + '/'
+        const testUrl = normalized + 'https://api.github.com/repos/jinghuashang/Hydrogen-Music/releases/latest'
         const parsed = new URL(testUrl)
         
         return new Promise((resolve) => {

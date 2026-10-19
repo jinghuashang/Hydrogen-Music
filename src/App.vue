@@ -117,15 +117,12 @@
   windowApi.checkUpdate((event, version) => {
     otherStore.toUpdate = true
     otherStore.newVersion = version.version
-    otherStore.updateDownloadUrl = version.downloadUrl
-    otherStore.updateDigest = version.digest || ''
     otherStore.updateIsWindows = version.isWindows
     otherStore.releaseBody = version.releaseBody || ''
-    // 自动开始下载更新（可在更新弹窗点"忽略"取消）
-    if (version.isWindows && version.downloadUrl) {
+    // 下载由主进程发起（渲染层不接触 URL/摘要），这里只同步状态
+    if (version.isWindows) {
       otherStore.autoUpdateStatus = 'downloading'
       otherStore.autoUpdateProgress = 0
-      windowApi.autoDownloadUpdate(version.downloadUrl, version.digest || '')
     }
   })
 
@@ -134,6 +131,8 @@
       otherStore.autoUpdateProgress = data.progress
       otherStore.autoUpdateTotalSize = data.totalSize || ''
       otherStore.autoUpdateDownloadedSize = data.downloadedSize || ''
+    } else if (data.status === 'ready') {
+      otherStore.autoUpdateStatus = 'ready'
     } else if (data.status === 'installing') {
       otherStore.autoUpdateStatus = 'installing'
     } else if (data.status === 'failed') {
