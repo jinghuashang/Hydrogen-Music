@@ -49,7 +49,10 @@
     const w = typeof window !== 'undefined' ? window.innerWidth : 0
     const wide = w >= 1180
     const fullscreen = isBrowserFullscreen()
+    // 心动 / 一起听是整页独立播放界面，不再启用主页右侧嵌入播放器
+    const standalonePage = route.name === 'heartbeat' || route.name === 'listentogether'
     webHomeSplit.value =
+      !standalonePage &&
       wide &&
       (fullscreen || w >= 1360) &&
       !!playerStore.widgetState &&
@@ -57,7 +60,7 @@
   }
 
   watch(
-    [() => playerStore.widgetState, hasCurrentSong],
+    [() => playerStore.widgetState, hasCurrentSong, () => route.name],
     () => {
       refreshWebHomeSplit()
     },
@@ -172,7 +175,7 @@
     <div
       class="musicWidget"
       v-if="playerStore.songList && playerStore.songList[playerStore.currentIndex]"
-      v-show="playerStore.widgetState && !webHomeSplit && route.name !== 'heartbeat'"
+      v-show="playerStore.widgetState && !webHomeSplit && route.name !== 'heartbeat' && route.name !== 'listentogether'"
     >
       <MusicWidget></MusicWidget>
     </div>

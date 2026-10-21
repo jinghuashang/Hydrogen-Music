@@ -40,6 +40,7 @@
       if (routeName === 'homepage') targetClass = 'button-home'
       else if (routeName === 'clouddisk') targetClass = 'button-cloud'
       else if (routeName === 'heartbeat') targetClass = 'button-heartbeat'
+      else if (routeName === 'listentogether') targetClass = 'button-together'
       else if (routeName === 'audiomatch') targetClass = 'button-match'
       else if (routeName === 'toplist') targetClass = 'button-toplist'
       else if (route.fullPath.split('/')[1] === 'mymusic' || route.fullPath.split('/')[1] === 'login') targetClass = 'button-music'
@@ -59,7 +60,7 @@
   watch(() => route.fullPath, updateTracker)
   // 导航按钮由页签开关 v-if 控制，开关后按钮挂载/移除，指示器需重新定位
   watch(
-    () => [userStore.homePage, userStore.cloudDiskPage, userStore.heartbeatPage, userStore.audioMatchPage, userStore.toplistPage],
+    () => [userStore.homePage, userStore.cloudDiskPage, userStore.heartbeatPage, userStore.listenTogetherPage, userStore.audioMatchPage, userStore.toplistPage],
     updateTracker
   )
   onMounted(() => {
@@ -76,7 +77,7 @@
   setTimeout(updateTracker, 600)
 
   // 页面切换动画：按导航序（首页→云盘→心动→识曲→我的音乐→搜索→设置）决定水平滑动方向
-  const routeOrder = { login: -1, homepage: 0, toplist: 1, clouddisk: 2, heartbeat: 3, audiomatch: 4, mymusic: 5, search: 6, settings: 7 }
+  const routeOrder = { login: -1, homepage: 0, toplist: 1, clouddisk: 2, heartbeat: 3, listentogether: 4, audiomatch: 5, mymusic: 6, search: 7, settings: 8 }
   let prevRouteName = null
   watch(() => route.name, (to, from) => { prevRouteName = from })
   const pageTransition = computed(() => {
@@ -124,6 +125,7 @@
           <router-link class="button-toplist" :style="{color: router.currentRoute.value.name == 'toplist' ? 'black' : '#353535'}" to="/toplist" v-if="userStore.toplistPage">排行</router-link>
           <router-link class="button-cloud" :style="{color: router.currentRoute.value.name == 'clouddisk' ? 'black' : '#353535'}" to="/cloud" v-if="userStore.cloudDiskPage">云盘</router-link>
           <router-link class="button-heartbeat" :style="{color: router.currentRoute.value.name == 'heartbeat' ? 'black' : '#353535'}" to="/heartbeat" v-if="userStore.heartbeatPage">心动</router-link>
+          <router-link class="button-together" :style="{color: router.currentRoute.value.name == 'listentogether' ? 'black' : '#353535'}" to="/listentogether" v-if="userStore.listenTogetherPage">一起听</router-link>
           <router-link class="button-match" :style="{color: router.currentRoute.value.name == 'audiomatch' ? 'black' : '#353535'}" to="/audiomatch" v-if="userStore.audioMatchPage">听歌识曲</router-link>
           <router-link class="button-music" :style="{color: router.currentRoute.value.name == 'mymusic' ? 'black' : '#353535'}" to="/mymusic" v-if="userStore.homePage || userStore.cloudDiskPage || userStore.audioMatchPage">我的音乐</router-link>
           <div class="user">
@@ -173,7 +175,7 @@
   @media (max-width: 1180px){
     .header-router .button-home, .header-router .button-cloud,
     .header-router .button-match, .header-router .button-heartbeat,
-    .header-router .button-toplist{
+    .header-router .button-together, .header-router .button-toplist{
       margin-right: 26px;
     }
   }
@@ -204,6 +206,9 @@
 	        margin-right: 40px;
 	      }
 	      .button-heartbeat{
+	        margin-right: 40px;
+	      }
+	      .button-together{
 	        margin-right: 40px;
 	      }
 	      .button-toplist{

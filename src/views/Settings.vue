@@ -841,6 +841,18 @@ const testMirrors = async () => {
                             </div>
                         </div>
                         <div class="option">
+                            <div class="option-name">开启一起听页面</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="userStore.listenTogetherPage = !userStore.listenTogetherPage">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': userStore.listenTogetherPage }">
+                                        {{ userStore.listenTogetherPage ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="userStore.listenTogetherPage"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option">
                             <div class="option-name">自定义字体</div>
                             <div class="custom-font local-folder">
                                 <!-- <div class="custom-font-path">{{customFont ? customFont : '未设置'}}</div> -->

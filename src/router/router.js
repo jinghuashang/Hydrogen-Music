@@ -13,6 +13,7 @@ import SearchResult from '../views/SearchResult.vue'
 import Settings from '../views/Settings.vue'
 import AudioMatch from '../views/AudioMatch.vue'
 import Heartbeat from '../views/Heartbeat.vue'
+import ListenTogether from '../views/ListenTogether.vue'
 import TopList from '../views/TopList.vue'
 
 import { useUserStore } from '../store/userStore'
@@ -178,6 +179,16 @@ const routes = [
         component: Heartbeat,
         beforeEnter: (to, from, next) => {
             if(!userStore.heartbeatPage) next({name: 'mymusic'})
+            else if(!isLogin()) { next({name: 'login'}); noticeOpen("请先登录", 2) }
+            else next()
+        }
+    },
+    {
+        path: '/listentogether',
+        name: 'listentogether',
+        component: ListenTogether,
+        beforeEnter: (to, from, next) => {
+            if(!userStore.listenTogetherPage) next({name: 'mymusic'})
             else if(!isLogin()) { next({name: 'login'}); noticeOpen("请先登录", 2) }
             else next()
         }
