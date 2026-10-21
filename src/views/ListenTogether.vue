@@ -541,22 +541,6 @@ onBeforeUnmount(() => {
     </div>
 
     <template v-else>
-      <div class="room-bar">
-        <div class="room-id">
-          <span class="room-label">ROOM</span>
-          <span class="room-value">{{ roomId }}</span>
-          <span class="room-role">{{ isHost ? 'HOST' : 'GUEST' }}</span>
-        </div>
-        <div class="room-bar-actions">
-          <button class="lt-btn ghost" :disabled="syncing" @click="syncNow">
-            {{ syncing ? 'SYNCING…' : '重新同步' }}
-          </button>
-          <button class="lt-btn ghost danger" :disabled="leaving" @click="confirmLeave">
-            {{ leaving ? 'LEAVING…' : isHost ? '结束房间' : '退出房间' }}
-          </button>
-        </div>
-      </div>
-
       <div class="room-grid">
         <section class="now-card">
           <div class="now-head">
@@ -767,6 +751,22 @@ onBeforeUnmount(() => {
               {{ syncing ? '同步中…' : '同步当前播放列表' }}
             </button>
             <div v-if="lastError" class="action-hint error">{{ lastError }}</div>
+          </section>
+
+          <section class="side-card room-card">
+            <div class="side-head">
+              <span class="card-index">ROOM</span>
+              <span class="room-role">{{ isHost ? 'HOST' : 'GUEST' }}</span>
+            </div>
+            <p class="room-value" :title="roomId">{{ roomId }}</p>
+            <div class="room-actions">
+              <button class="lt-btn ghost" :disabled="syncing" @click="syncNow">
+                {{ syncing ? 'SYNCING…' : '重新同步' }}
+              </button>
+              <button class="lt-btn ghost danger" :disabled="leaving" @click="confirmLeave">
+                {{ leaving ? 'LEAVING…' : isHost ? '结束房间' : '退出房间' }}
+              </button>
+            </div>
           </section>
         </aside>
       </div>
@@ -1112,48 +1112,36 @@ onBeforeUnmount(() => {
   color: rgba(26, 26, 26, 0.4);
 }
 
-/* ---------- 房间顶部 ---------- */
-.room-bar {
-  margin-top: 2.4vh;
-  padding-bottom: 1.4vh;
-  border-bottom: 1Px solid rgba(0, 0, 0, 0.18);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2vw;
-  .room-id {
-    display: flex;
-    align-items: baseline;
-    gap: 1.2vh;
-    min-width: 0;
-    .room-label {
-      font-size: 1.2vh;
-      font-weight: bold;
-      letter-spacing: 0.4vh;
-      color: rgba(26, 26, 26, 0.38);
-    }
-    .room-value {
-      font-size: 2.3vh;
-      font-weight: bold;
-      letter-spacing: 0.18vh;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .room-role {
-      padding: 0.35vh 0.9vh;
-      border: 1px solid rgba(0, 0, 0, 0.4);
-      font-size: 1.1vh;
-      font-weight: bold;
-      letter-spacing: 0.2vh;
-      color: rgba(26, 26, 26, 0.6);
-    }
+/* ---------- 房间信息（左侧边栏底部） ---------- */
+.room-card {
+  margin-top: auto;
+  .room-value {
+    margin: 0;
+    font-size: 1.5vh;
+    font-weight: bold;
+    letter-spacing: 0.14vh;
+    line-height: 1.5;
+    word-break: break-all;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
-  .room-bar-actions {
+  .room-role {
+    padding: 0.3vh 0.8vh;
+    border: 1px solid rgba(0, 0, 0, 0.4);
+    font-size: 1.05vh;
+    font-weight: bold;
+    letter-spacing: 0.2vh;
+    color: rgba(26, 26, 26, 0.6);
+  }
+  .room-actions {
+    margin-top: 1.3vh;
     display: flex;
-    align-items: center;
     gap: 1.2vh;
-    flex-shrink: 0;
+    .lt-btn {
+      flex: 1 1 0;
+    }
   }
 }
 
@@ -1698,6 +1686,14 @@ onBeforeUnmount(() => {
 
 .queue-scroller {
   height: 100%;
+  /* 隐藏右侧滚动条，仍支持滚轮/触控板滚动 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
 }
 
 .queue-item {
@@ -1888,11 +1884,6 @@ onBeforeUnmount(() => {
   }
   .side-col {
     display: flex;
-  }
-  .room-bar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1.4vh;
   }
   .now-bottom {
     flex-wrap: wrap;
