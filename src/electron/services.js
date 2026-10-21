@@ -54,6 +54,30 @@ module.exports = async function startNeteaseMusicApi() {
     })
   }
 
+  // 一起听：替换共享列表命令模块（补 playMode），并补上上游缺失的 leave 路由
+  const listenSyncIdx = defaultModules.findIndex(m => m.route === '/listentogether/sync/list/command')
+  if (listenSyncIdx !== -1) {
+    defaultModules[listenSyncIdx] = {
+      identifier: 'listentogether_sync_list_command',
+      route: '/listentogether/sync/list/command',
+      module: require('../server/custom-listen-together-sync'),
+    }
+  } else {
+    defaultModules.push({
+      identifier: 'listentogether_sync_list_command',
+      route: '/listentogether/sync/list/command',
+      module: require('../server/custom-listen-together-sync'),
+    })
+  }
+
+  if (!defaultModules.some(m => m.route === '/listentogether/leave')) {
+    defaultModules.push({
+      identifier: 'listentogether_leave',
+      route: '/listentogether/leave',
+      module: require('../server/custom-listen-together-leave'),
+    })
+  }
+
   const cloudDelIdx = defaultModules.findIndex(m => m.route === '/user/cloud/del')
   if (cloudDelIdx !== -1) {
     defaultModules[cloudDelIdx] = {

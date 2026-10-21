@@ -51,7 +51,7 @@
 <template>
   <div class="music-widget">
     <div class="music-progress-container">
-        <vue-slider id="widget-progress" class="music-progress" @click="changeProgress(progress)"  v-model="progress" :min="0" :max="time" :interval="1" :duration="0.5" tooltip="none"></vue-slider>
+        <vue-slider id="widget-progress" class="music-progress" @click="changeProgress(progress)" @drag-end="changeProgress(progress)"  v-model="progress" :min="0" :max="time" :interval="1" :duration="0.5" tooltip="none"></vue-slider>
         <div class="music-time">{{songTime2(progress)}} / {{songTime2(time)}}</div>
     </div>
     <div class="music-info">

@@ -129,3 +129,20 @@ export function scrobble(params) {
         }
     })
 }
+
+/**
+ * 批量获取歌曲详情（一起听共享队列按 id 还原歌曲对象）
+ * @param {Array<number|string>} ids
+ * @param {Object} options 请求配置（如 { silent: true }）
+ * @returns
+ */
+export function getSongsDetail(ids, options = {}) {
+    return request({
+        url: '/song/detail',
+        method: 'get',
+        params: {
+            ids: ids.join(','),
+        },
+        ...options,
+    })
+}
