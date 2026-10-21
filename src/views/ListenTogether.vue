@@ -1331,7 +1331,7 @@ onBeforeUnmount(() => {
 .lyric-viewport {
   flex: 1;
   min-height: 96px;
-  max-height: 25vh;
+  max-height: 40vh;
   position: relative;
   overflow: hidden;
   margin-top: 0.4vh;
