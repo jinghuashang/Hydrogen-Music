@@ -13,25 +13,62 @@
   const isActive = ref(false)
   const trackerLeft = ref(0)
   const trackerWidth = ref(14)
+  /** 窗口较窄、搜索框让出第一行（落到标题下方），导航仍占第一行 */
+  const searchStacked = ref(false)
+  /** 再窄一些、导航在第一行也放不下时，整排导航下移到第二行 */
+  const headerStacked = ref(false)
+  let layoutObserver = null
 
   function updateTracker() {
     nextTick(() => {
       const headerRouter = document.querySelector('.header-router')
-      // 导航整体尽量按窗口居中；窗口较窄时向右偏移刚好避开左侧悬浮层
-      // （logo+搜索框，聚焦展开后约 365Px，预留 380），且不进入右侧窗口控制按钮区（约 190Px，含头像外挂）
+      // 顶部第一行的排布优先级：
+      // 1. 搜索框留在标题右侧、导航跟在搜索框后（一行放下所有东西）
+      // 2. 搜索框落到标题下方，把第一行让给导航（导航不下移，见 .widget-compact）
+      // 3. 导航在第一行也放不下时，整排导航下移到第二行
       // 注意：偏移用 left 而非 transform——transform 会在 .header-router 上创建层叠上下文，
       // 把 .user（z-9999）关押在内，导致设置下拉被页面内容遮挡
       if (headerRouter) {
         const winWidth = window.innerWidth
         const routerWidth = headerRouter.getBoundingClientRect().width
         if (routerWidth > 0) {
-          const desiredLeft = (winWidth - routerWidth) / 2
-          const minLeft = 380
+          const globalWidget = document.querySelector('.globalWidget')
+          const titleEl = document.querySelector('.widget-title')
+          const searchEl = document.querySelector('.widget-search')
+          // 关键：这里只能用与当前排布无关的尺寸，否则「紧凑」会把悬浮层量窄，
+          // 下一轮又判定成放得下，两种排布会互相触发、界面反复闪烁
+          const titleRight = titleEl ? titleEl.getBoundingClientRect().right : 0
+          // 搜索框在标题右侧时的占宽：间隙 30Px（见 App.vue .widget-search），聚焦后加宽到 160Px
+          const searchWidth = Math.max(searchEl ? searchEl.getBoundingClientRect().width : 0, 160)
+          // 一行放下全部内容时，左侧需要让开「标题 + 搜索框」，再留 24Px 呼吸位
+          const inlineLimit = titleRight + 30 + searchWidth + 24
+          // 搜索框下移后，左侧只需要让开标题
+          const compactLimit = titleRight + 16
+          // 右侧窗口控制按钮区（约 190Px，含头像外挂）
           const maxRight = winWidth - 190
-          let offset = 0
-          if (desiredLeft < minLeft) offset = minLeft - desiredLeft
-          if (desiredLeft + offset + routerWidth > maxRight) offset = maxRight - routerWidth - desiredLeft
-          headerRouter.style.left = offset > 0 ? `${offset}px` : ''
+          const fitsInline = routerWidth <= maxRight - inlineLimit
+          const fitsCompact = routerWidth <= maxRight - compactLimit
+          const wasStacked = headerStacked.value
+          headerStacked.value = !fitsInline && !fitsCompact
+          const wasSearchStacked = searchStacked.value
+          searchStacked.value = !fitsInline && fitsCompact
+          if (globalWidget && wasSearchStacked !== searchStacked.value) {
+            globalWidget.classList.toggle('widget-compact', searchStacked.value)
+          }
+          const leftLimit = searchStacked.value ? compactLimit : inlineLimit
+          if (!headerStacked.value) {
+            const desiredLeft = (winWidth - routerWidth) / 2
+            // 先保证不压到左侧悬浮层，再保证不进入右侧按钮区（可能为负，表示需要往左挪）
+            const shift = Math.min(Math.max(leftLimit - desiredLeft, 0), maxRight - routerWidth - desiredLeft)
+            headerRouter.style.left = shift !== 0 ? `${shift}px` : ''
+          } else {
+            headerRouter.style.left = ''
+          }
+          // 堆叠状态切换会改变导航位置，等布局落定后再量下划线
+          if (wasStacked !== headerStacked.value) {
+            nextTick(updateTracker)
+            return
+          }
         }
       }
 
@@ -66,9 +103,21 @@
   onMounted(() => {
     updateTracker()
     window.addEventListener('resize', updateTracker)
+    // 首帧可能拿到尚未加载字体的宽度，挂载后导航/搜索框尺寸变化也要重算排布
+    if (window.ResizeObserver) {
+      const routerEl = document.querySelector('.header-router')
+      const widgetEl = document.querySelector('.globalWidget')
+      layoutObserver = new ResizeObserver(() => updateTracker())
+      if (routerEl) layoutObserver.observe(routerEl)
+      if (widgetEl) layoutObserver.observe(widgetEl)
+    }
   })
   onBeforeUnmount(() => {
     window.removeEventListener('resize', updateTracker)
+    if (layoutObserver) {
+      layoutObserver.disconnect()
+      layoutObserver = null
+    }
   })
 
   // 首次启动时自定义字体可能尚未加载，按钮宽度按回退字体测量会导致下划线偏移；
@@ -118,7 +167,7 @@
 <template>
   <div>
     <main>
-      <div class="home-header">
+      <div class="home-header" :class="{ 'header-stacked': headerStacked, 'header-compact': searchStacked }">
         <div class="header-router" :class="{'router-closed': !userStore.homePage && !userStore.cloudDiskPage}">
           <!-- <div class="logout" @click="userLogout()">退出登录</div> -->
           <router-link class="button-home" :style="{color: router.currentRoute.value.name == 'homepage' ? 'black' : '#353535'}" to="/" v-if="userStore.homePage">首页</router-link>
@@ -189,6 +238,14 @@
     flex-direction: row;
     justify-content: center;
     align-items: center;
+    /* 所有页签都开启且窗口较窄时，导航整排下移到品牌/搜索框下方，避免重叠 */
+    &.header-stacked{
+      margin-top: 66Px;
+    }
+    /* 搜索框落到标题下方后占住了第一行以下的空间，页面内容需要让出这段高度 */
+    &.header-compact{
+      margin-bottom: 36Px;
+    }
     .header-router{
       position: relative;
       a{

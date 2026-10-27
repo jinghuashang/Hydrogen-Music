@@ -320,6 +320,21 @@
     .widget-search{
       margin-left: 30Px;
     }
+    /* 窄窗口：搜索框落到标题下方，把第一行让给主导航（由 Home.vue 按导航宽度切换） */
+    &.widget-compact{
+      flex-direction: column;
+      align-items: flex-start;
+      .widget-search{
+        margin-left: 0;
+        margin-top: 8Px;
+        /* 搜索框贴左边时，原本居中的下拉面板会超出窗口被裁掉；改为左对齐并放宽 */
+        .search-preview{
+          left: 0;
+          transform: none;
+          width: 340Px;
+        }
+      }
+    }
   }
   .dragBar{
     width: 100%;
