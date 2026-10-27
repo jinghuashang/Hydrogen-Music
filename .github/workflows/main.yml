@@ -14,7 +14,6 @@ jobs:
   check-version:
     name: Check if version changed
     runs-on: ubuntu-latest
-    if: github.ref_type != 'tag'
     outputs:
       version_changed: ${{ steps.check.outputs.changed }}
       version: ${{ steps.check.outputs.version }}
