@@ -149,6 +149,11 @@ contextBridge.exposeInMainWorld('windowApi', {
     hidePlayer,
     setSettings,
     getSettings: () => ipcRenderer.invoke('get-settings'),
+    getSystemFonts: () => ipcRenderer.invoke('get-system-fonts'),
+    getKugouLyric: (payload) => ipcRenderer.invoke('get-kugou-lyric', payload),
+    platform: process.platform,
+    /** 任务栏歌词：把当前歌词行推给主进程（禁用时主进程只缓存） */
+    setTaskbarLyric: (payload) => ipcRenderer.send('taskbar-lyric:set', payload),
     openFile: () => ipcRenderer.invoke('dialog:openFile'),
     clearLocalMusicData,
     registerShortcuts,

@@ -1,0 +1,110 @@
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    user-select: none;
+}
+
+#taskbar-lyric {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    box-sizing: border-box;
+    white-space: nowrap;
+    font-family: SourceHanSansCN-Bold, Inter, Avenir, Helvetica, Arial, sans-serif;
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: 0.3px;
+    /* 深色字（浅色任务栏）默认用白描边托底；浅色字由 .is-light-text 换成深阴影 */
+    color: #141414;
+    text-shadow:
+        0 0 2px rgba(255, 255, 255, 0.95),
+        0 1px 1px rgba(255, 255, 255, 0.95),
+        0 -1px 1px rgba(255, 255, 255, 0.85);
+    paint-order: stroke fill;
+    transition: opacity 0.18s ease;
+}
+
+/* 描边画在字形外侧，不啃字 */
+#taskbar-lyric,
+#taskbar-lyric .lyric-fill {
+    -webkit-text-stroke-color: #ffffff;
+}
+
+#taskbar-lyric.is-light-text {
+    text-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.7),
+        0 0 4px rgba(0, 0, 0, 0.45);
+}
+
+#taskbar-lyric.no-shadow {
+    text-shadow: none;
+}
+
+.lyric-line {
+    position: relative;
+    display: inline-block;
+}
+
+.lyric-text,
+.lyric-fill {
+    display: block;
+}
+
+/* 未唱的字：文字色本身带透明度（见脚本），这里只做轻微模糊 */
+#taskbar-lyric.karaoke .lyric-text {
+    filter: blur(0.4px);
+}
+
+/* 卡拉OK填充层：叠在底色文字上，按进度从左往右裁切 */
+.lyric-fill {
+    position: absolute;
+    inset: 0;
+    color: var(--karaoke-color, #e8384f);
+    opacity: 0;
+    clip-path: inset(0 calc(100% - var(--karaoke, 100%)) 0 0);
+    /* 进度由逐帧插值驱动，这里不再加过渡，避免 4Hz 推送被二次平滑成台阶 */
+    transition: opacity 0.16s ease;
+    will-change: clip-path;
+}
+
+#taskbar-lyric.karaoke .lyric-fill {
+    opacity: 1;
+}
+
+/* 正在唱的字：柔和光晕（晕染），拖长音时持续发亮 */
+.lyric-fill span {
+    transition: text-shadow 0.35s ease-out, filter 0.35s ease-out;
+}
+
+.lyric-fill span.is-singing,
+.lyric-text span {
+    /* 光晕由脚本少量关键帧驱动，过渡负责补间 */
+    transition: text-shadow 0.45s ease-out;
+}
+
+#taskbar-lyric.is-empty {
+    opacity: 0;
+}
+
+#taskbar-lyric.is-enter {
+    animation: taskbar-lyric-in 0.22s ease;
+}
+
+@keyframes taskbar-lyric-in {
+    from {
+        opacity: 0.2;
+        transform: translateY(3px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}

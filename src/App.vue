@@ -15,6 +15,7 @@
 
   import { usePlayerStore } from './store/playerStore'
   import { useOtherStore } from './store/otherStore'
+  import { startTaskbarLyricSync } from './utils/taskbarLyric'
 
   const playerStore = usePlayerStore()
   const otherStore = useOtherStore()
@@ -91,6 +92,8 @@
   onMounted(() => {
     refreshWebHomeSplit()
     window.addEventListener('mouseup', onSideBackMouseUp, true)
+    // 任务栏歌词（Electron Windows）：同步当前歌词行给主进程的覆盖层窗口
+    startTaskbarLyricSync()
     if (!isWebClient) return
     window.addEventListener('resize', refreshWebHomeSplit)
     document.addEventListener('fullscreenchange', refreshWebHomeSplit)

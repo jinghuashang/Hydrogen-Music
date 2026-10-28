@@ -7,6 +7,7 @@ const MusicDownload = require('./src/electron/download')
 const LocalFiles = require('./src/electron/localmusic')
 const InitTray = require('./src/electron/tray')
 const registerShortcuts = require('./src/electron/shortcuts')
+const { applyTaskbarLyric, setTaskbarStyle, styleFromSettings } = require('./src/electron/taskbarLyric')
 
 const { app, BrowserWindow, globalShortcut, shell, session } = require('electron')
 const fs = require('fs')
@@ -390,6 +391,10 @@ const createWindow = () => {
     LocalFiles(win, app)
     InitTray(win, app, path.resolve(__dirname, './src/assets/icon/icon.ico'))
     registerShortcuts(win)
+    // 任务栏歌词（仅 Windows，设置里开启后启动即恢复）
+    const savedOther = settingsStore.get('settings')?.other || {}
+    setTaskbarStyle(styleFromSettings(savedOther))
+    applyTaskbarLyric(savedOther.taskbarLyric === true)
 }
 
 async function checkForGithubUpdate(win) {

@@ -5,11 +5,13 @@
   import { noticeOpen } from "../utils/dialog";
   import { isLogin } from '../utils/authority'
   import { useUserStore } from '../store/userStore';
+  import { usePlayerStore } from '../store/playerStore';
   import { isHydrogenWeb, clearWebProfileOnNas } from '../utils/webProfileNas'
 
   const router = useRouter()
   const route = useRoute()
   const userStore = useUserStore()
+  const playerStore = usePlayerStore()
   const isActive = ref(false)
   const trackerLeft = ref(0)
   const trackerWidth = ref(14)
@@ -46,8 +48,10 @@
           const compactLimit = titleRight + 16
           // 右侧窗口控制按钮区（约 190Px，含头像外挂）
           const maxRight = winWidth - 190
-          const fitsInline = routerWidth <= maxRight - inlineLimit
-          const fitsCompact = routerWidth <= maxRight - compactLimit
+          // 播放页（全屏播放器）里没有导航需要让位，搜索框保持与标题同行，不继承紧凑排布
+          const playerPageOpen = playerStore.widgetState === false
+          const fitsInline = playerPageOpen || routerWidth <= maxRight - inlineLimit
+          const fitsCompact = !playerPageOpen && routerWidth <= maxRight - compactLimit
           const wasStacked = headerStacked.value
           headerStacked.value = !fitsInline && !fitsCompact
           const wasSearchStacked = searchStacked.value
@@ -95,6 +99,12 @@
   }
 
   watch(() => route.fullPath, updateTracker)
+  // 播放页（widgetState=false）与浏览态切换时搜索框排布要跟着变：
+  // 切换瞬间导航可能还在过渡动画里（宽度为 0），等动画结束再补算一次
+  watch(() => playerStore.widgetState, () => {
+    updateTracker()
+    setTimeout(updateTracker, 450)
+  })
   // 导航按钮由页签开关 v-if 控制，开关后按钮挂载/移除，指示器需重新定位
   watch(
     () => [userStore.homePage, userStore.cloudDiskPage, userStore.heartbeatPage, userStore.listenTogetherPage, userStore.audioMatchPage, userStore.toplistPage],

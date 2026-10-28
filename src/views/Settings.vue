@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onActivated, onMounted } from 'vue'
+import { ref, computed, onActivated, onMounted } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { logout, getVipInfo, getUserLevel } from '../api/user'
 import { noticeOpen, dialogOpen } from "../utils/dialog";
@@ -9,6 +9,7 @@ import { useUserStore } from '../store/userStore';
 import { usePlayerStore } from '../store/playerStore';
 import { useOtherStore } from '../store/otherStore';
 import { insertCustomFontStyle } from '../utils/setFont';
+import FontSelect from '../components/FontSelect.vue';
 import { normalizeLocalDirPath, localDirPathEquals } from '../utils/localPath'
 import {
     isHydrogenWeb,
@@ -137,6 +138,32 @@ onActivated(() => {
         autoMirror.value = settings.other.autoMirror !== false
         githubMirror.value = settings.other.githubMirror || ''
         logToFile.value = settings.other.logToFile === true
+        if (isWindowsClient && systemFonts.value.length === 0) {
+            windowApi.getSystemFonts()
+                .then((list) => {
+                    if (Array.isArray(list)) systemFonts.value = list
+                })
+                .catch(() => {})
+        }
+        taskbarLyric.value = settings.other.taskbarLyric === true
+        taskbarLyricSize.value = Number(settings.other.taskbarLyricSize) || 20
+        taskbarLyricAlign.value = settings.other.taskbarLyricAlign || 'center'
+        taskbarLyricColor.value = settings.other.taskbarLyricColor || ''
+        taskbarLyricBackground.value = settings.other.taskbarLyricBackground || ''
+        taskbarLyricBackgroundAlpha.value = Number(settings.other.taskbarLyricBackgroundAlpha ?? 100)
+        taskbarLyricFontFamily.value = settings.other.taskbarLyricFontFamily || ''
+        taskbarLyricFontWeight.value = settings.other.taskbarLyricFontWeight || 'bold'
+        taskbarLyricItalic.value = settings.other.taskbarLyricItalic === true
+        taskbarLyricLetterSpacing.value = Number(settings.other.taskbarLyricLetterSpacing ?? 0)
+        taskbarLyricShadow.value = settings.other.taskbarLyricShadow !== false
+        taskbarLyricStroke.value = settings.other.taskbarLyricStroke === true
+        taskbarLyricStrokeColor.value = settings.other.taskbarLyricStrokeColor || '#ffffff'
+        taskbarLyricStrokeWidth.value = Number(settings.other.taskbarLyricStrokeWidth ?? 2)
+        taskbarLyricKaraoke.value = settings.other.taskbarLyricKaraoke === true
+        taskbarLyricKaraokeColor.value = settings.other.taskbarLyricKaraokeColor || '#e8384f'
+        taskbarLyricGlowRadius.value = Number(settings.other.taskbarLyricGlowRadius ?? 8)
+        taskbarLyricOffsetX.value = Number(settings.other.taskbarLyricOffsetX ?? 0)
+        taskbarLyricOffsetY.value = Number(settings.other.taskbarLyricOffsetY ?? 0)
         if (logToFile.value) refreshLogDir()
         if(settings.unblock) {
             unblockEnabled.value = settings.unblock.enabled
@@ -189,6 +216,25 @@ const setAppSettings = async () => {
             autoMirror: autoMirror.value,
             githubMirror: githubMirror.value,
             logToFile: logToFile.value,
+            taskbarLyric: taskbarLyric.value,
+            taskbarLyricSize: taskbarLyricSize.value,
+            taskbarLyricAlign: taskbarLyricAlign.value,
+            taskbarLyricColor: taskbarLyricColor.value,
+            taskbarLyricBackground: taskbarLyricBackground.value,
+            taskbarLyricBackgroundAlpha: taskbarLyricBackgroundAlpha.value,
+            taskbarLyricFontFamily: taskbarLyricFontFamily.value,
+            taskbarLyricFontWeight: taskbarLyricFontWeight.value,
+            taskbarLyricItalic: taskbarLyricItalic.value,
+            taskbarLyricLetterSpacing: taskbarLyricLetterSpacing.value,
+            taskbarLyricShadow: taskbarLyricShadow.value,
+            taskbarLyricStroke: taskbarLyricStroke.value,
+            taskbarLyricStrokeColor: taskbarLyricStrokeColor.value,
+            taskbarLyricStrokeWidth: taskbarLyricStrokeWidth.value,
+            taskbarLyricKaraoke: taskbarLyricKaraoke.value,
+            taskbarLyricKaraokeColor: taskbarLyricKaraokeColor.value,
+            taskbarLyricGlowRadius: taskbarLyricGlowRadius.value,
+            taskbarLyricOffsetX: taskbarLyricOffsetX.value,
+            taskbarLyricOffsetY: taskbarLyricOffsetY.value,
         },
         unblock: {
             enabled: unblockEnabled.value,
@@ -387,6 +433,74 @@ const setLyricCompletion = async () => {
     playerStore.lyricCompletion = lyricCompletion.value
     await setAppSettings()
     if (isWebClient) await persistWebSettingsFromForm()
+}
+// 任务栏歌词（仅 Windows 客户端有实现）
+const taskbarLyric = ref(false)
+const taskbarLyricSize = ref(20)
+const taskbarLyricAlign = ref('center')
+const taskbarLyricColor = ref('')
+const taskbarLyricBackground = ref('')
+const taskbarLyricBackgroundAlpha = ref(100)
+const taskbarLyricFontFamily = ref('')
+const taskbarLyricFontWeight = ref('bold')
+const taskbarLyricItalic = ref(false)
+const taskbarLyricLetterSpacing = ref(0)
+const taskbarLyricShadow = ref(true)
+const taskbarLyricStroke = ref(false)
+const taskbarLyricStrokeColor = ref('#ffffff')
+const taskbarLyricStrokeWidth = ref(2)
+const taskbarLyricKaraoke = ref(false)
+const taskbarLyricKaraokeColor = ref('#e8384f')
+const taskbarLyricGlowRadius = ref(8)
+const taskbarLyricOffsetX = ref(0)
+const taskbarLyricOffsetY = ref(0)
+const taskbarLyricAlignOptions = ref([
+    { label: '左侧', value: 'left' },
+    { label: '居中', value: 'center' },
+    { label: '右侧', value: 'right' },
+])
+const systemFonts = ref([])
+const taskbarFontWeightOptions = ref([
+    { label: '粗体', value: 'bold' },
+    { label: '中等', value: '500' },
+    { label: '常规', value: 'normal' },
+])
+const isWindowsClient = typeof windowApi !== 'undefined' && windowApi.platform === 'win32'
+// 空字符串表示「自动」/「透明」，与主进程侧的语义一致
+const taskbarLyricAutoColor = computed(() => !taskbarLyricColor.value)
+const taskbarLyricHasBackground = computed(() => !!taskbarLyricBackground.value)
+const setTaskbarLyric = async () => {
+    taskbarLyric.value = !taskbarLyric.value
+    await setAppSettings()
+    if (isWebClient) await persistWebSettingsFromForm()
+}
+const persistTaskbarLyricStyle = async () => {
+    await setAppSettings()
+    if (isWebClient) await persistWebSettingsFromForm()
+}
+const toggleTaskbarLyricAutoColor = () => {
+    taskbarLyricColor.value = taskbarLyricColor.value ? '' : '#141414'
+    persistTaskbarLyricStyle()
+}
+const toggleTaskbarLyricBackground = () => {
+    taskbarLyricBackground.value = taskbarLyricBackground.value ? '' : '#1c1c1c'
+    persistTaskbarLyricStyle()
+}
+const toggleTaskbarLyricItalic = () => {
+    taskbarLyricItalic.value = !taskbarLyricItalic.value
+    persistTaskbarLyricStyle()
+}
+const toggleTaskbarLyricShadow = () => {
+    taskbarLyricShadow.value = !taskbarLyricShadow.value
+    persistTaskbarLyricStyle()
+}
+const toggleTaskbarLyricStroke = () => {
+    taskbarLyricStroke.value = !taskbarLyricStroke.value
+    persistTaskbarLyricStyle()
+}
+const toggleTaskbarLyricKaraoke = () => {
+    taskbarLyricKaraoke.value = !taskbarLyricKaraoke.value
+    persistTaskbarLyricStyle()
 }
 const userLogout = () => {
     if (isLogin()) {
@@ -657,6 +771,195 @@ const testMirrors = async () => {
                                 <div class="button" @click="clearMusicVideo()">清除</div>
                             </div>
                         </div>
+                    </div>
+                </div>
+                <div class="settings-item" v-if="isWindowsClient">
+                    <h2 class="item-title">任务栏</h2>
+                    <div class="line"></div>
+                    <div class="item-options">
+                        <div class="option">
+                            <div class="option-name">任务栏歌词</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="setTaskbarLyric()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': taskbarLyric }">
+                                        {{ taskbarLyric ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="taskbarLyric"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <template v-if="taskbarLyric">
+                            <div class="option">
+                                <div class="option-name">歌词字号</div>
+                                <div class="option-operation">
+                                    <input v-model.number="taskbarLyricSize" name="taskbarLyricSize" type="number" min="10"
+                                        max="40" @change="persistTaskbarLyricStyle()">
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">文字颜色</div>
+                                <div class="option-operation taskbar-color-operation">
+                                    <div class="toggle" @click="toggleTaskbarLyricAutoColor()">
+                                        <div class="toggle-off" :class="{ 'toggle-on-in': taskbarLyricAutoColor }">
+                                            {{ taskbarLyricAutoColor ? '自动' : '自定义' }}</div>
+                                        <Transition name="toggle">
+                                            <div class="toggle-on" v-show="taskbarLyricAutoColor"></div>
+                                        </Transition>
+                                    </div>
+                                    <input v-if="!taskbarLyricAutoColor" class="color-input" type="color"
+                                        v-model="taskbarLyricColor" @change="persistTaskbarLyricStyle()">
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">背景色</div>
+                                <div class="option-operation taskbar-color-operation">
+                                    <div class="toggle" @click="toggleTaskbarLyricBackground()">
+                                        <div class="toggle-off" :class="{ 'toggle-on-in': taskbarLyricHasBackground }">
+                                            {{ taskbarLyricHasBackground ? '已开启' : '透明' }}</div>
+                                        <Transition name="toggle">
+                                            <div class="toggle-on" v-show="taskbarLyricHasBackground"></div>
+                                        </Transition>
+                                    </div>
+                                    <input v-if="taskbarLyricHasBackground" class="color-input" type="color"
+                                        v-model="taskbarLyricBackground" @change="persistTaskbarLyricStyle()">
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">显示位置</div>
+                                <div class="option-operation">
+                                    <Selector v-model="taskbarLyricAlign" :options="taskbarLyricAlignOptions"
+                                        @update:modelValue="persistTaskbarLyricStyle()"></Selector>
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">字体</div>
+                                <div class="option-operation">
+                                    <FontSelect v-model="taskbarLyricFontFamily" :fonts="systemFonts"
+                                        placeholder="内置（思源黑体）" @update:modelValue="persistTaskbarLyricStyle()">
+                                    </FontSelect>
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">字体样式</div>
+                                <div class="option-operation">
+                                    <Selector v-model="taskbarLyricFontWeight" :options="taskbarFontWeightOptions"
+                                        @update:modelValue="persistTaskbarLyricStyle()"></Selector>
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">斜体</div>
+                                <div class="option-operation">
+                                    <div class="toggle" @click="toggleTaskbarLyricItalic()">
+                                        <div class="toggle-off" :class="{ 'toggle-on-in': taskbarLyricItalic }">
+                                            {{ taskbarLyricItalic ? '已开启' : '已关闭' }}</div>
+                                        <Transition name="toggle">
+                                            <div class="toggle-on" v-show="taskbarLyricItalic"></div>
+                                        </Transition>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">字间距(px)</div>
+                                <div class="option-operation">
+                                    <input v-model.number="taskbarLyricLetterSpacing" name="taskbarLyricLetterSpacing" type="number"
+                                        min="-5" max="20" @change="persistTaskbarLyricStyle()">
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">文字阴影</div>
+                                <div class="option-operation">
+                                    <div class="toggle" @click="toggleTaskbarLyricShadow()">
+                                        <div class="toggle-off" :class="{ 'toggle-on-in': taskbarLyricShadow }">
+                                            {{ taskbarLyricShadow ? '已开启' : '已关闭' }}</div>
+                                        <Transition name="toggle">
+                                            <div class="toggle-on" v-show="taskbarLyricShadow"></div>
+                                        </Transition>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">文字描边</div>
+                                <div class="option-operation">
+                                    <div class="toggle" @click="toggleTaskbarLyricStroke()">
+                                        <div class="toggle-off" :class="{ 'toggle-on-in': taskbarLyricStroke }">
+                                            {{ taskbarLyricStroke ? '已开启' : '已关闭' }}</div>
+                                        <Transition name="toggle">
+                                            <div class="toggle-on" v-show="taskbarLyricStroke"></div>
+                                        </Transition>
+                                    </div>
+                                </div>
+                            </div>
+                            <template v-if="taskbarLyricStroke">
+                                <div class="option">
+                                    <div class="option-name">描边颜色</div>
+                                    <div class="option-operation taskbar-color-operation">
+                                        <input class="color-input" type="color" v-model="taskbarLyricStrokeColor"
+                                            @change="persistTaskbarLyricStyle()">
+                                    </div>
+                                </div>
+                                <div class="option">
+                                    <div class="option-name">描边宽度(px)</div>
+                                    <div class="option-operation">
+                                        <input v-model.number="taskbarLyricStrokeWidth" name="taskbarLyricStrokeWidth"
+                                            type="number" min="0" max="6" step="0.5" @change="persistTaskbarLyricStyle()">
+                                    </div>
+                                </div>
+                            </template>
+                            <div class="option">
+                                <div class="option-name">卡拉OK效果</div>
+                                <div class="option-operation">
+                                    <div class="toggle" @click="toggleTaskbarLyricKaraoke()">
+                                        <div class="toggle-off" :class="{ 'toggle-on-in': taskbarLyricKaraoke }">
+                                            {{ taskbarLyricKaraoke ? '已开启' : '已关闭' }}</div>
+                                        <Transition name="toggle">
+                                            <div class="toggle-on" v-show="taskbarLyricKaraoke"></div>
+                                        </Transition>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="option" v-if="taskbarLyricKaraoke">
+                                <div class="option-name">卡拉OK颜色</div>
+                                <div class="option-operation taskbar-color-operation">
+                                    <input class="color-input" type="color" v-model="taskbarLyricKaraokeColor"
+                                        @change="persistTaskbarLyricStyle()">
+                                </div>
+                            </div>
+                            <div class="option" v-if="taskbarLyricKaraoke">
+                                <div class="option-name">晕染半径(px)</div>
+                                <div class="option-operation">
+                                    <input v-model.number="taskbarLyricGlowRadius" name="taskbarLyricGlowRadius" type="number"
+                                        min="0" max="24" step="1" @change="persistTaskbarLyricStyle()">
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">水平偏移(px)</div>
+                                <div class="option-operation">
+                                    <input v-model.number="taskbarLyricOffsetX" name="taskbarLyricOffsetX" type="number" min="-6000"
+                                        max="6000" @change="persistTaskbarLyricStyle()">
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">垂直偏移(px)</div>
+                                <div class="option-operation">
+                                    <input v-model.number="taskbarLyricOffsetY" name="taskbarLyricOffsetY" type="number" min="-400"
+                                        max="400" @change="persistTaskbarLyricStyle()">
+                                </div>
+                            </div>
+                            <div class="option" v-if="taskbarLyricHasBackground">
+                                <div class="option-name">背景透明度(%)</div>
+                                <div class="option-operation">
+                                    <input v-model.number="taskbarLyricBackgroundAlpha" name="taskbarLyricBackgroundAlpha"
+                                        type="number" min="0" max="100" @change="persistTaskbarLyricStyle()">
+                                </div>
+                            </div>
+                            <div class="option">
+                                <div class="option-name">提示</div>
+                                <div class="option-operation option-hint">
+                                    文字颜色选「自动」时跟随 Windows 深浅色主题；显示位置相对整个任务栏（多屏时为主显示器）；偏移以像素为单位，正数向右/向下移动，实际可用范围取决于屏幕尺寸
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </div>
                 <div class="settings-item">
@@ -1253,6 +1556,37 @@ const testMirrors = async () => {
                             background-color: rgba(255, 255, 255, 0.35);
                             border: none;
                             outline: none;
+                        }
+
+                        /* 任务栏区块：颜色选择器与左右并排的开关 */
+                        .taskbar-color-operation {
+                            display: flex;
+                            flex-direction: row;
+                            align-items: center;
+                            justify-content: flex-end;
+
+                            .toggle {
+                                width: 200px;
+                            }
+                        }
+
+                        .color-input {
+                            width: 60px;
+                            height: 34px;
+                            padding: 2px 4px;
+                            margin-left: 8px;
+                            background-color: rgba(255, 255, 255, 0.35);
+                            border: none;
+                            outline: none;
+                            cursor: pointer;
+                        }
+
+                        .option-hint {
+                            max-width: 460px;
+                            font: 11px SourceHanSansCN-Bold;
+                            color: rgba(0, 0, 0, 0.55);
+                            line-height: 1.5;
+                            text-align: right;
                         }
 
                         .toggle {

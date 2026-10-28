@@ -4,9 +4,19 @@ const fs = require('fs')
 const path = require('path')
 const registerShortcuts = require('./shortcuts')
 const logger = require('./logger')
+const { applyTaskbarLyric, sendTaskbarLyric, setTaskbarStyle, styleFromSettings } = require('./taskbarLyric')
+const { fetchKugouKrc } = require('./kugouLyric')
 const Store = require('electron-store')
 const CancelToken = axios.CancelToken
 let cancel = null
+
+// 系统字体列表（任务栏歌词的字体选择器用），枚举一次后缓存
+let systemFontCache = null
+
+/** 任务栏歌词样式（字号/对齐/颜色/背景/字体/描边/卡拉OK）统一从设置对象里取 */
+function applyTaskbarStyleFromSettings(settings) {
+    setTaskbarStyle(styleFromSettings(settings?.other || {}))
+}
 
 // 主进程顶层预加载 UNM 模块，避免打包后在 handler 内动态 require 失败
 let unmMatch = null
@@ -104,9 +114,48 @@ module.exports = IpcMainEvent = (win, app) => {
             settingsStore.set('settings', parsed)
             logger.setEnabled(parsed?.other?.logToFile === true)
             registerShortcuts(win)
+            applyTaskbarStyleFromSettings(parsed)
+            applyTaskbarLyric(parsed?.other?.taskbarLyric === true)
         } catch (err) {
             console.error('[settings] 保存设置失败:', err)
         }
+    })
+    // 酷狗逐字歌词（yrc / AMLL 都没有时的第三来源）
+    ipcMain.handle('get-kugou-lyric', async (e, payload) => {
+        const krc = await fetchKugouKrc(payload || {})
+        return krc || null
+    })
+    // 系统已安装字体族（GDI+ 枚举，名字可直接写进 font-family）
+    ipcMain.handle('get-system-fonts', async () => {
+        if (systemFontCache && systemFontCache.length) return systemFontCache
+        if (process.platform !== 'win32') return []
+        try {
+            const { execFile } = require('child_process')
+            const stdout = await new Promise((resolve, reject) => {
+                execFile(
+                    'powershell.exe',
+                    [
+                        '-NoProfile',
+                        '-Command',
+                        // 中文系统下 powershell 默认按 GBK 输出，不转 UTF-8 会得到乱码字体名
+                        '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.Drawing; [System.Drawing.FontFamily]::Families | ForEach-Object { $_.Name }',
+                    ],
+                    { timeout: 15000, windowsHide: true, maxBuffer: 2 * 1024 * 1024 },
+                    (err, out) => (err ? reject(err) : resolve(out)),
+                )
+            })
+            const fonts = stdout.split(/\r?\n/).map((name) => name.trim()).filter(Boolean)
+            fonts.sort((a, b) => a.localeCompare(b, 'zh-CN'))
+            if (fonts.length) systemFontCache = fonts
+            return fonts
+        } catch (err) {
+            console.error('[fonts] 枚举系统字体失败:', err.message)
+            return []
+        }
+    })
+    // 任务栏歌词：渲染进程推送当前歌词行
+    ipcMain.on('taskbar-lyric:set', (e, payload) => {
+        sendTaskbarLyric(payload)
     })
     ipcMain.handle('get-settings', async () => {
         const settings =  await settingsStore.get('settings')
@@ -121,6 +170,25 @@ module.exports = IpcMainEvent = (win, app) => {
             if (!Object.prototype.hasOwnProperty.call(settings.other, 'autoMirror')) settings.other.autoMirror = true
             if (!Object.prototype.hasOwnProperty.call(settings.other, 'githubMirror')) settings.other.githubMirror = ''
             if (!Object.prototype.hasOwnProperty.call(settings.other, 'logToFile')) settings.other.logToFile = false
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyric')) settings.other.taskbarLyric = false
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricSize')) settings.other.taskbarLyricSize = 20
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricAlign')) settings.other.taskbarLyricAlign = 'center'
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricColor')) settings.other.taskbarLyricColor = ''
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricBackground')) settings.other.taskbarLyricBackground = ''
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricBackgroundAlpha')) settings.other.taskbarLyricBackgroundAlpha = 100
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricFontFamily')) settings.other.taskbarLyricFontFamily = ''
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricFontWeight')) settings.other.taskbarLyricFontWeight = 'bold'
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricItalic')) settings.other.taskbarLyricItalic = false
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricLetterSpacing')) settings.other.taskbarLyricLetterSpacing = 0
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricShadow')) settings.other.taskbarLyricShadow = true
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricStroke')) settings.other.taskbarLyricStroke = false
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricStrokeColor')) settings.other.taskbarLyricStrokeColor = '#ffffff'
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricStrokeWidth')) settings.other.taskbarLyricStrokeWidth = 2
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricKaraoke')) settings.other.taskbarLyricKaraoke = false
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricKaraokeColor')) settings.other.taskbarLyricKaraokeColor = '#e8384f'
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricGlowRadius')) settings.other.taskbarLyricGlowRadius = 8
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricOffsetX')) settings.other.taskbarLyricOffsetX = 0
+            if (!Object.prototype.hasOwnProperty.call(settings.other, 'taskbarLyricOffsetY')) settings.other.taskbarLyricOffsetY = 0
             return settings
         }
         else {
@@ -198,6 +266,25 @@ module.exports = IpcMainEvent = (win, app) => {
                     autoMirror: true,
                     githubMirror: '',
                     logToFile: false,
+                    taskbarLyric: false,
+                    taskbarLyricSize: 20,
+                    taskbarLyricAlign: 'center',
+                    taskbarLyricColor: '',
+                    taskbarLyricBackground: '',
+                    taskbarLyricBackgroundAlpha: 100,
+                    taskbarLyricFontFamily: '',
+                    taskbarLyricFontWeight: 'bold',
+                    taskbarLyricItalic: false,
+                    taskbarLyricLetterSpacing: 0,
+                    taskbarLyricShadow: true,
+                    taskbarLyricStroke: false,
+                    taskbarLyricStrokeColor: '#ffffff',
+                    taskbarLyricStrokeWidth: 2,
+                    taskbarLyricKaraoke: false,
+                    taskbarLyricKaraokeColor: '#e8384f',
+                    taskbarLyricGlowRadius: 8,
+                    taskbarLyricOffsetX: 0,
+                    taskbarLyricOffsetY: 0,
                 },
                 unblock: {
                     enabled: true

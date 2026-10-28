@@ -530,29 +530,76 @@ export async function completeMissingLyric(song, currentTargetId) {
     }
 }
 
+/**
+ * 部分歌曲的 /lyric/new 返回的是逐行 JSON 富文本（{"t":0,"c":[{"tx":"作词: "}]}），
+ * 前端 LRC 解析器读不了；这里统一转回标准 LRC 文本。
+ */
+function normalizeLyricPayload(payload) {
+    if (!payload || typeof payload !== 'object') return payload
+    // 注意歌词可能是「混合格式」：前几行是 JSON 富文本，后面是普通 LRC 行，
+    // 所以逐行判断，能解析成 JSON 的才转换，其余原样保留
+    const toLrc = (text) => {
+        if (typeof text !== 'string') return text
+        let converted = 0
+        const rows = text.split('\n').map((row) => {
+            const trimmed = row.trim()
+            if (!trimmed.startsWith('{')) return row
+            try {
+                const line = JSON.parse(trimmed)
+                const ms = Math.max(0, Number(line.t) || 0)
+                const content = (line.c || []).map((part) => part.tx || '').join('')
+                const mm = String(Math.floor(ms / 60000)).padStart(2, '0')
+                const ss = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')
+                const xxx = String(Math.floor(ms % 1000)).padStart(3, '0')
+                converted += 1
+                return `[${mm}:${ss}.${xxx}]${content}`
+            } catch (_) {
+                return row
+            }
+        })
+        return converted ? rows.join('\n') : text
+    }
+    const next = { ...payload }
+    if (next.lrc && typeof next.lrc.lyric === 'string') {
+        next.lrc = { ...next.lrc, lyric: toLrc(next.lrc.lyric) }
+    }
+    return next
+}
+
 // 歌词加载：云盘歌曲（id ≥ 8e8）无歌词时回退到云盘歌词接口；未命中时支持歌词补全计划
 function loadLyric(id, song) {
     const curSong = song || (songList.value || [])[currentIndex.value]
+    // 每次写入新歌词都先清空解析结果，否则 Lyric.vue 只在 lyricsObjArr 为空时才重新解析，
+    // 小窗/播放页会一直沿用上一首的歌词（任务栏歌词同样会显示错行）
+    const applyLyric = (next) => {
+        lyricsObjArr.value = null
+        lyric.value = normalizeLyricPayload(next)
+        // 播放页开着时歌词区应自动就绪（恢复播放时不会走 getSongUrl 里的那段）
+        if (!lyricShow.value && !widgetState.value) {
+            lyricShow.value = true
+            playerChangeSong.value = false
+        }
+    }
     getLyric(id).then(songLiric => {
         if (songLiric?.lrc?.lyric) {
-            lyric.value = songLiric
+            applyLyric(songLiric)
             return
         }
         if (id >= 800000000 && userStore.user) {
             getCloudLyric({ uid: userStore.user.userId, sid: id }).then(res => {
                 const lrc = res?.data?.lyric || res?.lyric || ''
                 if (lrc) {
-                    lyric.value = { lrc: { lyric: lrc } }
+                    applyLyric({ lrc: { lyric: lrc } })
                 } else {
-                    lyric.value = songLiric
+                    applyLyric(songLiric)
                     completeMissingLyric(curSong, id)
                 }
             }).catch(() => {
-                lyric.value = songLiric
+                applyLyric(songLiric)
                 completeMissingLyric(curSong, id)
             })
         } else {
-            lyric.value = songLiric
+            applyLyric(songLiric)
             completeMissingLyric(curSong, id)
         }
     }).catch(() => {

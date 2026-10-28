@@ -74,13 +74,21 @@ export function getMusicUrl(id,level) {
  * @returns
  */
  export function getLyric(id) {
+    // /lyric/new 在 lrc 之外额外返回逐字歌词 yrc（每字起始时间+时长），用于卡拉OK精确对齐；
+    // 接口不可用时回落到旧的 /lyric
     return request({
+        url: '/lyric/new',
+        method: 'get',
+        params: {
+            id: id,
+        }
+    }).catch(() => request({
         url: '/lyric',
         method: 'get',
         params: {
             id: id,
         }
-    })
+    }))
 }
 
 /**

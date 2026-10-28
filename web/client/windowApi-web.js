@@ -175,6 +175,11 @@ export function installWebWindowApi() {
     setSettings(settings) {
       return send('set-settings', settings)
     },
+    // Web 端没有任务栏歌词
+    platform: 'web',
+    setTaskbarLyric() {},
+    getSystemFonts: async () => [],
+    getKugouLyric: async () => null,
     getWebProfile: () => invoke('get-web-profile'),
     setWebProfile: (profile) => invoke('set-web-profile', [profile]),
     clearWebProfile: () => invoke('clear-web-profile'),
