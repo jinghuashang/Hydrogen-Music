@@ -184,7 +184,8 @@ function createOverlay() {
         overlay = null
     })
     if (isDev()) overlay.loadURL(DEV_SERVER_URL)
-    else overlay.loadFile(path.join(__dirname, 'dist', OVERLAY_HTML))
+    // 打包后本文件位于 app.asar/src/electron，页面在 app.asar/dist
+    else overlay.loadFile(path.join(__dirname, '..', '..', 'dist', OVERLAY_HTML))
     return overlay
 }
 
