@@ -113,11 +113,21 @@ jobs:
           name: ${{ matrix.os }}
           path: release
 
+      # softprops/action-gh-release@v1 在本仓库不会实际上传附件（release 里只有源码），
+      # 这里直接用 gh 上传，并把 Release 标题统一成 "Hydrogen Music vX.Y.Z"
       - name: Release
-        uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          files: release/**/*
-          generate_release_notes: false
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          TITLE="Hydrogen Music ${TAG}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TITLE" --notes "" || true
+          fi
+          gh release edit "$TAG" --title "$TITLE" || true
+          while IFS= read -r f; do
+            echo "uploading $f"
+            gh release upload "$TAG" "$f" --clobber
+          done < <(find release -maxdepth 2 -type f)
