@@ -106,8 +106,20 @@ jobs:
               *) continue ;;
             esac
             echo "uploading $f"
-            gh release upload "$TAG" "$f" --clobber
-            count=$((count + 1))
+            uploaded=0
+            for attempt in 1 2 3; do
+              if gh release upload "$TAG" "$f" --clobber; then
+                uploaded=1
+                break
+              fi
+              echo "upload failed (attempt $attempt), retrying in 15s"
+              sleep 15
+            done
+            if [ "$uploaded" -eq 1 ]; then
+              count=$((count + 1))
+            else
+              echo "::warning::upload failed after retries: $f"
+            fi
           done
           echo "uploaded $count file(s)"
           if [ "$count" -eq 0 ]; then
