@@ -127,7 +127,19 @@ jobs:
             gh release create "$TAG" --title "$TITLE" --notes "" || true
           fi
           gh release edit "$TAG" --title "$TITLE" || true
-          while IFS= read -r f; do
+          # 注意：Windows runner 上 PATH 里的 find.exe 是「文本查找」工具，
+          # 不是 git-bash 的 find，用它筛文件会得到空结果（步骤还是绿的但什么都没上传），
+          # 这里改用 bash 的 globstar 遍历产物目录
+          shopt -s nullglob globstar
+          count=0
+          for f in release/**/*; do
+            [ -f "$f" ] || continue
             echo "uploading $f"
             gh release upload "$TAG" "$f" --clobber
-          done < <(find release -maxdepth 2 -type f)
+            count=$((count + 1))
+          done
+          echo "uploaded $count file(s)"
+          if [ "$count" -eq 0 ]; then
+            echo "::error::release 目录里没有找到任何产物"
+            exit 1
+          fi
