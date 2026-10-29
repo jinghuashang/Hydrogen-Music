@@ -15,7 +15,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 12px;
+    /* 左右留够空间：句首/句尾字的晕染会向外扩散 ~14px，padding 太小会被窗口边缘裁掉 */
+    padding: 0 26px;
     box-sizing: border-box;
     white-space: nowrap;
     font-family: SourceHanSansCN-Bold, Inter, Avenir, Helvetica, Arial, sans-serif;
@@ -53,14 +54,25 @@ body {
     display: inline-block;
 }
 
+
 .lyric-text,
 .lyric-fill {
     display: block;
 }
 
-/* 未唱的字：文字色本身带透明度（见脚本），这里只做轻微模糊 */
+/* 逐字位移用：inline-block 才能应用 transform */
+.lyric-text span,
+.lyric-fill span {
+    display: inline-block;
+    vertical-align: baseline;
+    /* 抬升带缓动；新一行创建时直接落在“压低”位置（见脚本），因此换行不会有下落动画 */
+    transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1), text-shadow 0.45s ease-out,
+        filter 0.4s ease-out;
+}
+
+/* 参考 Alger：当前行内不模糊，只靠卡拉OK填充区分已唱/未唱 */
 #taskbar-lyric.karaoke .lyric-text {
-    filter: blur(0.4px);
+    filter: none;
 }
 
 /* 卡拉OK填充层：叠在底色文字上，按进度从左往右裁切 */
@@ -69,7 +81,9 @@ body {
     inset: 0;
     color: var(--karaoke-color, #e8384f);
     opacity: 0;
-    clip-path: inset(0 calc(100% - var(--karaoke, 100%)) 0 0);
+    /* 上下各放宽 0.5em：拉丁字母的降部（g/y/p 等）会伸出行盒，
+       不放宽的话填充层会被裁掉一截，看起来“没盖全” */
+    clip-path: inset(-0.5em calc(100% - var(--karaoke, 100%)) -0.5em 0);
     /* 进度由逐帧插值驱动，这里不再加过渡，避免 4Hz 推送被二次平滑成台阶 */
     transition: opacity 0.16s ease;
     will-change: clip-path;
@@ -84,11 +98,7 @@ body {
     transition: text-shadow 0.35s ease-out, filter 0.35s ease-out;
 }
 
-.lyric-fill span.is-singing,
-.lyric-text span {
-    /* 光晕由脚本少量关键帧驱动，过渡负责补间 */
-    transition: text-shadow 0.45s ease-out;
-}
+
 
 #taskbar-lyric.is-empty {
     opacity: 0;

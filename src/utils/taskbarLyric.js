@@ -24,8 +24,9 @@ function parseYrc(raw) {
         YRC_WORD.lastIndex = 0
         let wordMatch
         while ((wordMatch = YRC_WORD.exec(lineMatch[3])) !== null) {
-            const text = wordMatch[3].trim()
-            if (!text) continue
+            // 保留原始空格：英文逐字歌词的空格就在字与字之间，trim 掉会变成一整串
+            const text = wordMatch[3]
+            if (!text.trim()) continue
             words.push({
                 t: Number(wordMatch[1]) / 1000,
                 d: Number(wordMatch[2]) / 1000,

@@ -5,7 +5,7 @@ const root = document.getElementById('taskbar-lyric')
 const textEl = document.getElementById('taskbar-lyric-text')
 const fillEl = document.getElementById('taskbar-lyric-fill')
 const MIN_FONT_SIZE = 11
-const HORIZONTAL_PADDING = 12
+const HORIZONTAL_PADDING = 26
 const ALIGN_MAP = { left: 'flex-start', center: 'center', right: 'flex-end' }
 const DARK_TEXT = '#141414'
 const LIGHT_TEXT = '#f8f8f8'
@@ -76,7 +76,9 @@ function applyStyle(payload) {
     }
     root.style.color = color
     // 未唱部分用半透明文字色（而非整层 opacity）：光晕挂在同一层的字上时不会被一起变淡
-    textEl.style.color = payload?.karaoke === true ? toRgba(color, 45) || color : ''
+    // 参考 Alger：当前行未唱的部分是「原文字色」而不是半透明，深浅差异靠卡拉OK色体现
+    textEl.style.color = ''
+    textEl.style.textShadow = ''
 
     // 浅色字配深阴影、深色字配白描边，保证压在任务栏图标上也读得清
     const textLuma = luminance(color)
@@ -90,6 +92,9 @@ function applyStyle(payload) {
     // 晕染用低透明度：半径大但很淡，才不会把字的内部糊成色块
     root.style.setProperty('--karaoke-glow', toRgba(karaokeColor, 26) || 'rgba(232, 56, 79, 0.26)')
     root.style.setProperty('--karaoke-glow-soft', toRgba(karaokeColor, 13) || 'rgba(232, 56, 79, 0.13)')
+    // 正在唱的（尤其是句尾长音）用更高不透明度，才看得出明显的晕染
+    root.style.setProperty('--karaoke-glow-strong', toRgba(karaokeColor, 55) || 'rgba(232, 56, 79, 0.55)')
+    root.style.setProperty('--karaoke-glow-strong-soft', toRgba(karaokeColor, 28) || 'rgba(232, 56, 79, 0.28)')
 }
 
 function measureWords() {
@@ -105,11 +110,16 @@ function renderLine(line) {
         if (words) {
             textEl.textContent = ''
             fillEl.textContent = ''
+            const startY = 'translateY(0px)'
             for (const word of words) {
                 const base = document.createElement('span')
                 base.textContent = word.c
+                base.style.transform = startY
+                // 初始给一层同半径的透明阴影：这样字第一次亮起来时是渐变而不是“啪”一下加重
+                base.style.textShadow = transparentGlow()
                 const fill = document.createElement('span')
                 fill.textContent = word.c
+                fill.style.transform = startY
                 textEl.appendChild(base)
                 fillEl.appendChild(fill)
             }
@@ -119,6 +129,8 @@ function renderLine(line) {
         }
         wordWidths = []
         singingElement = null
+        previousBaseElement = null
+        litCount = -1
         // 重新触发入场动画
         root.classList.remove('is-enter')
         void root.offsetWidth
@@ -165,14 +177,78 @@ function sungPixels(line, time) {
 }
 
 // 正在唱的字加一层晕染光；拖长音时半径随进度继续变大，且持续到该字结束
+const WORD_RAISE = 1
+
+/** 已唱到的字整体抬高、未唱的压低，形成向上的“台阶” */
+let lastUpTo = -1
+
+function applyWordOffsets(upTo, animate = true) {
+    lastUpTo = upTo
+    const base = textEl.children
+    const fill = fillEl.children
+    for (let i = 0; i < base.length; i += 1) {
+        const raised = upTo >= 0 && i <= upTo
+        // 未唱的字保持原始基线（不再下压），唱到的字只向上抬
+        const value = raised ? `translateY(-${WORD_RAISE}px)` : 'translateY(0px)'
+        // 行刚重建时用瞬时赋值：否则已唱字会先落到基线再缓动抬回，看起来像"下沉又回弹"
+        if (!animate) {
+            base[i].style.transition = 'none'
+            if (fill[i]) fill[i].style.transition = 'none'
+        }
+        if (base[i].style.transform !== value) base[i].style.transform = value
+        const mirror = fill[i]
+        if (mirror && mirror.style.transform !== value) mirror.style.transform = value
+        if (!animate) {
+            // 强制重排后恢复过渡，后续唱字仍然沿动画走
+            void base[i].offsetWidth
+            base[i].style.transition = ''
+            if (mirror) mirror.style.transition = ''
+        }
+    }
+}
+
+/** 已唱完的字把底色也改成卡拉OK色：填充层与底色层叠在一起时，
+ *  字形边缘的抗锯齿会露出一点底色，颜色不一致就会像“描边” */
+function applyWordColors(upTo, finished) {
+    const base = textEl.children
+    for (let i = 0; i < base.length; i += 1) {
+        // 底色层永远保持原歌词颜色：进度颜色完全由填充层 clip 绘制。
+        // 若唱完后再把底色层切到 karaoke 色，两层同色叠加会让字在整字定型瞬间变深
+        if (!base[i].style.textShadow || base[i].style.textShadow.includes('transparent')) {
+            delete base[i].dataset.glow
+            paintGlow(base[i], 1, false)
+        }
+    }
+}
+
+/**
+ * 晕染淡出：直接把 text-shadow 清空会瞬间消失（none 无法参与过渡），
+ * 这里保留同样的半径、只把颜色换成 transparent，交给 CSS 的 0.45s 过渡补间
+ */
+function fadeGlowOut(element) {
+    if (!element) return
+    const current = element.style.textShadow
+    if (!current) return
+    element.style.textShadow = current.replace(/var\([^)]*\)/g, 'transparent')
+}
+
 let singingElement = null
+// 上一个唱过的字：保留一层较弱的柔光，形成“强光 → 柔光 → 淡出”的交接
+let previousBaseElement = null
 const glowRadius = () => Math.max(0, Math.min(24, Number(lastPayload?.glowRadius) || 8))
 
 /**
  * 晕染只做「少量关键帧 + CSS 过渡」：每帧改 text-shadow 会不断打断过渡并触发重绘，
  * 看起来一卡一卡的。这里强度变化不足 0.12 就跳过，剩下的交给 0.45s 的过渡补间。
  */
-function paintGlow(element, strength) {
+/** 与 paintGlow 相同半径、但全透明的阴影，用于让“从无到有”也能走过渡 */
+function transparentGlow() {
+    const radius = glowRadius()
+    const near = Math.max(2, radius * 0.16)
+    return `0 0 ${near.toFixed(1)}px transparent, 0 0 ${(near * 2.1).toFixed(1)}px transparent, 0 0 ${(near * 3.6).toFixed(1)}px transparent`
+}
+
+function paintGlow(element, strength, strong = false) {
     if (!element) return
     const radius = glowRadius()
     if (radius <= 0) {
@@ -184,22 +260,51 @@ function paintGlow(element, strength) {
     const applied = Number(element.dataset.glowStrength)
     if (Number.isFinite(applied) && Math.abs(applied - strength) < 0.12) return
     element.dataset.glowStrength = String(strength)
-    if (element.style.filter) element.style.filter = ''
-    // 贴着字形的大半径低透明度阴影：光沿着笔画化开，字的内部仍然透得出来
-    const inner = Math.max(1, radius * 0.4 * strength)
-    const outer = Math.max(1, radius * strength)
-    element.style.textShadow = `0 0 ${inner.toFixed(1)}px var(--karaoke-glow), 0 0 ${outer.toFixed(1)}px var(--karaoke-glow-soft)`
+    // 描边式渐晕：三层小半径阴影贴着笔画逐层放大、逐层变淡，
+    // 半径小到不会糊住字内部，也不会出现多方向叠层那种重影
+    const near = Math.max(2, radius * 0.16)
+    const mid = near * 2.1
+    const far = near * 3.6
+    const nearColor = strong ? 'var(--karaoke-glow-strong)' : 'var(--karaoke-glow)'
+    const midColor = strong ? 'var(--karaoke-glow)' : 'var(--karaoke-glow)'
+    const farColor = 'var(--karaoke-glow-soft)'
+    element.style.filter = ''
+    element.style.textShadow = `0 0 ${near.toFixed(1)}px ${nearColor}, 0 0 ${mid.toFixed(1)}px ${midColor}, 0 0 ${far.toFixed(1)}px ${farColor}`
 }
 
 let singingBaseElement = null
 
-function updateSingingWord(index, word, time) {
+let litCount = -1
+
+/** 已唱过的字保持一层基础晕染，让整句已唱部分连成一条光带 */
+function paintSungGlow(sungCount) {
+    if (sungCount === litCount) return
+    litCount = sungCount
+    const bases = textEl.children
+    for (let i = 0; i < bases.length; i += 1) {
+        const el = bases[i]
+        if (i < sungCount) {
+            if (!el.dataset.sungGlow) {
+                el.dataset.sungGlow = '1'
+                el.dataset.glowStrength = ''
+                paintGlow(el, 1)
+            }
+        } else if (el.dataset.sungGlow) {
+            delete el.dataset.sungGlow
+            el.style.textShadow = ''
+            el.style.filter = ''
+            el.dataset.glowStrength = ''
+        }
+    }
+}
+
+function updateSingingWord(index, word, time, totalWords) {
+    paintSungGlow(-1)
     const next = index >= 0 ? fillEl.children[index] || null : null
     const nextBase = index >= 0 ? textEl.children[index] || null : null
     if (next !== singingElement) {
         if (singingElement) {
             singingElement.classList.remove('is-singing')
-            singingElement.style.textShadow = ''
             singingElement.style.filter = ''
             singingElement.dataset.glowStrength = ''
         }
@@ -207,11 +312,7 @@ function updateSingingWord(index, word, time) {
         if (singingElement) singingElement.classList.add('is-singing')
     }
     if (nextBase !== singingBaseElement) {
-        if (singingBaseElement) {
-            singingBaseElement.style.textShadow = ''
-            singingBaseElement.style.filter = ''
-            singingBaseElement.dataset.glowStrength = ''
-        }
+        // 底色层的晕染是静态底纹，不随唱字状态增减
         singingBaseElement = nextBase
     }
     if (!singingElement) {
@@ -221,19 +322,12 @@ function updateSingingWord(index, word, time) {
         }
         return
     }
-    // 长音（>=0.8s）：前 75% 把晕染越推越大（最大 2.4 倍），最后 25% 才开始收回
-    const duration = Number(word?.d) || 0
-    let strength = 1
-    if (duration >= 0.8) {
-        const progress = Math.min(1, Math.max(0, (time - word.t) / duration))
-        const peak = 3.0
-        strength = progress <= 0.75
-            ? 1 + (peak - 1) * (progress / 0.75)
-            : peak - (peak - 1) * ((progress - 0.75) / 0.25)
+    // 只给底色层加光晕：填充层被 clip-path 按进度裁切，挂在它上面的光会被裁成直角
+    if (singingElement) {
+        singingElement.style.textShadow = ''
+        singingElement.style.filter = ''
     }
-    paintGlow(singingElement, strength)
-    // 底色层没有被 clip 裁切，光晕能完整地晕出字外
-    paintGlow(singingBaseElement, strength)
+    // 晕染只作用于未唱的字；当前唱字/已唱字不带光晕（见 applyWordColors）
 }
 
 function paint(line, time) {
@@ -244,10 +338,23 @@ function paint(line, time) {
     if (line.words && line.words.length) {
         const { px, singingIndex } = sungPixels(line, time)
         root.style.setProperty('--karaoke', `${px.toFixed(1)}px`)
-        updateSingingWord(singingIndex, line.words[singingIndex], time)
+        // 一句唱完后（还没切到下一句）保持整句抬起，不要因为“没有正在唱的字”而整体回落
+        const lastWord = line.words[line.words.length - 1]
+        const lineFinished = !!lastWord && time >= lastWord.t + lastWord.d
+        const lastIndex = line.words.length - 1
+        applyWordOffsets(lineFinished ? lastIndex : singingIndex)
+        applyWordColors(singingIndex, lineFinished)
+        // 一句唱完后把晕染留在最后一个字上，直到下一句开始才换走，
+        // 避免句尾和下一句之间留很长时间时光晕突然消失
+        updateSingingWord(
+            lineFinished ? lastIndex : singingIndex,
+            line.words[lineFinished ? lastIndex : singingIndex],
+            time,
+            line.words.length,
+        )
         return
     }
-    updateSingingWord(-1)
+    updateSingingWord(-1, null, time, 0)
     const duration = Number(line.duration) || 0
     const percent = duration > 0
         ? Math.min(1, Math.max(0, (time - line.start) / duration))

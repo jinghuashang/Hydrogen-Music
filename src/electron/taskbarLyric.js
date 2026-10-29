@@ -96,6 +96,17 @@ function positionOverlay() {
         width: area.width,
         height: area.height,
     })
+    // Windows 会给无边框窗口套一个最小高度（实测任务栏 48px 时窗口被撑到 56px），
+    // 这会让内容比任务栏中心低 4px；这里按实际高度把窗口上移，让文字与任务栏垂直居中
+    const actual = overlay.getBounds()
+    if (actual.height > area.height) {
+        overlay.setBounds({
+            x: actual.x,
+            y: Math.round(area.y + style.offsetY + area.height / 2 - actual.height / 2),
+            width: actual.width,
+            height: actual.height,
+        })
+    }
 }
 
 function normalizeWords(words) {
