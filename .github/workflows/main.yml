@@ -96,8 +96,15 @@ jobs:
           # 这里改用 bash 的 globstar 遍历产物目录
           shopt -s nullglob globstar
           count=0
-          for f in release/* release/**/*; do
+          # 只取产物目录下这一层的文件：release/<version>/*.exe|zip|dmg|yml
+          # 不能再往里递归，否则会把 win-unpacked / *.app 里的 Chromium 内部文件（.pak/.dll）
+          # 一起传上 Release
+          for f in release/* release/*/*; do
             [ -f "$f" ] || continue
+            case "$f" in
+              *.exe|*.zip|*.dmg|*.yml|*.blockmap) ;;
+              *) continue ;;
+            esac
             echo "uploading $f"
             gh release upload "$TAG" "$f" --clobber
             count=$((count + 1))
