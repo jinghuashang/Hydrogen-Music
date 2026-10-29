@@ -2,11 +2,9 @@ name: Release
 
 on:
   workflow_dispatch:
+  # 只按 tag 构建：同一次提交如果既推 main 又推 tag，会各触发一次构建，
+  # 其中 main 那次不会发布（Release 步骤只认 tag），纯属浪费 runner 时间
   push:
-    branches:
-      - main
-    paths:
-      - 'package.json'
     tags:
       - v*
 
