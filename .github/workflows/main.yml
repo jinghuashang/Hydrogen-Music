@@ -69,43 +69,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cleanup Artifacts for Windows
-        if: matrix.os == 'windows-latest'
-        run: |
-          node -e "
-          const fs = require('fs');
-          const path = require('path');
-          const dir = path.resolve('release');
-          if (fs.existsSync(dir)) {
-            for (const f of fs.readdirSync(dir)) {
-              const p = path.join(dir, f);
-              if (fs.statSync(p).isDirectory()) {
-                fs.rmSync(p, { recursive: true, force: true });
-              } else if (!f.endsWith('.exe')) {
-                fs.unlinkSync(p);
-              }
-            }
-          }
-          "
 
-      - name: Cleanup Artifacts for macOS
-        if: matrix.os == 'macos-latest'
-        run: |
-          node -e "
-          const fs = require('fs');
-          const path = require('path');
-          const dir = path.resolve('release');
-          if (fs.existsSync(dir)) {
-            for (const f of fs.readdirSync(dir)) {
-              const p = path.join(dir, f);
-              if (fs.statSync(p).isDirectory()) {
-                fs.rmSync(p, { recursive: true, force: true });
-              } else if (!f.endsWith('.dmg') && !f.endsWith('.zip')) {
-                fs.unlinkSync(p);
-              }
-            }
-          }
-          "
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -132,7 +96,7 @@ jobs:
           # 这里改用 bash 的 globstar 遍历产物目录
           shopt -s nullglob globstar
           count=0
-          for f in release/**/*; do
+          for f in release/* release/**/*; do
             [ -f "$f" ] || continue
             echo "uploading $f"
             gh release upload "$TAG" "$f" --clobber
