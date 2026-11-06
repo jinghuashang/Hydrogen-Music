@@ -299,4 +299,32 @@ function styleFromSettings(other = {}) {
     }
 }
 
-module.exports = { applyTaskbarLyric, sendTaskbarLyric, setTaskbarStyle, styleFromSettings }
+/** 桌面歌词独立样式：字段与任务栏同构，只是读取 desktopLyric* 前缀 */
+function desktopStyleFromSettings(other = {}) {
+    const pick = (key, fallback) => {
+        const value = other[`desktop${key}`]
+        return value === undefined || value === null ? fallback : value
+    }
+    return {
+        fontSize: Number(pick('LyricSize', 32)) || 32,
+        align: pick('LyricAlign', 'center'),
+        color: pick('LyricColor', ''),
+        background: pick('LyricBackground', ''),
+        backgroundAlpha: pick('LyricBackgroundAlpha', 100),
+        fontFamily: pick('LyricFontFamily', ''),
+        fontWeight: pick('LyricFontWeight', 'bold'),
+        italic: pick('LyricItalic', false),
+        letterSpacing: pick('LyricLetterSpacing', 0),
+        shadow: pick('LyricShadow', true),
+        stroke: pick('LyricStroke', false),
+        strokeColor: pick('LyricStrokeColor', '#ffffff'),
+        strokeWidth: pick('LyricStrokeWidth', 2),
+        karaoke: pick('LyricKaraoke', true),
+        karaokeColor: pick('LyricKaraokeColor', '#31C27C'),
+        glowRadius: pick('LyricGlowRadius', 14),
+        offsetX: 0,
+        offsetY: 0,
+    }
+}
+
+module.exports = { applyTaskbarLyric, sendTaskbarLyric, setTaskbarStyle, styleFromSettings, desktopStyleFromSettings }

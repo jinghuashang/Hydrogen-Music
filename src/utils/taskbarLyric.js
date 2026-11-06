@@ -14,7 +14,7 @@ import { getLyric } from '../api/song'
 const YRC_LINE = /^\[(\d+),(\d+)\](.*)$/
 const YRC_WORD = /\((\d+),(\d+),\d+\)([^()]*)/g
 
-function parseYrc(raw) {
+export function parseYrc(raw) {
     if (!raw) return null
     const lines = []
     for (const row of raw.split('\n')) {
@@ -50,7 +50,7 @@ const KRC_CACHE_PREFIX = 'krc2:lines:'
 const KRC_CACHE_LIMIT = 80
 
 /** 酷狗 KRC：`[行开始ms,行时长ms]<字开始ms,字时长ms,0>字…` */
-function parseKrc(raw) {
+export function parseKrc(raw) {
     if (!raw) return null
     const lines = []
     for (const row of String(raw).split('\n')) {
@@ -165,7 +165,7 @@ function similarity(a, b) {
  * 文本匹配到同一行后，保留字与字之间的相对节奏，整体平移到本曲该行的开始时间；
  * 若 KRC 那行比本曲行长还长，再等比压缩到行长内。匹配不上的行返回 null。
  */
-function anchorKrcToLines(ncmLines, krcLines) {
+export function anchorKrcToLines(ncmLines, krcLines) {
     if (!Array.isArray(ncmLines) || !ncmLines.length) return null
     if (!Array.isArray(krcLines) || !krcLines.length) return null
     const used = new Set()
@@ -209,6 +209,12 @@ function anchorKrcToLines(ncmLines, krcLines) {
     // 命中太少说明两份歌词不是同一版，整体弃用
     if (matched < Math.max(3, Math.ceil(ncmLines.length * 0.3))) return null
     return result
+}
+
+let taskbarStateSink = null
+/** 订阅任务栏歌词每帧算出的状态（lines 含逐字 words），供桌面歌词复用同一份数据 */
+export function onTaskbarState(cb) {
+    taskbarStateSink = cb
 }
 
 export function startTaskbarLyricSync() {
@@ -397,11 +403,13 @@ export function startTaskbarLyricSync() {
         }))
 
     const send = (state) => {
-        windowApi.setTaskbarLyric({
+        const plain = {
             lines: toPlainLines(state.lines),
             now: state.now || 0,
             playing: state.playing === true,
-        })
+        }
+        windowApi.setTaskbarLyric(plain)
+        if (taskbarStateSink) taskbarStateSink(plain)
     }
 
     const loadKugou = async (song) => {

@@ -8,6 +8,7 @@ const LocalFiles = require('./src/electron/localmusic')
 const InitTray = require('./src/electron/tray')
 const registerShortcuts = require('./src/electron/shortcuts')
 const { applyTaskbarLyric, setTaskbarStyle, styleFromSettings } = require('./src/electron/taskbarLyric')
+const DesktopLyric = require('./src/desktopLyric/desktopLyricManager')
 
 const { app, BrowserWindow, globalShortcut, shell, session } = require('electron')
 const fs = require('fs')
@@ -156,9 +157,17 @@ let myWindow = null
 const { ipcMain: ipcGuard } = require('electron')
 const isTrustedIpc = (event) => {
     try {
-        return !!myWindow
+        if (myWindow
             && event.sender === myWindow.webContents
-            && event.senderFrame === myWindow.webContents.mainFrame
+            && event.senderFrame === myWindow.webContents.mainFrame) {
+            return true
+        }
+        // 桌面歌词是独立 BrowserWindow，它自身的关闭/锁定/播放控制通道也要放行
+        const lyricWin = DesktopLyric.win
+        return !!lyricWin
+            && !lyricWin.isDestroyed()
+            && event.sender === lyricWin.webContents
+            && event.senderFrame === lyricWin.webContents.mainFrame
     } catch {
         return false
     }
@@ -395,6 +404,8 @@ const createWindow = () => {
     const savedOther = settingsStore.get('settings')?.other || {}
     setTaskbarStyle(styleFromSettings(savedOther))
     applyTaskbarLyric(savedOther.taskbarLyric === true)
+    // 桌面歌词（独立窗口 + 置顶锁定）
+    DesktopLyric.init(win)
 }
 
 async function checkForGithubUpdate(win) {

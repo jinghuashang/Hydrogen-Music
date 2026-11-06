@@ -16,6 +16,7 @@
   import { usePlayerStore } from './store/playerStore'
   import { useOtherStore } from './store/otherStore'
   import { startTaskbarLyricSync } from './utils/taskbarLyric'
+  import { startDesktopLyricSyncLoop } from './utils/player'
 
   const playerStore = usePlayerStore()
   const otherStore = useOtherStore()
@@ -23,6 +24,11 @@
 
   const isWebClient =
     import.meta.env.VITE_WEB === 'true' || import.meta.env.VITE_WEB === '1'
+
+  /** 桌面歌词窗口：只渲染歌词页，不加载主窗口的底栏/播放器等结构 */
+  const isDesktopLyric = computed(
+    () => route.name === 'desktopLyric' || route.path === '/desktop-lyric',
+  )
 
   const hasCurrentSong = computed(
     () => !!(playerStore.songList && playerStore.songList[playerStore.currentIndex]),
@@ -94,6 +100,8 @@
     window.addEventListener('mouseup', onSideBackMouseUp, true)
     // 任务栏歌词（Electron Windows）：同步当前歌词行给主进程的覆盖层窗口
     startTaskbarLyricSync()
+    // 桌面歌词：独立推送循环（不依赖播放进度定时器，避免热更新后不启动）
+    if (!isWebClient && !isDesktopLyric.value) startDesktopLyricSyncLoop()
     if (!isWebClient) return
     window.addEventListener('resize', refreshWebHomeSplit)
     document.addEventListener('fullscreenchange', refreshWebHomeSplit)
@@ -149,6 +157,10 @@
 </script>
 
 <template>
+  <div v-if="isDesktopLyric" class="desktopLyricApp">
+    <router-view></router-view>
+  </div>
+  <template v-else>
   <div class="mainWindow" :class="{ 'mainWindow--web-split': webHomeSplit }">
     <div class="mainWindow__content" :class="{ 'web-split-pane-home': webHomeSplit }">
       <Transition name="home">
@@ -214,9 +226,18 @@
       <Update></Update>
     </div>
   </Transition>
+  </template>
 </template>
 
 <style lang="scss">
+  .desktopLyricApp {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+  }
   #app{
     user-select: none;
     margin: 0;

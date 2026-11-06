@@ -10,6 +10,7 @@ import { getCloudLyric } from '../api/cloud'
 import { getLikelist } from '../api/user'
 import { useUserStore } from '../store/userStore'
 import { usePlayerStore } from '../store/playerStore'
+import { onTaskbarState } from './taskbarLyric'
 import { useLibraryStore } from '../store/libraryStore'
 import { useOtherStore } from '../store/otherStore'
 import { storeToRefs } from 'pinia'
@@ -29,6 +30,222 @@ let playModeOne = false //为true代表顺序播放已全部结束
 let currentTiming = null
 let videoCheckInterval = null
 let playFailCount = 0 //连续播放失败计数，用于停止不可用列表的自动跳歌死循环
+
+let desktopLyricProgressTimer = null
+// 任务栏歌词每帧算好的逐字数据（含 words），桌面歌词复用同一份，避免二次解析
+let latestTaskbarState = null
+onTaskbarState((state) => { latestTaskbarState = state })
+
+export function startDesktopLyricSyncLoop() {
+    clearInterval(desktopLyricProgressTimer)
+    syncDesktopLyric()
+    desktopLyricProgressTimer = setInterval(() => {
+        // 暂停也要推送：窗口用 syncTime + playing 外推进度，停推会让进度继续涨
+        if (currentMusic.value) {
+            syncDesktopLyric()
+        }
+    }, 100)
+    // 窗口创建/恢复时主进程会请求一帧，避免开窗瞬间只有占位文本
+    if (typeof window !== 'undefined' && windowApi?.onDesktopLyricRequestSync) {
+        windowApi.onDesktopLyricRequestSync(() => syncDesktopLyric())
+    }
+    // 桌面歌词悬浮工具栏的播放控制
+    if (typeof window !== 'undefined' && windowApi?.onDesktopLyricMainAction) {
+        windowApi.onDesktopLyricMainAction((action) => {
+            if (action === 'togglePlay') playing.value ? pauseMusic() : startMusic()
+            else if (action === 'prev') playLast()
+            else if (action === 'next') playNext()
+        })
+    }
+}
+
+export function stopDesktopLyricSyncLoop() {
+    clearInterval(desktopLyricProgressTimer)
+    syncDesktopLyric()
+}
+
+
+const regNewLine = /\n/
+const regTime = /\[\d{2}:\d{2}\.\d{2,3}\]?/
+
+function extractLyricLineText(line, match) {
+    const bracketIdx = line.indexOf(']', match.index)
+    const start = bracketIdx !== -1 ? bracketIdx + 1 : match.index + match[0].length
+    return line.substring(start).replace(/\[\d{2}:\d{2}\.\d{2,3}\]?/g, '').trim()
+}
+
+function formatLyricTimeSeconds(timeStr) {
+    const regMin = /.*:/
+    const regSec = /:.*\./
+    const regMs = /\./
+
+    if (timeStr.indexOf('.') === -1) timeStr = timeStr.replace(/(.*):/, '$1.')
+    const min = parseInt(timeStr.match(regMin)[0].slice(0, 2))
+    let sec = parseInt(timeStr.match(regSec)[0].slice(1, 3))
+    const ms = timeStr.slice(timeStr.match(regMs).index + 1, timeStr.match(regMs).index + 3)
+    if (min !== 0) sec += min * 60
+    return Number(sec + '.' + ms)
+}
+
+
+let parsedFromLyric = null
+
+export function ensureLyricParsed() {
+    if (!lyric.value?.lrc?.lyric) return
+    // 只解析"当前这首歌"一次：靠 store 字段是否为空判断会在切歌后沿用上一首的歌词
+    if (parsedFromLyric === lyric.value) return
+    parsedFromLyric = lyric.value
+    const lrcText = lyric.value.lrc.lyric
+    const cur = (songList.value || [])[currentIndex.value]
+    const curDt = cur?.dt ? Math.trunc(cur.dt / 1000) : (time.value || 0)
+
+    if (lrcText.indexOf('[') === -1) {
+        const lineArr = lrcText.split(regNewLine)
+        const parsed = []
+        lineArr.forEach(item => {
+            if (item.trim()) parsed.push({ lyric: item.trim(), time: 0 })
+        })
+        parsed.push({ lyric: '', time: curDt })
+        lyricsObjArr.value = parsed
+        return
+    }
+
+    const arr = lrcText.split(regNewLine)
+    const tarr = (lyric.value.tlyric && lyric.value.tlyric.lyric) ? lyric.value.tlyric.lyric.split(regNewLine) : null
+    const rarr = (lyric.value.romalrc && lyric.value.romalrc.lyric) ? lyric.value.romalrc.lyric.split(regNewLine) : null
+
+    const lyricArr = []
+    for (let i = 0; i < arr.length; i++) {
+        if (!arr[i]) continue
+        const lyctime = arr[i].match(regTime)
+        if (!lyctime) continue
+        const obj = {}
+        obj.lyric = extractLyricLineText(arr[i], lyctime)
+        if (!obj.lyric) continue
+        if (obj.lyric.indexOf('纯音乐') !== -1) {
+            lyricsObjArr.value = [
+                { lyric: '纯音乐，请欣赏', time: 0 },
+                { lyric: '', time: curDt }
+            ]
+            return
+        }
+        if (tarr && obj.lyric.indexOf('作词') === -1 && obj.lyric.indexOf('作曲') === -1) {
+            for (let j = 0; j < tarr.length; j++) {
+                if (!tarr[j]) continue
+                const tTimeCore = lyctime[0].replace(/\]$/, '')
+                if (tarr[j].indexOf(tTimeCore) !== -1) {
+                    const tMatch = tarr[j].match(regTime)
+                    obj.tlyric = tMatch ? extractLyricLineText(tarr[j], tMatch) : ''
+                    if (!obj.tlyric) { tarr.splice(j, 1); j--; continue }
+                    tarr.splice(j, 1)
+                    break
+                }
+            }
+        }
+        if (rarr && obj.lyric.indexOf('作词') === -1 && obj.lyric.indexOf('作曲') === -1) {
+            for (let k = 0; k < rarr.length; k++) {
+                if (!rarr[k]) continue
+                const rTimeCore = lyctime[0].replace(/\]$/, '')
+                if (rarr[k].indexOf(rTimeCore) !== -1) {
+                    const rMatch = rarr[k].match(regTime)
+                    obj.rlyric = rMatch ? extractLyricLineText(rarr[k], rMatch) : ''
+                    if (!obj.rlyric) { rarr.splice(k, 1); k--; continue }
+                    rarr.splice(k, 1)
+                    break
+                }
+            }
+        }
+        obj.time = lyctime ? formatLyricTimeSeconds(lyctime[0].replace(/[\[\]]/g, '')) : 0
+        if (obj.lyric !== '') lyricArr.push(obj)
+    }
+    lyricArr.sort((x, y) => x.time - y.time)
+    lyricsObjArr.value = lyricArr
+}
+
+
+function pickTaskbarWords(text) {
+    if (!latestTaskbarState || !Array.isArray(latestTaskbarState.lines)) return null
+    const hit = latestTaskbarState.lines.find((line) => line.text === text)
+    return hit && Array.isArray(hit.words) && hit.words.length ? hit.words : null
+}
+
+export function syncDesktopLyric() {
+    if (!windowApi?.sendDesktopLyricData) return
+    const cur = (songList.value || [])[currentIndex.value]
+    if (!cur) {
+        windowApi.sendDesktopLyricData({
+            title: '',
+            artist: '',
+            currentLrc: '',
+            transLrc: '',
+            romaLrc: '',
+            nextLrc: '',
+            lineStartTime: 0,
+            lineDuration: 0,
+            playing: false,
+            progress: 0,
+            duration: 0,
+            syncTime: Date.now(),
+        })
+        return
+    }
+
+    const seekTime = (currentMusic.value ? currentMusic.value.seek() : progress.value) || 0
+    let curText = ''
+    let curTrans = ''
+    let curRoma = ''
+    let nextText = ''
+    let lineStartTime = 0
+    let lineDuration = 4.0
+
+    // 歌词解析统一由 Lyric.vue 负责（它同时维护 lyricType）。
+    // 播放器侧再解析一次会与它交替写 lyricsObjArr，导致行号错乱（显示成"作词:xxx"这类首行）。
+
+    if (Array.isArray(lyricsObjArr.value) && lyricsObjArr.value.length) {
+        const arr = lyricsObjArr.value
+        // 加入 150ms 的声学起音提前量补偿，使得歌词切行动作与人声发音完全同步！
+        const effectiveSeek = seekTime + 0.15
+        let idx = -1
+        for (let i = 0; i < arr.length; i++) {
+            if (effectiveSeek >= arr[i].time) idx = i
+            else break
+        }
+        if (idx >= 0 && idx < arr.length) {
+            curText = arr[idx].lyric || ''
+            curTrans = arr[idx].tlyric || ''
+            curRoma = arr[idx].rlyric || arr[idx].romalrc || ''
+            lineStartTime = arr[idx].time || 0
+
+            const nextLine = arr[idx + 1]
+            if (nextLine && nextLine.time > lineStartTime) {
+                lineDuration = nextLine.time - lineStartTime
+                nextText = nextLine.lyric || ''
+            } else {
+                lineDuration = Math.max(2.0, Math.min(6.0, (time.value || 0) - lineStartTime))
+            }
+        } else if (arr.length > 0) {
+            lineStartTime = 0
+            lineDuration = arr[0].time || 4.0
+            nextText = arr[0].lyric || ''
+        }
+    }
+
+    windowApi.sendDesktopLyricData({
+        title: cur.name || cur.songName || cur.fileName || '',
+        artist: (cur.ar || []).map(a => a?.name).filter(Boolean).join('/') || cur.artist || '',
+        currentLrc: curText || (cur.name || cur.songName || cur.fileName || 'Hydrogen Music'),
+        transLrc: curTrans,
+        romaLrc: curRoma,
+        nextLrc: nextText,
+        lineStartTime,
+        lineDuration,
+        words: pickTaskbarWords(curText),
+        playing: playing.value,
+        progress: seekTime,
+        duration: time.value || 0,
+        syncTime: Date.now(),
+    })
+}
 
 // --- 网易云听歌记录同步 (Scrobble) ---
 let scrobbleState = {
@@ -288,6 +505,7 @@ export function play(url, autoplay) {
 
 export function startProgress() {
     clearInterval(musicProgress)
+    startDesktopLyricSyncLoop()
     if(!currentMusic.value) return
     progress.value = currentMusic.value.seek()
     musicProgress = setInterval(() => {

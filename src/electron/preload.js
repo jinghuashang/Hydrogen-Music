@@ -1,4 +1,13 @@
 const { contextBridge, ipcRenderer } = require('electron')
+
+function safeClone(obj) {
+    if (!obj || typeof obj !== 'object') return obj
+    try {
+        return JSON.parse(JSON.stringify(obj))
+    } catch (_) {
+        return obj
+    }
+}
  
 function windowMin() {
     ipcRenderer.send('window-min')
@@ -201,4 +210,19 @@ contextBridge.exposeInMainWorld('windowApi', {
         const res = await fetch(fetchUrl.toString(), { ...options, headers })
         return res.json()
     },
+    // 桌面歌词
+    getDesktopLyricState: () => ipcRenderer.invoke('desktop-lyric-get-state'),
+    toggleDesktopLyric: () => ipcRenderer.send('desktop-lyric-toggle'),
+    setDesktopLyricLock: (locked) => ipcRenderer.send('desktop-lyric-set-lock', locked),
+    setDesktopLyricIgnoreMouse: (ignore, options) => ipcRenderer.send('desktop-lyric-set-ignore-mouse', ignore, options),
+    closeDesktopLyric: () => ipcRenderer.send('desktop-lyric-close'),
+    sendDesktopLyricData: (data) => ipcRenderer.send('desktop-lyric-data-sync', safeClone(data)),
+    onDesktopLyricData: (cb) => ipcRenderer.on('desktop-lyric-render-data', (e, d) => cb(d)),
+    updateDesktopLyricConfig: (cfg) => ipcRenderer.send('desktop-lyric-config-update', safeClone(cfg)),
+    onDesktopLyricConfig: (cb) => ipcRenderer.on('desktop-lyric-apply-config', (e, c) => cb(c)),
+    sendDesktopLyricAction: (action, payload) => ipcRenderer.send('desktop-lyric-action', action, safeClone(payload)),
+    onDesktopLyricLockStatus: (cb) => ipcRenderer.on('desktop-lyric-lock-status', (e, s) => cb(s)),
+    onDesktopLyricStateChange: (cb) => ipcRenderer.on('desktop-lyric-state-change', (e, s) => cb(s)),
+    onDesktopLyricRequestSync: (cb) => ipcRenderer.on('desktop-lyric-request-sync', () => cb()),
+    onDesktopLyricMainAction: (cb) => ipcRenderer.on('desktop-lyric-main-action', (e, action, payload) => cb(action, payload)),
 })

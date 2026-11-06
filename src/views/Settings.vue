@@ -112,8 +112,10 @@ if (isLogin()) {
 }
 onMounted(async () => {
     appVersion.value = await windowApi.getAppVersion()
+    loadDesktopLyricState()
 })
 onActivated(() => {
+    loadDesktopLyricState()
     windowApi.getSettings().then(settings => {
         if (!settings) return
         musicLevel.value = settings.music.level
@@ -159,6 +161,19 @@ onActivated(() => {
         taskbarLyricStroke.value = settings.other.taskbarLyricStroke === true
         taskbarLyricStrokeColor.value = settings.other.taskbarLyricStrokeColor || '#ffffff'
         taskbarLyricStrokeWidth.value = Number(settings.other.taskbarLyricStrokeWidth ?? 2)
+        desktopLyricSize.value = Number(settings.other.desktopLyricSize) || 32
+        desktopLyricFontFamily.value = settings.other.desktopLyricFontFamily || ''
+        desktopLyricFontWeight.value = settings.other.desktopLyricFontWeight || 'bold'
+        desktopLyricColor.value = settings.other.desktopLyricColor || ''
+        desktopLyricBackground.value = settings.other.desktopLyricBackground || ''
+        desktopLyricBackgroundAlpha.value = Number(settings.other.desktopLyricBackgroundAlpha ?? 100)
+        desktopLyricLetterSpacing.value = Number(settings.other.desktopLyricLetterSpacing) || 0
+        desktopLyricShadow.value = settings.other.desktopLyricShadow !== false
+        desktopLyricStroke.value = settings.other.desktopLyricStroke === true
+        desktopLyricStrokeColor.value = settings.other.desktopLyricStrokeColor || '#ffffff'
+        desktopLyricStrokeWidth.value = Number(settings.other.desktopLyricStrokeWidth) || 2
+        desktopLyricKaraoke.value = settings.other.desktopLyricKaraoke !== false
+        desktopLyricKaraokeColor.value = settings.other.desktopLyricKaraokeColor || '#31C27C'
         taskbarLyricKaraoke.value = settings.other.taskbarLyricKaraoke === true
         taskbarLyricKaraokeColor.value = settings.other.taskbarLyricKaraokeColor || '#e8384f'
         taskbarLyricGlowRadius.value = Number(settings.other.taskbarLyricGlowRadius ?? 8)
@@ -230,6 +245,19 @@ const setAppSettings = async () => {
             taskbarLyricStroke: taskbarLyricStroke.value,
             taskbarLyricStrokeColor: taskbarLyricStrokeColor.value,
             taskbarLyricStrokeWidth: taskbarLyricStrokeWidth.value,
+            desktopLyricSize: Number(desktopLyricSize.value) || 32,
+            desktopLyricFontFamily: desktopLyricFontFamily.value,
+            desktopLyricFontWeight: desktopLyricFontWeight.value,
+            desktopLyricColor: desktopLyricColor.value,
+            desktopLyricBackground: desktopLyricBackground.value,
+            desktopLyricBackgroundAlpha: Number(desktopLyricBackgroundAlpha.value) || 100,
+            desktopLyricLetterSpacing: Number(desktopLyricLetterSpacing.value) || 0,
+            desktopLyricShadow: desktopLyricShadow.value,
+            desktopLyricStroke: desktopLyricStroke.value,
+            desktopLyricStrokeColor: desktopLyricStrokeColor.value,
+            desktopLyricStrokeWidth: Number(desktopLyricStrokeWidth.value) || 2,
+            desktopLyricKaraoke: desktopLyricKaraoke.value,
+            desktopLyricKaraokeColor: desktopLyricKaraokeColor.value,
             taskbarLyricKaraoke: taskbarLyricKaraoke.value,
             taskbarLyricKaraokeColor: taskbarLyricKaraokeColor.value,
             taskbarLyricGlowRadius: taskbarLyricGlowRadius.value,
@@ -434,6 +462,58 @@ const setLyricCompletion = async () => {
     await setAppSettings()
     if (isWebClient) await persistWebSettingsFromForm()
 }
+// 桌面歌词（独立窗口，主进程管理状态）
+const desktopLyricEnabled = ref(false)
+const desktopLyricLocked = ref(false)
+const desktopLyricSize = ref(32)
+const desktopLyricFontFamily = ref('')
+const desktopLyricFontWeight = ref('bold')
+const desktopLyricColor = ref('')
+const desktopLyricBackground = ref('')
+const desktopLyricBackgroundAlpha = ref(100)
+const desktopLyricLetterSpacing = ref(0)
+const desktopLyricShadow = ref(true)
+const desktopLyricStroke = ref(false)
+const desktopLyricStrokeColor = ref('#ffffff')
+const desktopLyricStrokeWidth = ref(2)
+const desktopLyricKaraoke = ref(true)
+const desktopLyricKaraokeColor = ref('#31C27C')
+const loadDesktopLyricState = async () => {
+    if (!windowApi?.getDesktopLyricState) return
+    try {
+        const state = await windowApi.getDesktopLyricState()
+        desktopLyricEnabled.value = !!state?.enabled
+        desktopLyricLocked.value = !!state?.locked
+    } catch (_) {}
+}
+const toggleDesktopLyric = () => {
+    if (!windowApi?.toggleDesktopLyric) return
+    windowApi.toggleDesktopLyric()
+    // 回读主进程真实状态：本地乐观取反会与异步 close() 后的 store 值错位
+    setTimeout(loadDesktopLyricState, 400)
+}
+const persistDesktopLyricStyle = async () => {
+    await setAppSettings()
+    if (isWebClient) await persistWebSettingsFromForm()
+}
+const toggleDesktopLyricShadow = () => {
+    desktopLyricShadow.value = !desktopLyricShadow.value
+    persistDesktopLyricStyle()
+}
+const toggleDesktopLyricStroke = () => {
+    desktopLyricStroke.value = !desktopLyricStroke.value
+    persistDesktopLyricStyle()
+}
+const toggleDesktopLyricKaraoke = () => {
+    desktopLyricKaraoke.value = !desktopLyricKaraoke.value
+    persistDesktopLyricStyle()
+}
+const toggleDesktopLyricLock = () => {
+    if (!windowApi?.setDesktopLyricLock) return
+    desktopLyricLocked.value = !desktopLyricLocked.value
+    windowApi.setDesktopLyricLock(desktopLyricLocked.value)
+}
+
 // 任务栏歌词（仅 Windows 客户端有实现）
 const taskbarLyric = ref(false)
 const taskbarLyricSize = ref(20)
@@ -773,6 +853,136 @@ const testMirrors = async () => {
                         </div>
                     </div>
                 </div>
+                <div class="settings-item">
+                    <h2 class="item-title">桌面歌词</h2>
+                    <div class="line"></div>
+                    <div class="item-options">
+                        <div class="option">
+                            <div class="option-name">桌面歌词</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyric()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': desktopLyricEnabled }">
+                                        {{ desktopLyricEnabled ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="desktopLyricEnabled"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">歌词字号</div>
+                            <div class="option-operation">
+                                <input v-model.number="desktopLyricSize" type="number" min="16" max="64"
+                                    @change="persistDesktopLyricStyle()">
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">字体</div>
+                            <div class="option-operation">
+                                <FontSelect v-model="desktopLyricFontFamily" :fonts="systemFonts"
+                                    placeholder="内置（思源黑体）" @update:modelValue="persistDesktopLyricStyle()">
+                                </FontSelect>
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">字重</div>
+                            <div class="option-operation">
+                                <Selector v-model="desktopLyricFontWeight" :options="taskbarFontWeightOptions"
+                                    @update:modelValue="persistDesktopLyricStyle()"></Selector>
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">文字颜色</div>
+                            <div class="option-operation taskbar-color-operation">
+                                <input v-model="desktopLyricColor" type="color" @change="persistDesktopLyricStyle()">
+                                <div class="button" @click="desktopLyricColor = desktopLyricColor ? '' : '#ffffff'; persistDesktopLyricStyle()">自动</div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">背景</div>
+                            <div class="option-operation taskbar-color-operation">
+                                <input v-model="desktopLyricBackground" type="color" @change="persistDesktopLyricStyle()">
+                                <div class="button" @click="desktopLyricBackground = desktopLyricBackground ? '' : '#141414'; persistDesktopLyricStyle()">无背景</div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">背景透明度</div>
+                            <div class="option-operation">
+                                <input v-model.number="desktopLyricBackgroundAlpha" type="number" min="0" max="100"
+                                    @change="persistDesktopLyricStyle()">
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">字间距</div>
+                            <div class="option-operation">
+                                <input v-model.number="desktopLyricLetterSpacing" type="number" min="-2" max="8" step="0.5"
+                                    @change="persistDesktopLyricStyle()">
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">阴影</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyricShadow()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': desktopLyricShadow }">
+                                        {{ desktopLyricShadow ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="desktopLyricShadow"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">描边</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyricStroke()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': desktopLyricStroke }">
+                                        {{ desktopLyricStroke ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="desktopLyricStroke"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled && desktopLyricStroke">
+                            <div class="option-name">描边颜色 / 宽度</div>
+                            <div class="option-operation taskbar-color-operation">
+                                <input v-model="desktopLyricStrokeColor" type="color" @change="persistDesktopLyricStyle()">
+                                <input v-model.number="desktopLyricStrokeWidth" type="number" min="0" max="6" step="0.5"
+                                    @change="persistDesktopLyricStyle()">
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">卡拉OK</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyricKaraoke()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': desktopLyricKaraoke }">
+                                        {{ desktopLyricKaraoke ? '已开启' : '已关闭' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="desktopLyricKaraoke"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled && desktopLyricKaraoke">
+                            <div class="option-name">卡拉OK 颜色</div>
+                            <div class="option-operation taskbar-color-operation">
+                                <input v-model="desktopLyricKaraokeColor" type="color" @change="persistDesktopLyricStyle()">
+                            </div>
+                        </div>
+                        <div class="option" v-if="desktopLyricEnabled">
+                            <div class="option-name">锁定歌词窗口（鼠标穿透）</div>
+                            <div class="option-operation">
+                                <div class="toggle" @click="toggleDesktopLyricLock()">
+                                    <div class="toggle-off" :class="{ 'toggle-on-in': desktopLyricLocked }">
+                                        {{ desktopLyricLocked ? '已锁定' : '未锁定' }}</div>
+                                    <Transition name="toggle">
+                                        <div class="toggle-on" v-show="desktopLyricLocked"></div>
+                                    </Transition>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div class="settings-item" v-if="isWindowsClient">
                     <h2 class="item-title">任务栏</h2>
                     <div class="line"></div>
@@ -789,7 +999,7 @@ const testMirrors = async () => {
                                 </div>
                             </div>
                         </div>
-                        <template v-if="taskbarLyric">
+                        <template v-if="taskbarLyric || desktopLyricEnabled">
                             <div class="option">
                                 <div class="option-name">歌词字号</div>
                                 <div class="option-operation">

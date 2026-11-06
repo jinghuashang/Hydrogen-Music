@@ -1,5 +1,6 @@
 const { Menu, Tray, ipcMain, nativeImage } = require('electron')
 const path = require('path')
+const desktopLyricManager = require('../desktopLyric/desktopLyricManager')
 
 module.exports = function InitTray(win, app, iconPath) {
     let tray = null
@@ -100,6 +101,27 @@ module.exports = function InitTray(win, app, iconPath) {
                         }
                     },
                 ]
+            },
+            {
+                type: 'separator'
+            },
+            {
+                label: '桌面歌词',
+                type: 'checkbox',
+                checked: desktopLyricManager.isEnabled,
+                click: (menuItem) => {
+                    desktopLyricManager.toggle()
+                    menuItem.checked = desktopLyricManager.isEnabled
+                }
+            },
+            {
+                label: '锁定桌面歌词 (Ctrl+Alt+L)',
+                type: 'checkbox',
+                checked: desktopLyricManager.isLocked,
+                click: (menuItem) => {
+                    desktopLyricManager.toggleLock()
+                    menuItem.checked = desktopLyricManager.isLocked
+                }
             },
             { 
                 label: '退出',
