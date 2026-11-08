@@ -94,7 +94,10 @@ jobs:
           # 注意：Windows runner 上 PATH 里的 find.exe 是「文本查找」工具，
           # 不是 git-bash 的 find，用它筛文件会得到空结果（步骤还是绿的但什么都没上传），
           # 这里改用 bash 的 globstar 遍历产物目录
-          shopt -s nullglob globstar
+          # macOS runner 的 bash 3.2 没有 globstar（bash 4 才加入），
+          # 直接 shopt -s globstar 会返回非零并在 set -e 下让步骤 2 秒内失败
+          shopt -s nullglob 2>/dev/null || true
+          shopt -s globstar 2>/dev/null || true
           count=0
           # 不再假设产物目录层级：递归找安装包与元数据，但排除解包目录里的内部文件
           # （win-unpacked / *.app 里有大量 Chromium 文件，不能上传）
