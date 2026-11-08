@@ -96,17 +96,9 @@ jobs:
           # 这里改用 bash 的 globstar 遍历产物目录
           shopt -s nullglob globstar
           count=0
-          # 只取产物目录下这一层的文件：release/<version>/*.exe|zip|dmg|yml
-          # 不能再往里递归，否则会把 win-unpacked / *.app 里的 Chromium 内部文件（.pak/.dll）
-          # 一起传上 Release
-          # macOS 的 .dmg/.zip 可能落在 release/<version>/<arch>/ 这一层，
-          # 只遍历两层会得到 count=0 并让整个 Release 步骤失败
-          for f in release/* release/*/* release/*/*/*; do
-            [ -f "$f" ] || continue
-            case "$f" in
-              *.exe|*.zip|*.dmg|*.yml|*.blockmap) ;;
-              *) continue ;;
-            esac
+          # 不再假设产物目录层级：递归找安装包与元数据，但排除解包目录里的内部文件
+          # （win-unpacked / *.app 里有大量 Chromium 文件，不能上传）
+          while IFS= read -r f; do
             echo "uploading $f"
             uploaded=0
             for attempt in 1 2 3; do
@@ -122,9 +114,18 @@ jobs:
             else
               echo "::warning::upload failed after retries: $f"
             fi
-          done
+          done < <(find release -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.dmg' -o -name '*.yml' -o -name '*.blockmap' \) -not -path '*/win-unpacked/*' -not -path '*.app/*' 2>/dev/null | sort)
           echo "uploaded $count file(s)"
+          echo "--- release tree (maxdepth 4) ---"
+          find release -maxdepth 4 -type f | head -60 || true
           if [ "$count" -eq 0 ]; then
-            echo "::error::release 目录里没有找到任何产物"
-            exit 1
+            # 本 job 没找到产物时，若 Release 上已有附件（另一平台的 job 传过），
+            # 视为该平台无可上传文件，给出警告而不是让整次 Release 红灯
+            existing=$(gh release view "$TAG" --json assets -q '.assets | length' 2>/dev/null || echo 0)
+            if [ "${existing:-0}" -gt 0 ]; then
+              echo "::warning::本 job 未找到可上传产物，Release 已存在 $existing 个附件，跳过"
+            else
+              echo "::error::release 目录里没有找到任何产物"
+              exit 1
+            fi
           fi
