@@ -190,32 +190,27 @@
 </template>
 
 <style scoped lang="scss">
+  /* 与 .song-control svg 同规格：2.5vh 方块 + 3vh 上间距，纯字形无边框 */
   .desktop-lyric-btn {
-    margin-right: 8Px;
-    font: 10Px SourceHanSansCN-Bold;
+    margin-top: 3vh;
+    width: 2.5vh;
+    height: 2.5vh;
+    font: 1.6vh SourceHanSansCN-Bold;
     font-weight: bold;
     color: #000;
     opacity: 0.65;
     cursor: pointer;
     user-select: none;
     transition: 0.2s;
-    border: 1.5Px solid #000;
-    border-radius: 4Px;
-    width: 16Px;
-    height: 16Px;
+    border: 0;
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
     line-height: 1;
-    &:hover {
-      opacity: 1;
-    }
-    &.desktop-lyric-active {
-      color: #fff;
-      background: #000;
-      opacity: 1;
-    }
+    &:hover { opacity: 1; }
+    &.desktop-lyric-active { opacity: 1; }
   }
 
   .player-container{

@@ -231,17 +231,18 @@
         align-items: center;
         /* 为桌面歌词按钮让位：整组控件左移 */
         transform: translateX(-42Px);
+        /* 与 .icon 同规格：20Px 方块 + 22Px 间距，纯字形，无边框无底板 */
         .desktop-lyric-btn {
             margin-right: 22Px;
-            font: 12Px SourceHanSansCN-Bold;
+            font: 17Px SourceHanSansCN-Bold;
             font-weight: bold;
             color: #000;
             opacity: 0.65;
             cursor: pointer;
             user-select: none;
             transition: 0.2s;
-            border: 1.5Px solid #000;
-            border-radius: 4Px;
+            border: 0;
+            background: transparent;
             width: 20Px;
             height: 20Px;
             display: flex;
@@ -250,7 +251,7 @@
             box-sizing: border-box;
             line-height: 1;
             &:hover { opacity: 1; }
-            &.desktop-lyric-active { color: #fff; background: #000; opacity: 1; }
+            &.desktop-lyric-active { opacity: 1; }
         }
         .music-control{
             padding: 0 18Px;
