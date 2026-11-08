@@ -99,7 +99,9 @@ jobs:
           # 只取产物目录下这一层的文件：release/<version>/*.exe|zip|dmg|yml
           # 不能再往里递归，否则会把 win-unpacked / *.app 里的 Chromium 内部文件（.pak/.dll）
           # 一起传上 Release
-          for f in release/* release/*/*; do
+          # macOS 的 .dmg/.zip 可能落在 release/<version>/<arch>/ 这一层，
+          # 只遍历两层会得到 count=0 并让整个 Release 步骤失败
+          for f in release/* release/*/* release/*/*/*; do
             [ -f "$f" ] || continue
             case "$f" in
               *.exe|*.zip|*.dmg|*.yml|*.blockmap) ;;
