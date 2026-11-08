@@ -194,6 +194,14 @@ function createOverlay() {
     overlay.on('closed', () => {
         overlay = null
     })
+    overlay.webContents.on('did-fail-load', (_e, code, desc, url) => {
+        if (code === -3) return
+        console.warn(`[taskbarLyric] load failed (${code} ${desc}), retrying`)
+        setTimeout(() => {
+            if (!overlay || overlay.isDestroyed()) return
+            overlay.loadURL(url && url !== 'about:blank' ? url : DEV_SERVER_URL)
+        }, 1000)
+    })
     if (isDev()) overlay.loadURL(DEV_SERVER_URL)
     // 打包后本文件位于 app.asar/src/electron，页面在 app.asar/dist
     else overlay.loadFile(path.join(__dirname, '..', '..', 'dist', OVERLAY_HTML))

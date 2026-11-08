@@ -145,6 +145,17 @@ class DesktopLyricManager {
             this.win.loadFile(path.resolve(__dirname, '../../dist/taskbar-lyric.html'))
         }
 
+        // dev 下若 Electron 先于 Vite 启动，窗口会 ERR_CONNECTION_REFUSED；
+        // 这里失败后自动重试，避免歌词窗口永久空白
+        this.win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+            if (code === -3) return // 主动 abort 不算失败
+            console.warn(`[desktopLyric] load failed (${code} ${desc}), retrying: ${url}`)
+            setTimeout(() => {
+                if (!this.win || this.win.isDestroyed()) return
+                if (url && url !== 'about:blank') this.win.loadURL(url)
+                else this.win.reload()
+            }, 1000)
+        })
         this.win.webContents.on('did-finish-load', () => {
             this.applyLockState()
             if (this.mainWin && !this.mainWin.isDestroyed()) {
