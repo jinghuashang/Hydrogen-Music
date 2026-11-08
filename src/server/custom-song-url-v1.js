@@ -21,6 +21,27 @@ function isPrivateVerifyTarget(urlStr) {
     return true
   }
 }
+// 解灰结果缓存：同一 songId + level 在 10 分钟内复用，
+// 避免连续切歌/重播时每首都重新跑一遍六源匹配与 HEAD 校验
+const UNBLOCK_CACHE_TTL_MS = 10 * 60 * 1000
+const UNBLOCK_CACHE_LIMIT = 200
+const unblockCache = new Map()
+function readUnblockCache(key) {
+  const hit = unblockCache.get(key)
+  if (!hit) return null
+  if (Date.now() - hit.at > UNBLOCK_CACHE_TTL_MS) {
+    unblockCache.delete(key)
+    return null
+  }
+  return hit.value
+}
+function writeUnblockCache(key, value) {
+  unblockCache.set(key, { at: Date.now(), value })
+  if (unblockCache.size > UNBLOCK_CACHE_LIMIT) {
+    unblockCache.delete(unblockCache.keys().next().value)
+  }
+}
+
 function verifyFullSong(url, minSize = 500 * 1024, redirects = 3) {
   // 第三方音源返回的 URL 不得指向回环/内网
   if (isPrivateVerifyTarget(url)) return Promise.resolve(false)
@@ -98,6 +119,14 @@ module.exports = async (query, request) => {
     console.warn('[unblock] 风控熔断中，跳过官方接口直接解灰')
   }
 
+  // 缓存命中直接返回，不再打外部音源
+  const cacheKey = `${query.id}:${query.level || ''}`
+  const cached = readUnblockCache(cacheKey)
+  if (cached) {
+    console.log(`[unblock] cache hit ${cacheKey} (${cached.source})`)
+    return cached.result
+  }
+
   let unblockUrl = null
   let unblockSource = null
   let unblockIsTrial = false
@@ -165,7 +194,7 @@ module.exports = async (query, request) => {
       if (useProxy === 'true' && process.env.PROXY_URL) proxyUrl = process.env.PROXY_URL + unblockUrl
       else proxyUrl = unblockUrl
     }
-    return {
+    const payload = {
       status: 200,
       body: {
         code: 200,
@@ -182,6 +211,8 @@ module.exports = async (query, request) => {
       },
       cookie: [],
     }
+    writeUnblockCache(cacheKey, { source: unblockSource, result: payload })
+    return payload
   }
 
   // 解灰未成功 — 回退官方结果（可能为试听片段或 null）

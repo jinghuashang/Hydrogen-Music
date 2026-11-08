@@ -26,6 +26,16 @@ const RETRY_DELAY = 1000
 /** -460 风控自动重试的全局冷却：期间其它请求不再自动重试，避免重试风暴放大风控 */
 const RISK_RETRY_COOLDOWN = 8000
 let riskRetryAfter = 0
+// 播放取址熔断：命中 -460 后一段时间内直接跳过 /song/url/v1，
+// 避免连续切歌时每一首都先打一次接口、反复触发风控
+const SONG_URL_BLOCK_MS = 15000
+let songUrlBlockedUntil = 0
+// 歌词接口串行化：一次歌单加载/连续切歌可能并发几十个 /lyric/new，
+// 这是 -460 的主要触发源之一，这里按最小间隔排队放行
+const LYRIC_MIN_INTERVAL = 250
+let lyricGate = 0
+// 音质降级链：风控对无损/高解析的阈值更严，命中 -460 时逐档降级重试
+const LEVEL_FALLBACK = { lossless: 'exhigh', hires: 'exhigh', jymaster: 'exhigh', sky: 'exhigh', exhigh: 'standard' }
 
 export function clearProxyCache() {}
 
@@ -33,6 +43,21 @@ export function clearProxyCache() {}
 request.interceptors.request.use(async function (config) {
   // 初始化重试计数器
   config._retryCount = config._retryCount || 0
+
+  // 歌词串行化：排队等待，避免瞬时并发打爆上游
+  if (config.url === '/lyric/new') {
+    const now = Date.now()
+    const wait = Math.max(0, lyricGate - now)
+    lyricGate = Math.max(now, lyricGate) + LYRIC_MIN_INTERVAL
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
+  }
+
+  // 熔断期内的取址请求直接拒绝，由调用方走"无法播放"提示
+  if (config.url === '/song/url/v1' && Date.now() < songUrlBlockedUntil) {
+    const blocked = new Error('risk-blocked')
+    blocked._riskBlocked = true
+    return Promise.reject(blocked)
+  }
 
   // 解锁灰色歌曲：对 /song/url/v1 请求附加 unblock=true 和歌曲元数据
   if (config.url === '/song/url/v1') {
@@ -97,6 +122,31 @@ request.interceptors.response.use(function (response) {
     // 网易云风控 -460（网络环境存在风险）：服务端已换 IP 重试一次，这里再兜一次（只兜一次，避免放大风控）
     const riskCode = error.response && error.response.data && error.response.data.code
     const isRiskControl = riskCode === -460
+    if (isRiskControl && config.url === '/song/url/v1') {
+      // 风控对高音质阈值更严：先尝试降一档音质，能拿到地址就继续播放
+      // 逐档降级：lossless → exhigh → standard（每一步都允许重试一次，直到 standard）
+      let curLevel = config.params?.level
+      let step = config._levelStep || 0
+      while (step < 3) {
+        const nextLevel = LEVEL_FALLBACK[curLevel]
+        if (!nextLevel) break
+        step += 1
+        config._levelStep = step
+        config.params = { ...config.params, level: nextLevel }
+        console.warn(`[request] -460 on /song/url/v1 (${curLevel}), 降级到 ${nextLevel} 重试`)
+        try {
+          return await request(config)
+        } catch (e) {
+          if (!(e && e.body && e.body.code === -460)) throw e
+          curLevel = nextLevel
+        }
+      }
+      // 已经是最低档仍被拦：熔断，避免连续请求放大风控
+      songUrlBlockedUntil = Date.now() + SONG_URL_BLOCK_MS
+      console.warn(`[request] -460 on /song/url/v1, blocked for ${SONG_URL_BLOCK_MS}ms`)
+      if (!config.silent) noticeOpen('网易云风控：暂停取址 15 秒', 2)
+      return Promise.reject(error)
+    }
     if (isRiskControl && (method === 'get' || method === 'head') && !config._riskRetried && Date.now() >= riskRetryAfter) {
       config._riskRetried = true
       riskRetryAfter = Date.now() + RISK_RETRY_COOLDOWN
@@ -104,6 +154,11 @@ request.interceptors.response.use(function (response) {
       console.log(`[request] Risk control -460 on ${config.url}, retrying once`)
       await new Promise(resolve => setTimeout(resolve, 1500))
       return request(config)
+    }
+    // 301/302 排查用：账号接口被重定向通常意味着 cookie 未生效，打出跳转目标便于定位
+    if (error.response && error.response.status >= 300 && error.response.status < 400) {
+      const location = error.response.headers?.location || '(no location)'
+      console.warn(`[request] Redirect ${error.response.status} on ${config.url} -> ${location}`)
     }
     const shouldRetry = (!error.response || error.response.status >= 500) && (method === 'get' || method === 'head')
     if (shouldRetry && config._retryCount < MAX_RETRIES) {

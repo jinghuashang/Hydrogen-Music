@@ -9,6 +9,9 @@ const RANDOM_CN_IP_FLAG = 'ENABLE_RANDOM_CN_IP'
 // 上游生成器不可用时的兜底：一个中国大陆地址，仍优于把 127.0.0.1/内网 IP 传上去
 const FALLBACK_CN_IP = '116.25.146.177'
 const IPV4_PATTERN = /^\d{1,3}(\.\d{1,3}){3}$/
+// eapi 网关是 PC 客户端（interfacepc），UA 必须也是 PC，否则「PC 参数 + iPhone UA」的
+// 混搭会直接被判定异常（实测：同一接口 iPhone UA 5 次 1 成功，PC UA 10/10 成功）
+const PC_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 NeteaseMusicDesktop/3.1.17.204416'
 
 /**
  * 打开随机中国 IP 缓解。
@@ -16,7 +19,12 @@ const IPV4_PATTERN = /^\d{1,3}(\.\d{1,3}){3}$/
  * @returns {boolean} 是否接管了该开关
  */
 function enableRandomCnIp({ env = process.env, globalScope = globalThis, generateIp } = {}) {
-  if (env[RANDOM_CN_IP_FLAG] === 'false') return false
+  if (env[RANDOM_CN_IP_FLAG] === 'false') {
+    // 显式关闭：清掉上游可能已生成的随机 IP，让它使用真实出口 IP
+    globalScope.cnIp = ''
+    console.log('[riskControl] 随机 CN IP 已关闭，使用真实出口 IP')
+    return false
+  }
 
   env[RANDOM_CN_IP_FLAG] = 'true'
 
@@ -43,6 +51,8 @@ function enableRandomCnIp({ env = process.env, globalScope = globalThis, generat
  */
 function createRiskControlledRequest(original, { generateIp, logger = console, retryCooldownMs = 8000, now = () => Date.now() } = {}) {
   const nextIp = () => {
+    // 显式关闭随机 IP 时不注入任何 IP，让请求走真实出口
+    if (process.env[RANDOM_CN_IP_FLAG] === 'false') return ''
     try {
       const generated = typeof generateIp === 'function' ? String(generateIp() || '') : ''
       if (IPV4_PATTERN.test(generated)) return generated
@@ -52,11 +62,17 @@ function createRiskControlledRequest(original, { generateIp, logger = console, r
 
   // -460 重试冷却：避免并发请求同时重试形成风暴，反而加重风控
   let retryAfter = 0
+  // IP 粘性：同一 cookie/会话全程使用同一个 CN IP，只在命中 -460 后才换。
+  // 每个请求都换 IP 会让网易云看到「同一账号短时间内跨省漂移」，这是 -460 的头号诱因。
+  let stickyIp = nextIp()
 
   return async function riskControlledRequest(...args) {
     const options = args[2] || {}
-    if (options.randomCNIP && !options.realIP) {
-      options.realIP = nextIp()
+    // 统一 PC 指纹：eapi 的 os/appver 都是 PC，UA 保持 PC 才自洽
+    options.headers = { ...(options.headers || {}), 'user-agent': PC_UA }
+    args[2] = options
+    if (options.randomCNIP && !options.realIP && stickyIp) {
+      options.realIP = stickyIp
       args[2] = options
     }
 
@@ -64,7 +80,9 @@ function createRiskControlledRequest(original, { generateIp, logger = console, r
     const isRiskError = (value) => !!value && !!value.body && value.body.code === -460
 
     const retryOnce = async () => {
-      options.realIP = nextIp()
+      // 只有被风控拦下时才换 IP，换完继续粘住，避免又变成每请求漂移
+      stickyIp = nextIp()
+      options.realIP = stickyIp
       args[2] = options
       logger.warn && logger.warn('[riskControl] 命中 -460，已切换随机 IP 重试')
       return original(...args)
@@ -74,23 +92,16 @@ function createRiskControlledRequest(original, { generateIp, logger = console, r
     try {
       response = await original(...args)
     } catch (e) {
-      if (isRiskError(e) && now() >= retryAfter) {
-        retryAfter = now() + retryCooldownMs
-        return retryOnce()
-      }
+      // 命中 -460 不再换 IP 重试：换 IP 会让同一 cookie 在短时间内跨省漂移，
+      // 反而加重风控。直接抛出，由调用方走熔断/降级。
       if (isRiskError(e)) {
-        logger.warn && logger.warn('[riskControl] 命中 -460，冷却中不再重试')
+        logger.warn && logger.warn('[riskControl] 命中 -460，放弃重试（避免 IP 漂移放大风控）')
       }
       throw e
     }
 
     if (isRiskError(response)) {
-      if (now() < retryAfter) {
-        logger.warn && logger.warn('[riskControl] 命中 -460，冷却中不再重试')
-        return response
-      }
-      retryAfter = now() + retryCooldownMs
-      return retryOnce()
+      logger.warn && logger.warn('[riskControl] 命中 -460，放弃重试（避免 IP 漂移放大风控）')
     }
     return response
   }

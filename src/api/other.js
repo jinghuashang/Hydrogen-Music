@@ -25,11 +25,33 @@ export function getBanner(id) {
  * @param {*} id 
  * @returns 
  */
-export function search(params, options = {}) {
-    return request({
+// 搜索是 -460 风控的高发入口：连点/输入联想会在极短时间内打出大量并发请求。
+// 这里做最小间隔 800ms 的串行节流 + 30s 短时缓存，同一关键词不重复打接口。
+const SEARCH_MIN_INTERVAL = 800
+const SEARCH_CACHE_TTL = 30000
+const SEARCH_CACHE_LIMIT = 30
+let lastSearchAt = 0
+const searchCache = new Map()
+
+export async function search(params, options = {}) {
+    const cacheKey = JSON.stringify(params || {})
+    const now = Date.now()
+    const hit = searchCache.get(cacheKey)
+    if (hit && now - hit.at < SEARCH_CACHE_TTL) return hit.value
+
+    const wait = SEARCH_MIN_INTERVAL - (now - lastSearchAt)
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
+    lastSearchAt = Date.now()
+
+    const result = await request({
         url: '/cloudsearch',
         method: 'get',
         params,
         ...options,
     })
+    searchCache.set(cacheKey, { at: Date.now(), value: result })
+    if (searchCache.size > SEARCH_CACHE_LIMIT) {
+        searchCache.delete(searchCache.keys().next().value)
+    }
+    return result
 }
