@@ -99,10 +99,9 @@ jobs:
           shopt -s nullglob 2>/dev/null || true
           shopt -s globstar 2>/dev/null || true
           count=0
-          # 不再假设产物目录层级：递归找安装包与元数据，但排除解包目录里的内部文件
+          # 产物发现统一走 scripts/artifact-files.cjs（本地 build.js 与 CI 共用同一份规则）：
+          # 优先 release/<version>，缺失时取最近修改的子目录；只取该层文件，不递归
           # （win-unpacked / *.app 里有大量 Chromium 文件，不能上传）
-          # 用 node 复用 build.js 的产物定位逻辑（release/<version> 或最近修改的子目录），
-          # 比 bash 的层级 glob 更可靠：macOS 的 .dmg/.zip 位置与 Windows 不同
           while IFS= read -r f; do
             [ -f "$f" ] || continue
             echo "uploading $f"
@@ -116,22 +115,7 @@ jobs:
               sleep 15
             done
             if [ "$uploaded" -eq 1 ]; then count=$((count + 1)); else echo "::warning::upload failed after retries: $f"; fi
-          done < <(node -e '
-            const fs = require("fs"), path = require("path");
-            const v = require("./package.json").version;
-            const base = path.join(process.cwd(), "release");
-            if (!fs.existsSync(base)) { console.error("no release dir"); process.exit(0); }
-            let dir = path.join(base, v);
-            if (!fs.existsSync(dir)) {
-              const ds = fs.readdirSync(base)
-                .map(n => ({ n, t: fs.statSync(path.join(base, n)).mtimeMs }))
-                .sort((a, b) => b.t - a.t);
-              if (ds.length) dir = path.join(base, ds[0].n);
-            }
-            for (const f of fs.readdirSync(dir)) {
-              if (/\.(exe|zip|dmg|yml|blockmap)$/.test(f)) console.log(path.join(dir, f));
-            }
-          ')
+          done < <(node -e 'const { listArtifacts } = require("./scripts/artifact-files.cjs"); for (const f of listArtifacts()) console.log(f)')
           echo "uploaded $count file(s)"
           echo "--- release tree (maxdepth 4) ---"
           find release -maxdepth 4 -type f | head -60 || true
