@@ -680,6 +680,7 @@ const toggleLogToFile = async () => {
     noticeOpen(logToFile.value ? '日志落盘已开启' : '日志落盘已关闭', 1)
 }
 const openLogDir = () => {
+    if (typeof windowApi.openLogDir === 'function') return windowApi.openLogDir()
     if (logDir.value) windowApi.openLocalFolder(logDir.value)
 }
 

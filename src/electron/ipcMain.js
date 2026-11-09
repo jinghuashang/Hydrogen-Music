@@ -99,7 +99,10 @@ module.exports = IpcMainEvent = (win, app) => {
         if (s.local?.videoFolder) roots.push(s.local.videoFolder)
         const abs = path.resolve(String(filePath || ''))
         const allowed = roots.map(r => path.resolve(String(r).trim())).some(r => abs.startsWith(r + path.sep))
-        if (!allowed) return null
+        if (!allowed) {
+            logger.warn && logger.warn(`[open-local-folder] 目录不在白名单: ${abs}`)
+            return
+        } null
         // music-metadata 8+ 为 ESM-only，CJS 侧需动态导入
         const { parseFile } = await import('music-metadata')
         const data = await parseFile(filePath)
@@ -345,8 +348,17 @@ module.exports = IpcMainEvent = (win, app) => {
             .some(r => abs === r || abs.startsWith(r + path.sep))
         if (!allowed) return
         try {
+            console.log('[open-local-folder] 尝试打开:', p)
             if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
-                shell.openPath(p)
+                // openPath 在部分环境返回空串但实际没打开，失败时用 explorer 兜底
+                shell.openPath(p).then((err) => {
+                    console.log('[open-local-folder] openPath 结果:', JSON.stringify(err))
+                    if (err) {
+                        try {
+                            require('child_process').spawn('explorer.exe', [p], { detached: true, stdio: 'ignore' }).unref()
+                        } catch (_) {}
+                    }
+                })
             } else {
                 shell.showItemInFolder(p)
             }

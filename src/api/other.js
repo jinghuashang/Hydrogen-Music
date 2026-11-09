@@ -30,28 +30,36 @@ export function getBanner(id) {
 const SEARCH_MIN_INTERVAL = 800
 const SEARCH_CACHE_TTL = 30000
 const SEARCH_CACHE_LIMIT = 30
-let lastSearchAt = 0
 const searchCache = new Map()
+let searchChain = Promise.resolve()
 
-export async function search(params, options = {}) {
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+export function search(params, options = {}) {
     const cacheKey = JSON.stringify(params || {})
-    const now = Date.now()
     const hit = searchCache.get(cacheKey)
-    if (hit && now - hit.at < SEARCH_CACHE_TTL) return hit.value
+    if (hit && Date.now() - hit.at < SEARCH_CACHE_TTL) return Promise.resolve(hit.value)
 
-    const wait = SEARCH_MIN_INTERVAL - (now - lastSearchAt)
-    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
-    lastSearchAt = Date.now()
+    const run = async () => {
+        // 排队后再查一次缓存：并发调用会被合并成一次请求
+        const cached = searchCache.get(cacheKey)
+        if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL) return cached.value
 
-    const result = await request({
-        url: '/cloudsearch',
-        method: 'get',
-        params,
-        ...options,
-    })
-    searchCache.set(cacheKey, { at: Date.now(), value: result })
-    if (searchCache.size > SEARCH_CACHE_LIMIT) {
-        searchCache.delete(searchCache.keys().next().value)
+        await delay(SEARCH_MIN_INTERVAL)
+        const result = await request({
+            url: '/cloudsearch',
+            method: 'get',
+            params,
+            ...options,
+        })
+        searchCache.set(cacheKey, { at: Date.now(), value: result })
+        if (searchCache.size > SEARCH_CACHE_LIMIT) {
+            searchCache.delete(searchCache.keys().next().value)
+        }
+        return result
     }
-    return result
+
+    const pending = searchChain.then(run, run)
+    searchChain = pending.catch(() => {})
+    return pending
 }

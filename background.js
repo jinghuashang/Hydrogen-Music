@@ -66,6 +66,9 @@ async function testMirrorLatency(mirrorUrl) {
 }
 
 // 获取最快的镜像站
+// 镜像探测结果缓存：同一会话内 10 分钟内复用，避免每次检查更新都花几百毫秒重新测速
+let mirrorProbeCache = { at: 0, url: '' }
+
 async function getFastestMirror() {
     const settings = settingsStore.get('settings')
     const autoMirror = settings?.other?.autoMirror !== false
@@ -75,6 +78,7 @@ async function getFastestMirror() {
     if (!autoMirror) {
         return customMirror || ''
     }
+    if (Date.now() - mirrorProbeCache.at < 10 * 60 * 1000) return mirrorProbeCache.url
     
     // 并发测试所有镜像站
     const results = await Promise.all(GITHUB_MIRRORS.map(m => testMirrorLatency(m.url)))
@@ -82,10 +86,12 @@ async function getFastestMirror() {
     
     if (successful.length > 0) {
         console.log(`[mirror] Fastest mirror: ${successful[0].url} (${successful[0].latency}ms)`)
+        mirrorProbeCache = { at: Date.now(), url: successful[0].url }
         return successful[0].url
     }
-    
+
     console.log('[mirror] No mirror available, using official source')
+    mirrorProbeCache = { at: Date.now(), url: '' }
     return ''
 }
 
@@ -252,7 +258,9 @@ const createWindow = () => {
         webPreferences: {
             //预加载脚本
             preload: path.resolve(__dirname, './src/electron/preload.js'),
-            webSecurity: true,
+            // dev 下页面来源是 http://localhost:5173，读取 file:// 本地音乐会被同源策略拦截，
+            // 打包后页面本身是 file:// 不受影响。这里仅在 dev 关闭该限制方便调试本地曲库。
+            webSecurity: !(process.resourcesPath && process.resourcesPath.indexOf('\\node_modules\\') !== -1),
         }
     })
     myWindow = win
@@ -522,49 +530,110 @@ function autoDownloadAndInstall(win, url, expectedDigest = '') {
         autoUpdateCancelFn = null
         downloadInFlight = false
         try { if (currentReq) currentReq.destroy(new Error('cancelled')) } catch (e) {}
+        try { fs.unlinkSync(savePath + '.part') } catch (e) {}
         try { fs.unlinkSync(savePath) } catch (e) {}
         win.setProgressBar(-1)
         win.webContents.send('auto-update-status', { status: 'failed', error: '已取消下载' })
     }
 
-    const download = (target, redirects) => {
+    // 断点续传 + 失败重试：更新包通常 150MB+，单连接一次失败就整包重下代价太大。
+    // 用 <file>.part 保存中间状态，重试时带 Range 续传；下载完成后再整体校验 SHA-256。
+    const partPath = savePath + '.part'
+    const maxAttempts = 3
+    const agent = new https.Agent({ keepAlive: true, maxSockets: 1 })
+
+    const existingSize = () => {
+        try {
+            const st = fs.statSync(partPath)
+            return st.isFile() ? st.size : 0
+        } catch {
+            return 0
+        }
+    }
+
+    const hashFile = (filePath) => new Promise((resolve, reject) => {
+        const hash = crypto.createHash('sha256')
+        fs.createReadStream(filePath)
+            .on('data', (chunk) => hash.update(chunk))
+            .on('error', reject)
+            .on('end', () => resolve(hash.digest('hex')))
+    })
+
+    const finish = async () => {
+        win.setProgressBar(-1)
+        if (expectedDigest && expectedDigest.startsWith('sha256:')) {
+            const actual = await hashFile(partPath)
+            if (actual !== expectedDigest.slice('sha256:'.length)) {
+                try { fs.unlinkSync(partPath) } catch (e) {}
+                fail('安装包校验失败，已取消安装')
+                return
+            }
+        }
+        try {
+            fs.renameSync(partPath, savePath)
+        } catch (e) {
+            fail('写入文件失败')
+            return
+        }
+        autoUpdateCancelFn = null
+        downloadInFlight = false
+        pendingUpdate = { ...(pendingUpdate || {}), savePath }
+        win.webContents.send('auto-update-status', { status: 'ready', version: pendingUpdate.version || '' })
+    }
+
+    const attempt = (target, redirects, attemptIndex) => {
+        if (cancelled) return
         if (redirects <= 0) {
+            if (attemptIndex < maxAttempts) return attempt(url, 5, attemptIndex + 1)
             fail('重定向次数超限')
             return
         }
-        const req = https.get(target, (res) => {
+        const offset = existingSize()
+        const headers = offset > 0 ? { Range: `bytes=${offset}-` } : {}
+        const req = https.get(target, { headers, agent }, (res) => {
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                 res.resume()
-                // 仅跟随 https 重定向，避免 http 目标让 https.get 同步抛错
                 if (!/^https:\/\//i.test(String(res.headers.location))) {
                     fail('下载重定向协议不受支持')
                     return
                 }
-                download(res.headers.location, redirects - 1)
+                attempt(res.headers.location, redirects - 1, attemptIndex)
                 return
             }
-            if (res.statusCode !== 200) {
+            // 206 = 续传成功；200 = 服务端不支持 Range，从头写
+            if (res.statusCode !== 200 && res.statusCode !== 206) {
+                res.resume()
+                if (attemptIndex < maxAttempts) return attempt(target, redirects, attemptIndex + 1)
                 fail('下载失败')
                 return
             }
-            const total = parseInt(res.headers['content-length'], 10) || 0
-            // 更新包大小上限，避免被超大盘/无限流写满磁盘
+            const resumed = res.statusCode === 206
+            let startOffset = 0
+            let total = 0
+            if (resumed) {
+                const cr = String(res.headers['content-range'] || '')
+                const m = cr.match(/bytes (\d+)-(\d+)\/(\d+)/)
+                if (m) {
+                    startOffset = Number(m[1])
+                    total = Number(m[3])
+                }
+            } else {
+                total = parseInt(res.headers['content-length'], 10) || 0
+            }
             const MAX_UPDATE_BYTES = 400 * 1024 * 1024
             if (total > MAX_UPDATE_BYTES) {
                 res.resume()
                 fail('安装包超出大小限制')
                 return
             }
-            let downloaded = 0
-            const hash = crypto.createHash('sha256')
-            const file = fs.createWriteStream(savePath)
-            file.on('error', (err) => {
-                try { fs.unlinkSync(savePath) } catch (e) {}
+            let downloaded = startOffset
+            const file = fs.createWriteStream(partPath, { flags: resumed ? 'a' : 'w' })
+            file.on('error', () => {
+                try { fs.unlinkSync(partPath) } catch (e) {}
                 fail('写入文件失败')
             })
             res.on('data', (chunk) => {
                 downloaded += chunk.length
-                hash.update(chunk)
                 if (total > 0) {
                     const progress = Math.round(downloaded / total * 100)
                     win.webContents.send('auto-update-status', {
@@ -576,39 +645,37 @@ function autoDownloadAndInstall(win, url, expectedDigest = '') {
                     win.setProgressBar(progress / 100)
                 }
             })
-            res.pipe(file)
             res.on('error', () => {
-                file.close()
-                try { fs.unlinkSync(savePath) } catch (e) {}
-                fail('下载失败')
+                file.close(() => {
+                    if (cancelled) return
+                    if (attemptIndex < maxAttempts) attempt(target, redirects, attemptIndex + 1)
+                    else fail('下载中断')
+                })
             })
-            // 等待文件完全落盘后再校验/启动，避免执行不完整文件
+            res.pipe(file)
             file.on('finish', () => {
                 file.close(() => {
                     if (cancelled) return
-                    autoUpdateCancelFn = null
-                    win.setProgressBar(-1)
-                    // GitHub 提供摘要时校验，不符立即删除且绝不执行
-                    if (expectedDigest && expectedDigest.startsWith('sha256:')) {
-                        const actual = hash.digest('hex')
-                        if (actual !== expectedDigest.slice('sha256:'.length)) {
-                            try { fs.unlinkSync(savePath) } catch (e) {}
-                            fail('安装包校验失败，已取消安装')
-                            return
-                        }
+                    if (total > 0 && downloaded < total) {
+                        if (attemptIndex < maxAttempts) return attempt(target, redirects, attemptIndex + 1)
+                        fail('下载不完整')
+                        return
                     }
-                    // 校验通过后仅标记就绪，安装需用户显式确认（install-update）
-                    downloadInFlight = false
-                    pendingUpdate = { ...(pendingUpdate || {}), savePath }
-                    win.webContents.send('auto-update-status', { status: 'ready', version: pendingUpdate.version || '' })
+                    finish().catch(() => fail('安装包校验失败，已取消安装'))
                 })
             })
         })
         currentReq = req
-        req.on('error', () => fail('网络连接失败'))
-        req.setTimeout(60000, () => req.destroy(new Error('下载超时')))
+        req.on('error', () => {
+            if (cancelled) return
+            if (attemptIndex < maxAttempts) attempt(target, redirects, attemptIndex + 1)
+            else fail('网络连接失败')
+        })
+        req.setTimeout(60000, () => req.destroy(new Error('download timeout')))
     }
-    download(url, 5)
+
+    attempt(url, 5, 0)
+
 }
 
 function isNewerVersion(latest, current) {

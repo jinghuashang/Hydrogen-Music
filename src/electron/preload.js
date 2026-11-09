@@ -189,6 +189,7 @@ contextBridge.exposeInMainWorld('windowApi', {
     setWindowTile,
     log,
     getLogDir: () => ipcRenderer.invoke('get-log-dir'),
+    openLogDir: () => ipcRenderer.send('open-log-dir'),
     getDesktopSources: () => ipcRenderer.invoke('get-desktop-sources'),
     manualCheckUpdate: () => ipcRenderer.invoke('manual-check-update'),
     startUpdateDownload: () => ipcRenderer.invoke('start-update-download'),

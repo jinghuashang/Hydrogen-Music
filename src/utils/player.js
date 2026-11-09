@@ -372,6 +372,23 @@ function resetScrobbleForLoop() {
 }
 
 // 统一处理"当前歌曲无法播放"：清理状态 + 自动跳下一首；连续失败达到列表长度时停止
+/** 命中风控冷却：不参与"连续失败"计数，也不再自动切歌打扰用户 */
+function pauseForRisk() {
+    clearInterval(musicProgress)
+    playing.value = false
+    windowApi.playOrPauseMusicCheck(false)
+    // 关键：必须停掉上一首的 Howl。界面已经切到新歌，若旧音频继续出声，
+    // 就会出现「显示的是初恋、听到的是出现又离开」这种歌与声音不一致
+    try {
+        if (currentMusic.value) {
+            currentMusic.value.unload()
+            currentMusic.value = null
+        }
+    } catch (_) {}
+    progress.value = 0
+    noticeOpen('网易云风控冷却中，请稍后重试', 2)
+}
+
 function skipUnplayable(msg) {
     clearInterval(musicProgress)
     playing.value = false
@@ -689,8 +706,24 @@ export function setSongToWindows() {
     }
 }
 // 歌词补全计划：当本地/云盘或无歌词歌曲播放时，搜索匹配网易云曲库歌词自动补全
-export async function completeMissingLyric(song, currentTargetId) {
-    if (!playerStore.lyricCompletion || !song) return
+// 歌词补全的频控：同一首只查一次，且全局 2s 冷却，
+// 避免快速切歌/本地曲库连续跳过时把 /cloudsearch 打爆（405 操作频繁）
+const lyricLookupAt = new Map()
+const LYRIC_LOOKUP_DEDUPE_MS = 10 * 60 * 1000
+const LYRIC_LOOKUP_COOLDOWN_MS = 2000
+let lyricLookupLastAt = 0
+
+export async function completeMissingLyric(song, currentTargetId, force = false, token = null) {
+    if (!song) return
+    if (!force && !playerStore.lyricCompletion) return
+    const lookupKey = String(song.id || song.url || song.name || song.localName || '')
+    if (!lookupKey) return
+    const lastAt = lyricLookupAt.get(lookupKey)
+    const nowTs = Date.now()
+    if (lastAt && nowTs - lastAt < LYRIC_LOOKUP_DEDUPE_MS) return
+    if (nowTs - lyricLookupLastAt < LYRIC_LOOKUP_COOLDOWN_MS) return
+    lyricLookupLastAt = nowTs
+    lyricLookupAt.set(lookupKey, nowTs)
     let rawName = song.songName || song.name || song.localName || song.title || song.fileName || ''
     let cleanName = rawName
         .replace(/\.[^/.]+$/, '')
@@ -728,10 +761,34 @@ export async function completeMissingLyric(song, currentTargetId) {
         const songs = searchRes?.result?.songs || []
         if (!songs.length) return
 
-        const matchedSong = songs[0]
-        if (!matchedSong || !matchedSong.id) return
+        // 不再直接取搜索结果第一条：名字/时长对不上时会套用别的歌的歌词
+        const norm = (v) => String(v || '').toLowerCase().replace(/[\s\-_（）()《》【】\[\]]/g, '')
+        const targetName = norm(cleanName)
+        const targetDt = Number(song.dt || 0)
+        const matchedSong = songs.find((item) => {
+            if (!item || !item.id) return false
+            const name = norm(item.name)
+            const nameOk = !!name && (name === targetName || name.includes(targetName) || targetName.includes(name))
+            const dtOk = !targetDt || !item.dt
+                ? true
+                : Math.abs(item.dt - targetDt) <= Math.max(10000, targetDt * 0.15)
+            // 歌手也要对得上：同名翻唱/合辑经常时长一致，只比名字会套上原唱歌词
+            const targetArtist = norm(rawArtist)
+            const candidateArtists = (item.ar || item.artists || [])
+                .map((a) => norm(a && (a.name || a)))
+                .filter(Boolean)
+            const artistOk = !targetArtist || !candidateArtists.length
+                ? true
+                : candidateArtists.some((a) => a.includes(targetArtist) || targetArtist.includes(a))
+            return nameOk && dtOk && artistOk
+        }) || null
+        if (!matchedSong) {
+            console.warn('[completeMissingLyric] 无可靠匹配，跳过补全')
+            return
+        }
 
         const foundLyric = await getLyric(matchedSong.id)
+        if (token != null && token !== lyricToken) return
         if (foundLyric?.lrc?.lyric) {
             // 防竞态：确认当前播放歌曲未被切走
             if (songId.value === currentTargetId || currentTargetId == null) {
@@ -784,12 +841,21 @@ function normalizeLyricPayload(payload) {
     return next
 }
 
+// 歌词请求令牌：切歌/连续跳过时，旧的异步结果必须作废，否则会出现
+// 「封面与歌名没变但歌词在跳」的串台现象
+let lyricToken = 0
+let lastLyricKey = ''
+
 // 歌词加载：云盘歌曲（id ≥ 8e8）无歌词时回退到云盘歌词接口；未命中时支持歌词补全计划
 function loadLyric(id, song) {
     const curSong = song || (songList.value || [])[currentIndex.value]
     // 每次写入新歌词都先清空解析结果，否则 Lyric.vue 只在 lyricsObjArr 为空时才重新解析，
     // 小窗/播放页会一直沿用上一首的歌词（任务栏歌词同样会显示错行）
+    const token = ++lyricToken
     const applyLyric = (next) => {
+        // 已经切歌，丢弃过期结果
+        if (token !== lyricToken) return
+        clearLoading()
         lyricsObjArr.value = null
         lyric.value = normalizeLyricPayload(next)
         // 播放页开着时歌词区应自动就绪（恢复播放时不会走 getSongUrl 里的那段）
@@ -798,6 +864,10 @@ function loadLyric(id, song) {
             playerChangeSong.value = false
         }
     }
+    playerStore.lyricLoading = true
+    const clearLoading = () => { playerStore.lyricLoading = false }
+    // 兜底：任何异常都不该让空态一直隐藏
+    setTimeout(clearLoading, 6000)
     getLyric(id).then(songLiric => {
         if (songLiric?.lrc?.lyric) {
             applyLyric(songLiric)
@@ -810,18 +880,18 @@ function loadLyric(id, song) {
                     applyLyric({ lrc: { lyric: lrc } })
                 } else {
                     applyLyric(songLiric)
-                    completeMissingLyric(curSong, id)
+                    completeMissingLyric(curSong, id, false, token)
                 }
             }).catch(() => {
                 applyLyric(songLiric)
-                completeMissingLyric(curSong, id)
+                completeMissingLyric(curSong, id, false, token)
             })
         } else {
             applyLyric(songLiric)
-            completeMissingLyric(curSong, id)
+            completeMissingLyric(curSong, id, false, token)
         }
     }).catch(() => {
-        completeMissingLyric(curSong, id)
+        completeMissingLyric(curSong, id, false, token)
     })
 }
 
@@ -904,6 +974,17 @@ async function playBySongInfo(songInfo, id, autoplay, unblockOn) {
 
 export async function getSongUrl(id, index, autoplay, isLocal) {
     const cur = (songList.value || [])[currentIndex.value]
+    // 切歌瞬间先清空歌词：否则新歌取址/取歌词期间会一直显示上一首的歌词，
+    // 与已更新的封面/歌名错位（快速连点下一首时尤其明显）。
+    // 同一首歌的重复调用（预取/重试）不再清空，避免把刚拿到的歌词又抹掉。
+    const lyricKey = String(id) + ':' + String(index)
+    if (lyricKey !== lastLyricKey) {
+        lastLyricKey = lyricKey
+        lyricToken += 1
+        lyric.value = null
+        lyricsObjArr.value = null
+        playerStore.lyricLoading = true
+    }
     initScrobble(cur)
     if(cur) windowApi.setWindowTile(cur.name + " - " + (cur.ar?.[0]?.name || ''))
     if(isLocal) {
@@ -912,14 +993,17 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
             setSongToWindows()
         })
         play(songList.value[currentIndex.value].url, autoplay)
-        // 加载本地歌词
+        // 加载本地歌词（令牌防止快速跳过时后到的结果覆盖当前歌）
+        const localToken = ++lyricToken
+        playerStore.lyricLoading = true
         const localLyric = await getLocalLyric(songList.value[currentIndex.value].url)
         if(localLyric) {
             lyric.value = { lrc: { lyric: localLyric } }
         } else {
             lyric.value = null
             lyricsObjArr.value = null
-            completeMissingLyric(cur, id)
+            // 本地文件通常没有内嵌/sidecar 歌词，强制补全一次（内部有去重与 2s 冷却）
+            completeMissingLyric(cur, id, true, localToken).finally(() => { playerStore.lyricLoading = false })
         }
         if(!lyricShow.value && !widgetState.value) {
             lyricShow.value = true
@@ -932,7 +1016,9 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
     // 不再用 check/music 决定分支（VIP 曲同样返回 success，导致拿不到完整 URL 时不会尝试解灰），统一以 URL 结果为准
     getMusicUrl(id, quality.value).then(songInfo => {
         playBySongInfo(songInfo, id, autoplay, unblockOn)
-    }).catch(async () => {
+    }).catch(async (err) => {
+        const risk = err?._riskBlocked || err?.code === -460 || err?.response?.data?.code === -460
+        if (risk) { pauseForRisk(); return }
         // 请求失败同样尝试 IPC 兜底
         const fallbackUrl = unblockOn ? await tryUnblockFallback(id) : null
         if (fallbackUrl) play(fallbackUrl, autoplay)
@@ -943,8 +1029,14 @@ export async function getSongUrl(id, index, autoplay, isLocal) {
 
 export function startMusic() {
     if(!currentMusic.value) {
-        // 无可播放对象（如上一首加载失败），尝试切到下一首
-        if(songList.value && songList.value.length) playNext()
+        // 当前没有可用音源（加载失败/风控暂停）：先重试当前这首，
+        // 用户点播放的意图是「继续这一首」，不应该直接跳到下一首
+        const cur = (songList.value || [])[currentIndex.value]
+        if (cur) {
+            getSongUrl(cur.id, currentIndex.value, true, cur.type === 'local')
+        } else if(songList.value && songList.value.length) {
+            playNext()
+        }
         return
     }
     if(playMode.value == 0 && currentIndex.value == songList.value.length - 1 && playModeOne && currentMusic.value.seek() == 0) {playNext();playModeOne = false;return}

@@ -43,6 +43,8 @@ export const usePlayerStore = defineStore('playerStore', {
             coverUrl: null,
             /** 歌词补全计划开关 */
             lyricCompletion: false,
+            /** 歌词正在加载（用于抑制"暂无歌词"空态闪烁） */
+            lyricLoading: false,
             /** Web：全屏播放页过渡；`webRightEmbed` 从右侧分栏进入（横向滑入），`widget` 从底栏进入（沿用 translateY） */
             fullPlayerOpenSource: null,
             /** Web 主页分栏右侧嵌入：为 true 时不启用音乐视频层与封面模糊（不写入 persist） */

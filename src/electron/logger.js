@@ -54,6 +54,16 @@ function bindIpc() {
         writer.write(tag, safe)
     })
     ipcMain.handle('get-log-dir', () => writer.ensureDir())
+    // 专用通道：不经过 open-local-folder 的白名单，直接打开日志目录
+    ipcMain.on('open-log-dir', () => {
+        try {
+            const dir = writer.ensureDir()
+            if (!dir) return
+            require('child_process').spawn('explorer.exe', [dir], { detached: true, stdio: 'ignore' }).unref()
+        } catch (e) {
+            writer.write('open-log-dir', String((e && e.message) || e))
+        }
+    })
 }
 
 function setEnabled(value) {

@@ -28,7 +28,7 @@ const RISK_RETRY_COOLDOWN = 8000
 let riskRetryAfter = 0
 // 播放取址熔断：命中 -460 后一段时间内直接跳过 /song/url/v1，
 // 避免连续切歌时每一首都先打一次接口、反复触发风控
-const SONG_URL_BLOCK_MS = 15000
+const SONG_URL_BLOCK_MS = 8000
 let songUrlBlockedUntil = 0
 // 歌词接口串行化：一次歌单加载/连续切歌可能并发几十个 /lyric/new，
 // 这是 -460 的主要触发源之一，这里按最小间隔排队放行
@@ -56,6 +56,7 @@ request.interceptors.request.use(async function (config) {
   if (config.url === '/song/url/v1' && Date.now() < songUrlBlockedUntil) {
     const blocked = new Error('risk-blocked')
     blocked._riskBlocked = true
+    blocked.code = -460   // 供调用方识别：这是本地熔断，不是真的取不到地址
     return Promise.reject(blocked)
   }
 
