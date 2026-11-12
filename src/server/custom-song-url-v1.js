@@ -93,8 +93,38 @@ module.exports = async (query, request) => {
     return request('/api/song/enhance/player/url/v1', data, createOption(query))
   }
 
+  // Web API 兜底：eapi 网关对高音质/异常指纹更严格（mygo-music#10 实测 20/20 成功），
+  // 取址被 -460 时改走 weapi 的旧接口
+  const BR_BY_LEVEL = { standard: 128000, exhigh: 320000, lossless: 999000, hires: 1900000 }
+  const webApiRequest = () => request(
+    '/api/song/enhance/player/url',
+    { ids: data.ids, br: BR_BY_LEVEL[data.level] || 320000 },
+    createOption(query),
+  )
+  const webApiFallback = async () => {
+    try {
+      const res = await webApiRequest()
+      const info = res && res.body && res.body.data && res.body.data[0]
+      if (info && info.url) {
+        console.log('[song/url] eapi -460，Web API 兜底成功')
+        return res
+      }
+    } catch (e) {
+      console.warn('[song/url] Web API 兜底失败:', e && e.message)
+    }
+    return null
+  }
+
   if (query.unblock !== 'true') {
-    return plainRequest()
+    try {
+      return await plainRequest()
+    } catch (e) {
+      if (e && e.body && e.body.code === -460) {
+        const web = await webApiFallback()
+        if (web) return web
+      }
+      throw e
+    }
   }
 
   // 优先官方音源：拿到完整 URL（非试听）就直接用，避免第三方源匹配到错误录音/片段
@@ -106,9 +136,11 @@ module.exports = async (query, request) => {
       const info = plain && plain.body && plain.body.data && plain.body.data[0]
       if (info && info.url && !info.freeTrialInfo) return plain
     } catch (e) {
-      // 命中风控（-460）：进入熔断窗口，后续直接走解灰，避免持续冲击官方接口
+      // 命中风控（-460）：先用 Web API 兜底，仍失败再进入熔断/解灰
       const code = e && e.body && e.body.code
       if (code === -460) {
+        const web = await webApiFallback()
+        if (web) return web
         riskUntil = Date.now() + RISK_COOLDOWN_MS
         console.warn('[unblock] 官方接口命中风控 -460，熔断 5 分钟并改用解灰音源')
       } else {

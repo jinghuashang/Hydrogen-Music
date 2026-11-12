@@ -240,6 +240,10 @@ export function syncDesktopLyric() {
         lineStartTime,
         lineDuration,
         words: pickTaskbarWords(curText),
+        // 直接复用任务栏每帧算好的行窗口与当前时间，
+        // 避免两套独立推算导致桌面歌词比任务栏/人声更靠前
+        lines: latestTaskbarState && Array.isArray(latestTaskbarState.lines) ? latestTaskbarState.lines : null,
+        now: latestTaskbarState ? latestTaskbarState.now : null,
         playing: playing.value,
         progress: seekTime,
         duration: time.value || 0,

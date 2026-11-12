@@ -103,15 +103,29 @@ function measureWords() {
 
 /** 按行内容重建文字（逐字行用等量的字级 span，普通行用整段文本） */
 function renderLine(line) {
-    const words = Array.isArray(line?.words) && line.words.length ? line.words : null
-    const signature = words ? `w:${words.map((word) => word.c).join('')}` : `t:${line?.text || ''}`
+    // 逐字数据与整行文本必须一致：KRC/YRC 对齐偶尔会在尾部多出片段
+    // （例如「…正年轻」变成「…正年轻年轻)」），不一致时退回整行渲染
+    let words = Array.isArray(line?.words) && line.words.length ? line.words : null
+    if (words) {
+        const joined = words.map((word) => word.c).join('').replace(/\s+/g, '')
+        const plain = String(line?.text || '').replace(/\s+/g, '')
+        if (plain && joined !== plain) words = null
+    }
+    // 签名只看最终可见文本：同一行在「有逐字数据 / 退回整行」之间切换时
+    // 不应触发重建，否则每次重建都会重播入场动画，看起来像"下坠又回弹"
+    const signature = `c:${(words ? words.map((word) => word.c).join('') : (line?.text || '')).replace(/\s+/g, '')}`
     if (signature !== renderedSignature) {
+        // 同一行被重建（时钟/样式刷新）时保留当前抬升进度；
+        // 若当成新行从 0 开始，已唱字会先落回基线再抬起来（"下沉又回弹"）
+        const sameLine = signature === renderedSignature
+        const initialUpTo = sameLine ? lastUpTo : -1
         renderedSignature = signature
         if (words) {
             textEl.textContent = ''
             fillEl.textContent = ''
-            const startY = 'translateY(0px)'
-            for (const word of words) {
+            for (let index = 0; index < words.length; index += 1) {
+                const word = words[index]
+                const startY = index <= initialUpTo ? `translateY(-${WORD_RAISE}px)` : 'translateY(0px)'
                 const base = document.createElement('span')
                 base.textContent = word.c
                 base.style.transform = startY
@@ -123,6 +137,7 @@ function renderLine(line) {
                 textEl.appendChild(base)
                 fillEl.appendChild(fill)
             }
+            lastUpTo = initialUpTo
         } else {
             textEl.textContent = line?.text || ''
             fillEl.textContent = line?.text || ''
@@ -177,7 +192,9 @@ function sungPixels(line, time) {
 }
 
 // 正在唱的字加一层晕染光；拖长音时半径随进度继续变大，且持续到该字结束
-const WORD_RAISE = 1
+// 逐字上浮曾用于强调"正在唱"，但任何一点上下位移在长句里都会被放大成
+// "下坠/回弹"的观感。这里归零：只靠卡拉OK颜色与填充表达进度，彻底消除竖向位移
+const WORD_RAISE = 0
 
 /** 已唱到的字整体抬高、未唱的压低，形成向上的“台阶” */
 let lastUpTo = -1
@@ -378,10 +395,9 @@ function frame(now) {
     const time = clock.now + elapsed
     const index = activeLineIndex(time)
     const line = index >= 0 ? clock.lines[index] : null
-    if (index !== activeIndex) {
-        activeIndex = index
-        renderLine(line)
-    }
+    // renderLine 内部按签名判重，内容没变不会重建；内容变了则重建一次
+    activeIndex = index
+    renderLine(line)
     paint(line, time)
     frameId = clock.playing ? requestAnimationFrame(frame) : null
 }
@@ -398,7 +414,7 @@ function restartClock(payload) {
         // 用本帧时间作基准，避免跨进程时钟差
         baseTs: performance.now(),
     }
-    activeIndex = -1
+    // 不重置 activeIndex：同一行重复重建会让已唱字先落回基线再抬起来（看起来"掉下去又弹回"）
     if (clock.lines.length === 0) {
         root.classList.add('is-empty')
         textEl.textContent = ''
@@ -411,9 +427,27 @@ function restartClock(payload) {
     frame(clock.baseTs)
 }
 
+function lineSignature(lines) {
+    return (Array.isArray(lines) ? lines : []).map((line) => `${line.start}:${line.text}`).join('|')
+}
+
 function render(payload) {
     lastPayload = payload || null
     applyStyle(payload)
+
+    // 主窗口每 100ms 推一次，但 now 往往还是同一个整数进度；
+    // 每次都 restartClock 会把进度重置回去，视觉上就是卡拉OK反复闪。
+    // 只有「行窗口变化 / 播放态变化 / 时间大幅跳变(seek)」才重建时钟。
+    const nextNow = Math.max(0, Number(payload?.now) || 0)
+    if (clock) {
+        const current = clock.now + (clock.playing ? (performance.now() - clock.baseTs) / 1000 : 0)
+        const sameLines = lineSignature(payload?.lines) === lineSignature(clock.lines)
+        const samePlaying = (payload?.playing === true) === clock.playing
+        // 阈值放宽到 2s：now 每秒才前进一次，<2s 的偏差属于正常抖动，
+        // 重建时钟反而会让短行（作词/作曲这类）的填充反复回跳
+        if (sameLines && samePlaying && Math.abs(current - nextNow) < 2.0) return
+    }
+
     restartClock(payload)
 }
 

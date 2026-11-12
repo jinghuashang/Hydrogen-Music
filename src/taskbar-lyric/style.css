@@ -34,9 +34,15 @@ body {
 }
 
 /* 描边画在字形外侧，不啃字 */
-#taskbar-lyric,
-#taskbar-lyric .lyric-fill {
+#taskbar-lyric {
     -webkit-text-stroke-color: #ffffff;
+}
+
+/* 填充层描边跟随卡拉OK色，并比底色层略粗 0.7px：
+   盖住抗锯齿产生的浅色过渡边，避免看起来"边缘没盖全" */
+#taskbar-lyric .lyric-fill {
+    -webkit-text-stroke-color: var(--karaoke-color, #e8384f);
+    -webkit-text-stroke-width: 0.7px;
 }
 
 #taskbar-lyric.is-light-text {
@@ -58,6 +64,8 @@ body {
 .lyric-text,
 .lyric-fill {
     display: block;
+    /* 任何继承来的背景都不能落到文字层：否则会出现"文字后面一条底色块" */
+    background: transparent;
 }
 
 /* 逐字位移用：inline-block 才能应用 transform */
@@ -81,9 +89,9 @@ body {
     inset: 0;
     color: var(--karaoke-color, #e8384f);
     opacity: 0;
-    /* 上下各放宽 0.5em：拉丁字母的降部（g/y/p 等）会伸出行盒，
-       不放宽的话填充层会被裁掉一截，看起来“没盖全” */
-    clip-path: inset(-0.5em calc(100% - var(--karaoke, 100%)) -0.5em 0);
+    /* 上下各放宽 50%：拉丁字母降部、字体本身的行盒溢出都可能超过 0.5em，
+       裁到底部会露出底色，看起来像“卡拉OK没盖全” */
+    clip-path: inset(-50% calc(100% - var(--karaoke, 100%)) -50% 0);
     /* 进度由逐帧插值驱动，这里不再加过渡，避免 4Hz 推送被二次平滑成台阶 */
     transition: opacity 0.16s ease;
     will-change: clip-path;
@@ -109,12 +117,11 @@ body {
 }
 
 @keyframes taskbar-lyric-in {
+    /* 只做透明度淡入：竖向位移会让人以为是"先掉下去再弹回来" */
     from {
         opacity: 0.2;
-        transform: translateY(3px);
     }
     to {
         opacity: 1;
-        transform: none;
     }
 }

@@ -11,6 +11,16 @@ const settingsStore = new Store({ name: 'settings' })
  * 逐字时间先按线性均分（无 YRC/KRC 时的降级），行有效时长沿用 lineDuration。
  */
 function toTaskbarPayload(data) {
+    // 主窗口已带上任务栏同款行窗口时直接透传：两边渲染的时间基准完全一致
+    if (Array.isArray(data?.lines) && data.lines.length) {
+        return {
+            ...desktopStyleFromSettings(settingsStore.get('settings')?.other || {}),
+            dark: nativeTheme.shouldUseDarkColors,
+            lines: data.lines,
+            now: Number(data.now) || 0,
+            playing: data.playing === true,
+        }
+    }
     const text = String(data?.currentLrc || '')
     const start = Number(data?.lineStartTime) || 0
     const available = Math.max(0.6, Number(data?.lineDuration) || 0)

@@ -11,7 +11,6 @@ const FALLBACK_CN_IP = '116.25.146.177'
 const IPV4_PATTERN = /^\d{1,3}(\.\d{1,3}){3}$/
 // eapi 网关是 PC 客户端（interfacepc），UA 必须也是 PC，否则「PC 参数 + iPhone UA」的
 // 混搭会直接被判定异常（实测：同一接口 iPhone UA 5 次 1 成功，PC UA 10/10 成功）
-const PC_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 NeteaseMusicDesktop/3.1.17.204416'
 
 /**
  * 打开随机中国 IP 缓解。
@@ -19,10 +18,10 @@ const PC_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHT
  * @returns {boolean} 是否接管了该开关
  */
 function enableRandomCnIp({ env = process.env, globalScope = globalThis, generateIp } = {}) {
-  if (env[RANDOM_CN_IP_FLAG] === 'false') {
-    // 显式关闭：清掉上游可能已生成的随机 IP，让它使用真实出口 IP
+  // 默认不注入随机 IP：上游自己会用真实出口 IP，随机换 IP 会让同一 cookie 跨省漂移，
+  // 反而成为 -460 的强信号。只有显式设置 ENABLE_RANDOM_CN_IP=true 才启用。
+  if (env[RANDOM_CN_IP_FLAG] !== 'true') {
     globalScope.cnIp = ''
-    console.log('[riskControl] 随机 CN IP 已关闭，使用真实出口 IP')
     return false
   }
 
@@ -64,13 +63,13 @@ function createRiskControlledRequest(original, { generateIp, logger = console, r
   let retryAfter = 0
   // IP 粘性：同一 cookie/会话全程使用同一个 CN IP，只在命中 -460 后才换。
   // 每个请求都换 IP 会让网易云看到「同一账号短时间内跨省漂移」，这是 -460 的头号诱因。
-  let stickyIp = nextIp()
+  let stickyIp = ''
 
   return async function riskControlledRequest(...args) {
     const options = args[2] || {}
-    // 统一 PC 指纹：eapi 的 os/appver 都是 PC，UA 保持 PC 才自洽
-    options.headers = { ...(options.headers || {}), 'user-agent': PC_UA }
-    args[2] = options
+    if (options.randomCNIP && !options.realIP) {
+      if (!stickyIp) stickyIp = nextIp()
+    }
     if (options.randomCNIP && !options.realIP && stickyIp) {
       options.realIP = stickyIp
       args[2] = options
