@@ -333,6 +333,9 @@ module.exports = IpcMainEvent = (win, app) => {
         if(lastPlaylist) return lastPlaylist
         else return null
     })
+    ipcMain.on('get-ncm-port', (e) => {
+        try { e.returnValue = require('./services').getNcmPort() } catch (_) { e.returnValue = 36530 }
+    })
     ipcMain.on('open-local-folder', (e, targetPath) => {
         const p = path.normalize(String(targetPath || ''))
         if (!p) return
@@ -369,8 +372,10 @@ module.exports = IpcMainEvent = (win, app) => {
     ipcMain.handle('get-request-data', async (e, request) => {
         const raw = String(request?.url || '')
         // 仅允许代理到本机 NCM API，防止任意 URL SSRF
-        const target = raw.startsWith('/') ? `http://127.0.0.1:36530${raw}` : raw
-        if (!/^https?:\/\/(127\.0\.0\.1|localhost):36530\//.test(target)) throw new Error('url not allowed')
+        const ncmPort = require('./services').getNcmPort()
+        const target = raw.startsWith('/') ? `http://127.0.0.1:${ncmPort}${raw}` : raw
+        const allow = new RegExp(`^https?://(127\\.0\\.0\\.1|localhost):${ncmPort}/`)
+        if (!allow.test(target)) throw new Error('url not allowed')
         const option = { ...(request?.option || {}) }
         for (const k of ['socketPath', 'proxy', 'agent', 'httpAgent', 'httpsAgent', 'auth', 'transport']) delete option[k]
         option.maxRedirects = 0

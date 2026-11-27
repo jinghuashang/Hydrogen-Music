@@ -30,7 +30,8 @@ function fetchBuffer(url) {
 
 function fetchLyric(songId) {
     return new Promise((resolve) => {
-        const url = `http://localhost:36530/lyric?id=${songId}`
+        const port = require('./services').getNcmPort()
+        const url = `http://127.0.0.1:${port}/lyric?id=${songId}`
         http.get(url, (res) => {
             let data = ''
             res.on('data', c => data += c)

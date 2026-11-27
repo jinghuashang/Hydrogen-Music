@@ -111,10 +111,47 @@ module.exports = async function startNeteaseMusicApi() {
   // 风控缓解：上游请求改用随机中国大陆 IP（不走 app.js 入口，需自行初始化 global.cnIp）
   enableRandomCnIp({ generateIp: generateRandomChineseIP })
 
-  await serveNcmApi({
-    checkVersion: true,
-    port: 36530,
-    host: '127.0.0.1',
-    moduleDefs: defaultModules,
-  })
+  // 端口可能被 Windows 保留（Hyper-V/WinNAT 的 excludedportrange 会覆盖 36530），
+  // 先试首选端口，失败则按候选列表回退，最终端口通过 IPC 告知渲染进程
+  const candidates = [Number(process.env.NCM_PORT) || 36530, 40130, 40131, 40132]
+  let lastError = null
+  for (const port of candidates) {
+    try {
+      await serveNcmApi({
+        checkVersion: true,
+        port,
+        host: '127.0.0.1',
+        moduleDefs: defaultModules,
+      })
+      // 主动探活：listen 回调成功不代表真的可连（端口被系统保留时会静默失败）
+      const probe = await new Promise((resolve) => {
+        const req = require('http').get({ host: '127.0.0.1', port, path: '/personalized/newsong', timeout: 3000 }, (res) => {
+          res.resume()
+          resolve(true)
+        })
+        req.on('error', () => resolve(false))
+        req.on('timeout', () => { req.destroy(); resolve(false) })
+      })
+      if (!probe) {
+        console.error(`[services] 端口 ${port} 监听成功但无法连接，继续尝试下一个端口`)
+        continue
+      }
+      currentNcmPort = port
+      process.env.NCM_PORT = String(port)
+      if (port !== 36530) console.warn(`[services] 36530 不可用，NCM API 改用 ${port}`)
+      return
+    } catch (e) {
+      lastError = e
+      console.warn(`[services] NCM API 端口 ${port} 启动失败:`, e && e.message)
+    }
+  }
+  throw lastError || new Error('NCM API 启动失败')
 }
+
+let currentNcmPort = Number(process.env.NCM_PORT) || 36530
+
+function getNcmPort() {
+  return currentNcmPort
+}
+
+module.exports.getNcmPort = getNcmPort

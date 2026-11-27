@@ -12,7 +12,7 @@ import { noticeOpen } from "./dialog";
 const ncmBase =
     import.meta.env.VITE_WEB === 'true' || import.meta.env.VITE_WEB === '1'
         ? '/ncm'
-        : 'http://localhost:36530'
+        : `http://127.0.0.1:${(typeof windowApi !== 'undefined' && windowApi?.ncmPort) || 36530}`
 
 const request = axios.create({
     baseURL: ncmBase,

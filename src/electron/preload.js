@@ -127,7 +127,11 @@ function setWindowTile(title) {
 function log(level, text) {
     ipcRenderer.send('renderer-log', level, text)
 }
+let ncmPort = 36530
+try { ncmPort = ipcRenderer.sendSync('get-ncm-port') || 36530 } catch (_) {}
+
 contextBridge.exposeInMainWorld('windowApi', {
+    ncmPort,
     unblockSongUrl: (payload) => ipcRenderer.invoke('unblock-song-url', payload),
     windowMin,
     windowMax,
